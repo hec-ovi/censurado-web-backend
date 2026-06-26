@@ -64,7 +64,52 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("sqlite schema: %w", err)
 	}
+	if err := migrate(context.Background(), db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite migrate: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// migrate applies additive column migrations that the embedded CREATE TABLE IF NOT
+// EXISTS cannot reach: a database created before a column was added keeps its old
+// table definition, so adding the column to schema.sql never touches it. Each entry
+// adds its column only when the table lacks it, so migrate is idempotent and safe to
+// run on every Open. (deleted_at was added with soft-delete after the first article
+// tables shipped, so pre-existing databases need this to stay readable.)
+func migrate(ctx context.Context, db *sql.DB) error {
+	adds := []struct{ table, column, ddl string }{
+		{"articles", "deleted_at", "ALTER TABLE articles ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''"},
+		{"authors", "deleted_at", "ALTER TABLE authors ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''"},
+		{"topics", "deleted_at", "ALTER TABLE topics ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, a := range adds {
+		has, err := hasColumn(ctx, db, a.table, a.column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, a.ddl); err != nil {
+			return fmt.Errorf("add %s.%s: %w", a.table, a.column, err)
+		}
+	}
+	return nil
+}
+
+// hasColumn reports whether table has a column of the given name, via the
+// pragma_table_info table-valued function (so the table name binds as a parameter).
+func hasColumn(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, "SELECT 1 FROM pragma_table_info(?) WHERE name = ?", table, column)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return true, nil
+	}
+	return false, rows.Err()
 }
 
 // Close releases the database.
