@@ -207,12 +207,10 @@ a { color: inherit; }
 
 .admin-dates {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
 }
-@media (max-width: 22rem) {
-  .admin-dates { grid-template-columns: 1fr; }
-}
+.admin-dates > div { min-width: 0; }
 
 .admin-filter-actions {
   display: flex;
