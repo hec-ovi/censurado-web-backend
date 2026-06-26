@@ -1,0 +1,30 @@
+# Keep the build context small, cache-free, and free of secrets. The Dockerfiles
+# only need go.mod/go.sum, the Go source, and the embedded assets.
+
+# Version control
+.git
+.github
+.gitignore
+
+# Go build/module caches kept in-tree (gitignored); never ship them into a build
+.gocache
+.gomodcache
+
+# Build output and local databases
+dist
+tmp
+
+# Local databases and sqlite WAL/SHM sidecars (never bake a database or secrets in)
+*.db
+*.db-*
+
+# Internal docs and research (not needed to build; keep them out of the context)
+docs
+grok-research
+.research
+
+# Compiled test binaries
+*.test
+
+# Deploy artifacts themselves (the Dockerfiles, compose, env, and any throwaway .env)
+deploy

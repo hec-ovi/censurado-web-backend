@@ -1,0 +1,157 @@
+# =============================================================================
+# Censurado backend topology (data + API server)
+#
+# This repo is the SERVER side. Two Go binaries share ONE sqlite database file on
+# the db-data volume:
+#   - publish : the ONLY db writer. Serves the authenticated write API (POST
+#               /articles, POST /articles:batch), the self-hosted media store
+#               (POST /media, GET /media/{name}), the authenticated JSON read API
+#               (GET /authors, /topics, /articles, /articles/{slug}), and the
+#               operator mutation lane (CRUD/edit/delete under admin:write).
+#   - admin   : a READER. The private operator console (/admin/*). It proxies
+#               writes to publish over the compose network, so publish stays the
+#               sole writer.
+#
+# The database runs in WAL mode (set in the sqlite DSN), which lets the readers run
+# concurrently with the single writer. db-data is mounted READ-WRITE for both
+# services on purpose: WAL readers must create/update the -wal and -shm sidecars.
+#
+# STATIC SITE GENERATION lives in a SEPARATE repo (censurado-web). That generator
+# reads this database (the db-data volume) and renders the static site for the CDN;
+# it is not part of this compose. Point the generator at the same db-data volume
+# (mount it, or run on the same host) and let it write the site output the CDN
+# serves. The backend no longer regenerates the site in-process.
+#
+# Private by default: the publish API and the admin console are bound to 127.0.0.1
+# on the host, reachable only over a private network or an SSH tunnel. Secrets/config
+# come from deploy/.env (see .env.example).
+# =============================================================================
+
+services:
+  # --- publish: the write API + read API + operator lane, the ONLY db writer ---
+  publish:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.publish
+    image: censurado-publish:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed internal paths (not secrets). The keys file is mounted read-only below.
+      CENSURADO_DB: /data/censurado.db
+      CENSURADO_PUBLISH_KEYS_FILE: /etc/censurado/keys.json
+      # The self-hosted image store / CDN. publish writes uploaded images here (POST
+      # /media) and serves them (GET /media/{name}); the public web server also serves
+      # /media/ from this same volume. Leave unset to disable media.
+      CENSURADO_MEDIA_DIR: /srv/media
+    ports:
+      # Private: bound to localhost on the host. The container listens on 0.0.0.0:8080.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - db-data:/data
+      - media-data:/srv/media
+      # Seed this as an empty JSON array FIRST (`printf '[]\n' > keys.json`) before
+      # any `compose run`: Docker creates an empty DIRECTORY here if the host file is
+      # missing, which breaks the documented first-run. Then mint entries with
+      # `docker compose run --rm publish -gen-key -author NAME` and replace the [].
+      - ./keys.json:/etc/censurado/keys.json:ro
+    read_only: true
+    # Pure-Go HTTP servers binding ports >1024 as the distroless nonroot user: they
+    # need zero Linux capabilities. Drop the default set and forbid privilege
+    # escalation to shrink the post-compromise blast radius.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- admin: the private operator console, a db reader ----------------------
+  admin:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.admin
+    image: censurado-admin:dev
+    restart: unless-stopped
+    # depends_on so publish initializes the db-data volume (and its ownership) first.
+    depends_on:
+      - publish
+    env_file: .env
+    environment:
+      CENSURADO_DB: /data/censurado.db
+      # The manual "New article" form POSTs to the publish service over the compose
+      # network, so the admin stays a NON-WRITER of the db (publish remains the only
+      # writer). The operator token (CENSURADO_ADMIN_PUBLISH_TOKEN) comes from .env;
+      # leave it blank there to disable the create form.
+      CENSURADO_ADMIN_PUBLISH_URL: http://publish:8080
+      # CENSURADO_BASE_URL, CENSURADO_ADMIN_TOKEN_HASH, CENSURADO_ADMIN_SESSION_KEY,
+      # CENSURADO_ADMIN_SECURE_COOKIES, and CENSURADO_ADMIN_PUBLISH_TOKEN come from .env.
+    ports:
+      # Private: bound to localhost on the host. The container listens on 0.0.0.0:8081.
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - db-data:/data
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- litestream: continuous backup sidecar ---------------------------------
+  # Continuously replicates /data/censurado.db (snapshots + WAL frames) to a replica.
+  # By default that is the local "replica-data" volume (a file replica, no
+  # credentials). For off-site backups, set the LITESTREAM_S3_* vars in .env and
+  # uncomment the s3 block in litestream.yml.
+  #
+  # Single-writer is preserved: litestream only READS article data to replicate it.
+  # It holds a read lock and manages the WAL, which is why db-data is mounted
+  # read-write (a ":ro" mount cannot touch the -wal/-shm sidecars). It runs as root
+  # because it shares the WAL index (-shm/-wal) with the nonroot publish writer (uid
+  # 65532) and writes a fresh replica-data volume Docker initializes root-owned.
+  litestream:
+    image: litestream/litestream:0.3.14@sha256:c5a1e1b01916b3a110f6600820ef176d048d9b9c2411ef0a680de0caa68934a5
+    restart: unless-stopped
+    depends_on:
+      - publish
+    env_file: .env
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    volumes:
+      - db-data:/data
+      - replica-data:/replica
+      - ./litestream.yml:/etc/litestream.yml:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # The single sqlite database (WAL): written by publish, read by admin/litestream
+  # and by the censurado-web generator (which mounts this same volume from its own
+  # compose/run).
+  db-data:
+  # The self-hosted image store: uploaded images written by publish, served at
+  # /media/ by publish AND by the external web server. Litestream backs up only the
+  # sqlite db, so back this volume up separately.
+  media-data:
+  # Local file-replica target for the litestream backup sidecar (snapshots + WAL).
+  replica-data:

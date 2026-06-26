@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://censurado.local/contracts/batch-request.schema.json",
+  "title": "BatchPublishRequest",
+  "description": "Body of POST /articles:batch: a single 'articles' array. Each item is the article payload defined by article.schema.json plus a required per-item idempotency_key, since one HTTP header cannot carry N keys. The article shape itself is owned by article.schema.json and is unchanged; the fields are mirrored here only so a batch payload validates as one document. The server strict-decodes each item (unknown fields rejected) exactly like the single payload, validates every item before any write, and commits the whole batch in one transaction or none of it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["articles"],
+  "properties": {
+    "articles": {
+      "type": "array",
+      "description": "The articles to publish. An empty array is accepted and writes nothing.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "body", "author", "section", "idempotency_key"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 300, "description": "Headline. maxLength is input hygiene, not a content limit." },
+          "body": { "type": "string", "minLength": 1, "description": "Article body as Markdown. No maximum length; bodies must never be truncated." },
+          "author": { "type": "string", "minLength": 1, "maxLength": 120, "description": "Author persona identifier." },
+          "section": { "type": "string", "minLength": 1, "maxLength": 120, "description": "Top-level section." },
+          "topics": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 120 }, "uniqueItems": true, "description": "Free-form topic tags." },
+          "slug": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Optional; derived from the title when absent. Must be unique within the batch." },
+          "published_at": { "type": "string", "format": "date-time", "description": "Optional; defaults to the server receipt time." },
+          "metadata": { "type": "object", "additionalProperties": true, "description": "Open-ended attributes, including the media keys (image, image_alt, youtube)." },
+          "idempotency_key": { "type": "string", "minLength": 1, "description": "Per-item idempotency key; must be unique within the batch. A replayed key returns the prior article with status deduplicated." }
+        }
+      }
+    }
+  }
+}

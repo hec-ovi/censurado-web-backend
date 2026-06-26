@@ -1,0 +1,74 @@
+{{define "content"}}
+<div class="admin-layout">
+<aside class="admin-filters">
+<form class="admin-filter-form" method="get" action="/admin/articles" hx-get="/admin/articles" hx-target="#results" hx-push-url="true" hx-include="closest form">
+<h2 class="admin-h2">Filter</h2>
+
+<label class="admin-label" for="q">Search</label>
+<input class="admin-input" id="q" name="q" type="search" value="{{.Query}}" placeholder="title or body text">
+
+<fieldset class="admin-fieldset">
+<legend class="admin-legend">Section</legend>
+{{range .Sections}}
+<label class="admin-check"><input type="checkbox" name="section" value="{{.Value}}"{{if .Selected}} checked{{end}}> <span class="admin-check-label">{{.Value}}</span> <span class="admin-count">{{.Count}}</span></label>
+{{else}}
+<p class="admin-muted">none</p>
+{{end}}
+</fieldset>
+
+<fieldset class="admin-fieldset">
+<legend class="admin-legend">Author</legend>
+{{range .Authors}}
+<label class="admin-check"><input type="checkbox" name="author" value="{{.Value}}"{{if .Selected}} checked{{end}}> <span class="admin-check-label">{{.Value}}</span> <span class="admin-count">{{.Count}}</span></label>
+{{else}}
+<p class="admin-muted">none</p>
+{{end}}
+</fieldset>
+
+<fieldset class="admin-fieldset">
+<legend class="admin-legend">Topic</legend>
+{{range .Topics}}
+<label class="admin-check"><input type="checkbox" name="topic" value="{{.Value}}"{{if .Selected}} checked{{end}}> <span class="admin-check-label">{{.Value}}</span> <span class="admin-count">{{.Count}}</span></label>
+{{else}}
+<p class="admin-muted">none</p>
+{{end}}
+</fieldset>
+
+<div class="admin-dates">
+<div>
+<label class="admin-label" for="from">From</label>
+<input class="admin-input" id="from" name="from" type="date" value="{{.From}}">
+</div>
+<div>
+<label class="admin-label" for="to">To (inclusive)</label>
+<input class="admin-input" id="to" name="to" type="date" value="{{.To}}">
+</div>
+</div>
+
+<label class="admin-label" for="order">Order</label>
+<select class="admin-input" id="order" name="order">
+<option value="newest"{{if eq .Order "newest"}} selected{{end}}>Newest first</option>
+<option value="oldest"{{if eq .Order "oldest"}} selected{{end}}>Oldest first</option>
+</select>
+
+<div class="admin-filter-actions">
+<button class="admin-btn" type="submit">Apply</button>
+<a class="admin-btn admin-btn-ghost" href="/admin/articles">Reset</a>
+</div>
+</form>
+</aside>
+
+<section class="admin-results-wrap">
+{{if .Chips}}
+<ul class="admin-chips" aria-label="Active filters">
+{{range .Chips}}
+<li class="admin-chip">{{.Axis}}: {{.Value}} <a class="admin-chip-x" href="{{.RemoveURL}}" aria-label="Remove {{.Axis}} {{.Value}}">x</a></li>
+{{end}}
+</ul>
+{{end}}
+<div id="results">
+{{template "results" .Results}}
+</div>
+</section>
+</div>
+{{end}}

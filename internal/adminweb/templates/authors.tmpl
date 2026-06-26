@@ -1,0 +1,39 @@
+{{define "content"}}
+<section class="admin-registry">
+<h1 class="admin-h1">Authors</h1>
+<p class="admin-muted">The managed author registry: the canonical identity the public site renders. Changes go through the operator API, the same write boundary the agents use, so the admin never writes the database directly. Run <a href="/admin/regenerate">Regenerate</a> after a change to push it live.</p>
+
+{{if not .Configured}}
+<p class="admin-notice admin-muted" role="status">The author registry is not configured for this instance. Set the operator API URL and an <code>admin:write</code> operator token to enable it.</p>
+{{else}}
+<p class="admin-actions">
+<a class="admin-btn" href="/admin/authors/new">New author</a>
+<a class="admin-btn admin-btn-ghost" href="{{.ToggleURL}}">{{if .ShowDeleted}}Hide removed{{else}}Show removed{{end}}</a>
+</p>
+{{if .Rows}}
+<table class="admin-table">
+<thead><tr><th scope="col">Handle</th><th scope="col">Name</th><th scope="col">Bio</th><th scope="col">Actions</th></tr></thead>
+<tbody>
+{{range .Rows}}
+<tr{{if .Deleted}} class="admin-row-deleted"{{end}}>
+<td class="admin-mono">{{.Handle}}{{if .Deleted}} <span class="admin-tag">removed</span>{{end}}</td>
+<td>{{.Name}}</td>
+<td>{{.Bio}}</td>
+<td class="admin-row-actions">
+<a class="admin-btn admin-btn-ghost" href="{{.EditURL}}">Edit</a>
+{{if .Deleted}}
+<form method="post" action="/admin/authors/{{.Handle}}/restore" class="admin-inline-form"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="admin-btn admin-btn-ghost" type="submit">Restore</button></form>
+{{else}}
+<form method="post" action="/admin/authors/{{.Handle}}/delete" class="admin-inline-form"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="admin-btn admin-btn-danger" type="submit">Delete</button></form>
+{{end}}
+</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p class="admin-muted">No authors yet. <a href="/admin/authors/new">Create one</a>.</p>
+{{end}}
+{{end}}
+</section>
+{{end}}

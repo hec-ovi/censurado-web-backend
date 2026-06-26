@@ -1,0 +1,44 @@
+{{define "content"}}
+<section class="admin-regenerate">
+<h1 class="admin-h1">Regenerate static site</h1>
+<p class="admin-muted">Rebuild the public static site from the current store. Only changed artifacts are written; the purge list reports every URL to invalidate at the edge.</p>
+{{if .Configured}}
+<form class="admin-regen-form" method="post" action="/admin/regenerate" hx-post="/admin/regenerate" hx-target="#regen-result">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<button class="admin-btn" type="submit">Regenerate static site</button>
+</form>
+{{else}}
+<p class="admin-notice admin-muted" role="status">Regeneration is not configured for this instance. Set the output directory and base URL to enable it.</p>
+{{end}}
+<div id="regen-result">
+{{template "regen_result" .}}
+</div>
+</section>
+{{end}}
+
+{{define "regen_result"}}
+{{if .Error}}
+<div class="admin-regen-summary admin-error" role="alert">
+<h2 class="admin-h2">Regeneration failed</h2>
+<p class="admin-mono">{{.Error}}</p>
+</div>
+{{else if .Result}}
+<div class="admin-regen-summary" role="status">
+<h2 class="admin-h2">Regeneration complete</h2>
+<dl class="admin-provenance">
+<dt>Written</dt><dd class="admin-mono">{{.Result.Written}}</dd>
+<dt>Unchanged</dt><dd class="admin-mono">{{.Result.Unchanged}}</dd>
+<dt>Deleted</dt><dd class="admin-mono">{{.Result.Deleted}}</dd>
+<dt>Scopes</dt><dd class="admin-mono">{{.Result.ScopeCount}}</dd>
+</dl>
+<h3 class="admin-h3">Purge URLs ({{len .Result.Purge}})</h3>
+{{if .Result.Purge}}
+<ul class="admin-purge">
+{{range .Result.Purge}}<li class="admin-mono">{{.}}</li>{{end}}
+</ul>
+{{else}}
+<p class="admin-muted">No URLs to purge.</p>
+{{end}}
+</div>
+{{end}}
+{{end}}

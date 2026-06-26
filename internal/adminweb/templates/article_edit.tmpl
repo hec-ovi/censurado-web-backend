@@ -1,0 +1,52 @@
+{{define "content"}}
+<section class="admin-create">
+<h1 class="admin-h1">Edit article</h1>
+<p><a class="admin-back" href="/admin/articles/{{.Slug}}">Back to article</a></p>
+<p class="admin-muted">Saving recomputes the content hash and rebuilds the page; the permalink (slug) never changes. Edits go through the operator API, so the admin never writes the database directly. Run <a href="/admin/regenerate">Regenerate</a> afterward to push it live.</p>
+
+{{if not .Configured}}
+<p class="admin-notice admin-muted" role="status">Article editing is not configured for this instance. Set the operator API URL and an <code>admin:write</code> operator token to enable it.</p>
+{{else}}
+{{if .Deleted}}<p class="admin-notice" role="status">This article is currently removed (hidden from the public site). Saving an edit keeps it removed; use Restore on the article page to bring it back.</p>{{end}}
+{{if .Error}}<div class="admin-error" role="alert">{{.Error}}</div>{{end}}
+
+<form class="admin-create-form" method="post" action="/admin/articles/{{.Slug}}">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+<label class="admin-label" for="title">Title</label>
+<input class="admin-input" id="title" name="title" type="text" value="{{.Title}}" required>
+{{with index .Fields "title"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<div class="admin-create-row">
+<div>
+<label class="admin-label" for="section">Section</label>
+<input class="admin-input" id="section" name="section" type="text" value="{{.Section}}" required>
+{{with index .Fields "section"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+</div>
+<div>
+<label class="admin-label" for="author">Author</label>
+<input class="admin-input" id="author" name="author" type="text" value="{{.Author}}" required>
+{{with index .Fields "author"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+</div>
+</div>
+
+<label class="admin-label" for="topics">Topics <span class="admin-muted">(comma-separated)</span></label>
+<input class="admin-input" id="topics" name="topics" type="text" value="{{.Topics}}">
+
+<label class="admin-label" for="published_at">Published at <span class="admin-muted">(UTC)</span></label>
+<input class="admin-input" id="published_at" name="published_at" type="datetime-local" value="{{.PublishedAt}}">
+{{with index .Fields "published_at"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<label class="admin-label" for="body">Body <span class="admin-muted">(Markdown; raw HTML is stripped)</span></label>
+<textarea class="admin-input admin-textarea" id="body" name="body" rows="16" required>{{.Body}}</textarea>
+{{with index .Fields "body"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<label class="admin-label" for="metadata">Metadata <span class="admin-muted">(optional JSON object)</span></label>
+<textarea class="admin-input admin-textarea admin-textarea-short" id="metadata" name="metadata" rows="6" placeholder='{"image":"https://example/x.jpg"}'>{{.Metadata}}</textarea>
+{{with index .Fields "metadata"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<div class="admin-create-actions"><button class="admin-btn" type="submit">Save changes</button></div>
+</form>
+{{end}}
+</section>
+{{end}}

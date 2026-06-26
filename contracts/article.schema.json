@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://censurado.local/contracts/article.schema.json",
+  "title": "PublishArticleInput",
+  "description": "The payload an author agent submits to the publish API. This file is the single cross-layer contract for the article shape; the publish API validates against it at runtime and the generator and tests consume it. Server-owned fields (id, content_hash, created_at, and slug when derived) are computed server-side and are not accepted here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "body", "author", "section"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Headline. maxLength is an input-hygiene guard, not a content limit."
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Article body as Markdown. Untrusted: rendered and allowlist-sanitized server-side. No maximum length; article bodies must never be truncated."
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Author persona identifier."
+    },
+    "section": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Top-level section, e.g. tech, politics, economics."
+    },
+    "topics": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Free-form topic tags; slugified into /topic/<slug> navigation at generation time."
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Optional. Derived from the title when absent."
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional. Defaults to the server receipt time."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Open-ended extensible attributes. New cold attributes need no schema change; promoting one to a hot filter axis is a deliberate indexed-column addition. The keys below are recognized and rendered by the static-site generator; any other key is stored and ignored.",
+      "properties": {
+        "subtitle": {
+          "type": "string",
+          "description": "Authored dek: one short line under the headline, shown on cards and at the top of the article. No length cap; keep it to a single line."
+        },
+        "description": {
+          "type": "string",
+          "description": "Authored standfirst/lede: one or two sentences shown as the article's opening paragraph (distinct from the SEO meta description, which is derived from the body)."
+        },
+        "author_name": {
+          "type": "string",
+          "description": "Reader-facing byline name. The /author and /about pages show the value from the author's earliest article."
+        },
+        "author_bio": {
+          "type": "string",
+          "description": "Author bio shown on the /author and /about pages (newlines are preserved as paragraphs). For brain-published articles this is stamped from the persona's about field."
+        },
+        "author_avatar": {
+          "type": "string",
+          "description": "Author portrait media URL (/media/<sha256>.<ext> or an absolute http(s) URL), rendered as a circular avatar."
+        },
+        "image": {
+          "type": "string",
+          "description": "Hero/card image media URL. When absent, the card and article render cleanly with no image and no placeholder."
+        },
+        "image_alt": {
+          "type": "string",
+          "description": "Alt text for the hero/card image; falls back to the title."
+        }
+      }
+    }
+  }
+}

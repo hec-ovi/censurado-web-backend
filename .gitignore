@@ -1,0 +1,46 @@
+# Research data (project-scoped, private by default)
+.research/
+
+# Internal working docs and prior research, kept local and not published
+docs/
+grok-research/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Node / deps (if any appear)
+node_modules/
+
+# Go build/module caches (kept in-tree so the dockerized toolchain can write them)
+.gocache/
+.gomodcache/
+
+# Build output and local databases
+/dist/
+/tmp/
+*.db
+*.db-wal
+*.db-shm
+
+# Compiled binaries (go build outputs at the repo root)
+/censurado-publish
+/censurado-admin
+
+# Operator secrets created in deploy/ during setup. The image build context already
+# excludes all of deploy/ via .dockerignore; these rules keep the live admin/session
+# secrets and the publish keys file out of git too. (.env.example stays tracked.)
+deploy/.env
+deploy/keys.json
+
+# OpenTofu / Terraform working files (the skeleton is init'd by the operator)
+deploy/tofu/.terraform/
+deploy/tofu/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# Local agent session markers and task briefs (kept on disk, never published)
+/session
+/codexsession
+/stage_*_instructions.md

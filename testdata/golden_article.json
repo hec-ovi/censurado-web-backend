@@ -1,0 +1,8 @@
+{
+  "title": "OpenTofu 1.12 Lands Client-Side State Encryption",
+  "body": "# OpenTofu 1.12\n\nThe release adds client-side state encryption, letting teams encrypt state before it leaves the machine.\n\n- Vendor-neutral\n- MPL-2.0 licensed\n",
+  "author": "ada",
+  "section": "tech",
+  "topics": ["infrastructure", "iac"],
+  "metadata": { "source_count": 3, "region": "global" }
+}

@@ -1,0 +1,53 @@
+# Litestream configuration for the censurado source-of-truth SQLite database.
+#
+# Format note: this is the Litestream 0.3.x config schema. Each entry under "dbs"
+# names one database "path" and a "replicas" ARRAY (one or more replica targets).
+# This is deliberately NOT the 0.5.x schema (which replaced the array with a single
+# "replica" and switched the on-disk format to LTX). We pin 0.3.14 on purpose: it
+# is the conservative, still-maintained line, and 0.5.x shipped restore/sync
+# regressions we will not adopt until the restore drill stays green against it.
+# Upgrading to 0.5.x (LTX) is the documented future step, gated on that drill.
+#
+# How it works: Litestream runs as a sidecar (see deploy/docker-compose.yml). It
+# only READS /data/censurado.db and its WAL to replicate frames out; it never
+# writes article data, so the single-writer topology (publish is the only writer)
+# is preserved. It holds a long-lived read lock so the WAL is not checkpointed away
+# before its frames are replicated.
+
+dbs:
+  - path: /data/censurado.db
+    # How often Litestream syncs new WAL frames to the replicas. 1s keeps the
+    # recovery point objective (RPO) tight: at most ~1s of writes can be lost on a
+    # hard crash. The restore drill (scripts/restore-drill.sh) reuses this same
+    # config, so this interval is exercised on every push.
+    monitor-interval: 1s
+
+    replicas:
+      # --- file replica: local/drill target, needs no credentials -------------
+      # Used by the automated restore drill and as a local/staging replica. In the
+      # compose topology this maps to the "replica-data" named volume mounted at
+      # /replica. A point-in-time restore reads the latest snapshot plus the
+      # replicated WAL from here.
+      - type: file
+        path: /replica
+        # Take a fresh full snapshot on this cadence; older snapshots beyond the
+        # retention window are pruned. WAL between snapshots gives point-in-time
+        # recovery to within monitor-interval of any moment in the window.
+        snapshot-interval: 1h
+        retention: 24h
+
+      # --- s3 replica: PRODUCTION off-site target (env-driven) ----------------
+      # Commented by default so local/CI runs stay self-contained and need no
+      # secrets. To enable off-site backups in production, set the LITESTREAM_S3_*
+      # variables in deploy/.env (see deploy/.env.example) and uncomment this block.
+      # Litestream expands ${VAR} references at load time.
+      #
+      # - type: s3
+      #   bucket: ${LITESTREAM_S3_BUCKET}
+      #   path: ${LITESTREAM_S3_PATH}              # key prefix inside the bucket, e.g. censurado/db
+      #   region: ${LITESTREAM_S3_REGION}
+      #   endpoint: ${LITESTREAM_S3_ENDPOINT}      # set for S3-compatible stores (R2, MinIO, B2); omit for AWS S3
+      #   access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID}
+      #   secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY}
+      #   snapshot-interval: 1h
+      #   retention: 72h

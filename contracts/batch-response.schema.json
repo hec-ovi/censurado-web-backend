@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://censurado.local/contracts/batch-response.schema.json",
+  "title": "BatchPublishResponse",
+  "description": "Success response from POST /articles:batch: one result per input item, in input order. The HTTP status is 201 when any item was created and 200 when every item was deduplicated. On a failed validation the server instead returns an application/problem+json document carrying a per-item error list (index and code) and writes nothing, so this success shape is never partial.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "description": "One entry per submitted article, in the order received.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "id", "slug", "status"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0, "description": "Zero-based position of the item in the request." },
+          "id": { "type": "string", "description": "Server-assigned article id." },
+          "slug": { "type": "string", "description": "Article slug (its permalink stem)." },
+          "status": { "type": "string", "enum": ["created", "deduplicated"], "description": "created for a brand-new article; deduplicated for an idempotent replay or a content-hash duplicate." }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{{define "content"}}
+{{if .NotConfigured}}
+<section class="admin-notice">
+<h1 class="admin-h1">Audit log unavailable</h1>
+<p class="admin-muted">The audit log is not configured for this instance.</p>
+<p><a class="admin-btn admin-btn-ghost" href="/admin/articles">Back to browse</a></p>
+</section>
+{{else}}
+<div class="admin-layout">
+<aside class="admin-filters">
+<form class="admin-filter-form" method="get" action="/admin/audit" hx-get="/admin/audit" hx-target="#audit-results" hx-push-url="true" hx-include="closest form">
+<h2 class="admin-h2">Audit filter</h2>
+
+<label class="admin-label" for="author">Author</label>
+<input class="admin-input" id="author" name="author" type="search" value="{{.Author}}" placeholder="exact author">
+
+<div class="admin-dates">
+<div>
+<label class="admin-label" for="from">From</label>
+<input class="admin-input" id="from" name="from" type="date" value="{{.From}}">
+</div>
+<div>
+<label class="admin-label" for="to">To (inclusive)</label>
+<input class="admin-input" id="to" name="to" type="date" value="{{.To}}">
+</div>
+</div>
+
+<div class="admin-filter-actions">
+<button class="admin-btn" type="submit">Apply</button>
+<a class="admin-btn admin-btn-ghost" href="/admin/audit">Reset</a>
+</div>
+</form>
+</aside>
+
+<section class="admin-results-wrap">
+<div id="audit-results">
+{{template "audit_results" .Results}}
+</div>
+</section>
+</div>
+{{end}}
+{{end}}

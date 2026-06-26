@@ -1,0 +1,90 @@
+{{define "content"}}
+<section class="admin-create">
+<h1 class="admin-h1">New article</h1>
+<p class="admin-muted">Publishes through the write API, the same boundary the author agents use, so the admin never writes the database directly. After it lands, run <a href="/admin/regenerate">Regenerate</a> to push it to the public site.</p>
+
+{{if not .Configured}}
+<p class="admin-notice admin-muted" role="status">Manual publishing is not configured for this instance. Set <code>CENSURADO_ADMIN_PUBLISH_URL</code> and <code>CENSURADO_ADMIN_PUBLISH_TOKEN</code> (an operator key holding the <code>articles:publish-any</code> scope) to enable it.</p>
+{{else}}
+
+{{if .Result}}
+<div class="admin-create-summary" role="status">
+<h2 class="admin-h2">{{if .Result.Created}}Article published{{else}}Already published (idempotent, no new article){{end}}</h2>
+<dl class="admin-provenance">
+<dt>Slug</dt><dd class="admin-mono">{{.Result.Slug}}</dd>
+<dt>ID</dt><dd class="admin-mono">{{.Result.ID}}</dd>
+</dl>
+<p><a class="admin-btn admin-btn-ghost" href="{{.Result.DetailURL}}">View in admin</a></p>
+<p class="admin-muted">It is in the store now. Run <a href="/admin/regenerate">Regenerate</a> to publish it to the live site.</p>
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="admin-error" role="alert">{{.Error}}</div>
+{{end}}
+
+<form class="admin-create-form" method="post" action="/admin/create" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+<label class="admin-label" for="title">Title</label>
+<input class="admin-input" id="title" name="title" type="text" value="{{.Form.Title}}" required>
+{{with index .Fields "title"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<div class="admin-create-row">
+<div>
+<label class="admin-label" for="section">Section</label>
+<input class="admin-input" id="section" name="section" type="text" value="{{.Form.Section}}" list="section-options" required>
+<datalist id="section-options">{{range .Sections}}<option value="{{.}}"></option>{{end}}</datalist>
+{{with index .Fields "section"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+</div>
+<div>
+<label class="admin-label" for="author">Author</label>
+<input class="admin-input" id="author" name="author" type="text" value="{{.Form.Author}}" list="author-options" required>
+<datalist id="author-options">{{range .Authors}}<option value="{{.}}"></option>{{end}}</datalist>
+{{with index .Fields "author"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+</div>
+</div>
+
+<label class="admin-label" for="topics">Topics <span class="admin-muted">(comma-separated, optional)</span></label>
+<input class="admin-input" id="topics" name="topics" type="text" value="{{.Form.Topics}}" list="topic-options">
+<datalist id="topic-options">{{range .Topics}}<option value="{{.}}"></option>{{end}}</datalist>
+
+<label class="admin-label" for="published_at">Published at <span class="admin-muted">(optional, UTC; blank means now)</span></label>
+<input class="admin-input" id="published_at" name="published_at" type="datetime-local" value="{{.Form.PublishedAt}}">
+{{with index .Fields "published_at"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<label class="admin-label" for="body">Body <span class="admin-muted">(Markdown; raw HTML is stripped)</span></label>
+<textarea class="admin-input admin-textarea" id="body" name="body" rows="16" required>{{.Form.Body}}</textarea>
+{{with index .Fields "body"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<fieldset class="admin-create-media">
+<legend class="admin-label">Media <span class="admin-muted">(optional)</span></legend>
+{{if .UploadEnabled}}
+<label class="admin-label" for="image">Upload image</label>
+<input class="admin-input" id="image" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+<p class="admin-muted">Stored on this site and attached as the article image. Max 10 MiB; JPEG, PNG, GIF, or WebP.</p>
+{{end}}
+<label class="admin-label" for="image_url">Image URL <span class="admin-muted">(or paste an existing one)</span></label>
+<input class="admin-input" id="image_url" name="image_url" type="text" value="{{.Form.ImageURL}}" placeholder="/media/... or https://...">
+{{with index .Fields "image"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+{{with index .Fields "image_url"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<label class="admin-label" for="image_alt">Image alt text</label>
+<input class="admin-input" id="image_alt" name="image_alt" type="text" value="{{.Form.ImageAlt}}">
+
+<label class="admin-label" for="youtube">YouTube <span class="admin-muted">(URL or video id; takes precedence over the image)</span></label>
+<input class="admin-input" id="youtube" name="youtube" type="text" value="{{.Form.YouTube}}" placeholder="https://youtu.be/...">
+{{with index .Fields "youtube"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+</fieldset>
+
+<label class="admin-label" for="metadata">Metadata <span class="admin-muted">(optional JSON object)</span></label>
+<textarea class="admin-input admin-textarea admin-textarea-short" id="metadata" name="metadata" rows="4" placeholder='{"image":"https://example/x.jpg"}'>{{.Form.Metadata}}</textarea>
+{{with index .Fields "metadata"}}<p class="admin-field-error" role="alert">{{.}}</p>{{end}}
+
+<div class="admin-create-actions">
+<button class="admin-btn" type="submit">Publish article</button>
+</div>
+</form>
+{{end}}
+</section>
+{{end}}

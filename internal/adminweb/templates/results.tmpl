@@ -1,0 +1,32 @@
+{{define "results"}}
+<div class="admin-results">
+<p class="admin-resultcount" aria-live="polite">
+{{- if .Total}}{{.Total}} article{{if ne .Total 1}}s{{end}}{{if .Shown}}, showing {{.FirstIndex}}-{{.LastIndex}}{{end}}{{else}}No articles match the current filters.{{end -}}
+</p>
+{{if .Rows}}
+<table class="admin-table">
+<thead>
+<tr><th scope="col">Title</th><th scope="col">Author</th><th scope="col">Section</th><th scope="col">Topics</th><th scope="col">Published</th></tr>
+</thead>
+<tbody>
+{{range .Rows}}
+<tr>
+<td><a class="admin-title-link" href="{{.DetailURL}}">{{.Title}}</a></td>
+<td>{{.Author}}</td>
+<td>{{.Section}}</td>
+<td>{{range $i, $t := .Topics}}{{if $i}}, {{end}}{{$t}}{{end}}</td>
+<td>{{.Published}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+<nav class="admin-pager" aria-label="Pagination">
+{{if .HasPrev}}<a class="admin-btn admin-btn-ghost admin-prev" href="{{.PrevURL}}" hx-get="{{.PrevURL}}" hx-target="#results" hx-push-url="true">Prev</a>{{end}}
+<span class="admin-pageinfo">Page {{.Page}}{{if .TotalPages}} of {{.TotalPages}}{{end}}</span>
+{{if .HasNext}}<a class="admin-btn admin-btn-ghost admin-next" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#results" hx-push-url="true">Next</a>{{end}}
+</nav>
+{{else}}
+<p class="admin-empty">No articles match the current filters.</p>
+{{end}}
+</div>
+{{end}}

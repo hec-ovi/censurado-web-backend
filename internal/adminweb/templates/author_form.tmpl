@@ -1,0 +1,34 @@
+{{define "content"}}
+<section class="admin-registry-form">
+<h1 class="admin-h1">{{if .Editing}}Edit author{{else}}New author{{end}}</h1>
+<p><a class="admin-back" href="/admin/authors">Back to authors</a></p>
+
+{{if not .Configured}}
+<p class="admin-notice admin-muted" role="status">The author registry is not configured for this instance.</p>
+{{else}}
+{{if .Error}}<div class="admin-error" role="alert">{{.Error}}</div>{{end}}
+<form class="admin-create-form" method="post" action="{{.ActionURL}}">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+<label class="admin-label" for="handle">Handle</label>
+{{if .Editing}}
+<input class="admin-input" id="handle" type="text" value="{{.Handle}}" readonly>
+<p class="admin-muted">The handle is the stable key and matches the author byline; it does not change on edit.</p>
+{{else}}
+<input class="admin-input" id="handle" name="handle" type="text" value="{{.Handle}}" required>
+{{end}}
+
+<label class="admin-label" for="name">Name</label>
+<input class="admin-input" id="name" name="name" type="text" value="{{.Name}}">
+
+<label class="admin-label" for="avatar">Avatar URL</label>
+<input class="admin-input" id="avatar" name="avatar" type="text" value="{{.Avatar}}" placeholder="/media/... or https://...">
+
+<label class="admin-label" for="bio">Bio</label>
+<textarea class="admin-input admin-textarea admin-textarea-short" id="bio" name="bio" rows="5">{{.Bio}}</textarea>
+
+<div class="admin-create-actions"><button class="admin-btn" type="submit">{{if .Editing}}Save changes{{else}}Create author{{end}}</button></div>
+</form>
+{{end}}
+</section>
+{{end}}

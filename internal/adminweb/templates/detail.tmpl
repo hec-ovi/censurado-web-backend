@@ -1,0 +1,38 @@
+{{define "content"}}
+<article class="admin-detail">
+<p><a class="admin-back" href="/admin/articles">Back to browse</a></p>
+<h1 class="admin-detail-title">{{.ArticleTitle}}</h1>
+<p class="admin-byline">By {{.Author}} in {{.Section}} on {{.Published}}</p>
+{{if .Deleted}}<p class="admin-notice" role="status">This article is removed (hidden from the public site).</p>{{end}}
+{{if .EditEnabled}}
+<p class="admin-actions">
+<a class="admin-btn admin-btn-ghost" href="/admin/articles/{{.Slug}}/edit">Edit</a>
+{{if .Deleted}}
+<form method="post" action="/admin/articles/{{.Slug}}/restore" class="admin-inline-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="admin-btn admin-btn-ghost" type="submit">Restore</button></form>
+{{else}}
+<form method="post" action="/admin/articles/{{.Slug}}/delete" class="admin-inline-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="admin-btn admin-btn-danger" type="submit">Delete</button></form>
+{{end}}
+</p>
+{{end}}
+{{if .Topics}}
+<ul class="admin-topics" aria-label="Topics">
+{{range .Topics}}<li class="admin-topic">{{.}}</li>{{end}}
+</ul>
+{{end}}
+<div class="admin-article-body">
+{{.BodyHTML}}
+</div>
+{{if .Meta}}
+<h2 class="admin-h2">Metadata</h2>
+<table class="admin-table admin-meta">
+<tbody>
+{{range .Meta}}<tr><th scope="row">{{.Key}}</th><td class="admin-mono">{{.Value}}</td></tr>{{end}}
+</tbody>
+</table>
+{{end}}
+<dl class="admin-provenance">
+<dt>Content hash</dt><dd class="admin-mono">{{.ContentHash}}</dd>
+<dt>Created</dt><dd class="admin-mono">{{.CreatedAt}}</dd>
+</dl>
+</article>
+{{end}}

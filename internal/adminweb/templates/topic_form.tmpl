@@ -1,0 +1,31 @@
+{{define "content"}}
+<section class="admin-registry-form">
+<h1 class="admin-h1">{{if .Editing}}Edit topic{{else}}New topic{{end}}</h1>
+<p><a class="admin-back" href="/admin/topics">Back to topics</a></p>
+
+{{if not .Configured}}
+<p class="admin-notice admin-muted" role="status">The topic registry is not configured for this instance.</p>
+{{else}}
+{{if .Error}}<div class="admin-error" role="alert">{{.Error}}</div>{{end}}
+<form class="admin-create-form" method="post" action="{{.ActionURL}}">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+<label class="admin-label" for="slug">Slug</label>
+{{if .Editing}}
+<input class="admin-input" id="slug" type="text" value="{{.Slug}}" readonly>
+<p class="admin-muted">The slug is the stable key and matches the topic in article memberships; it does not change on edit.</p>
+{{else}}
+<input class="admin-input" id="slug" name="slug" type="text" value="{{.Slug}}" required>
+{{end}}
+
+<label class="admin-label" for="label">Label</label>
+<input class="admin-input" id="label" name="label" type="text" value="{{.Label}}">
+
+<label class="admin-label" for="description">Description</label>
+<textarea class="admin-input admin-textarea admin-textarea-short" id="description" name="description" rows="5">{{.Description}}</textarea>
+
+<div class="admin-create-actions"><button class="admin-btn" type="submit">{{if .Editing}}Save changes{{else}}Create topic{{end}}</button></div>
+</form>
+{{end}}
+</section>
+{{end}}

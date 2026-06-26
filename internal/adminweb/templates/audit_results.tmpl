@@ -1,0 +1,33 @@
+{{define "audit_results"}}
+<div class="admin-results">
+<p class="admin-resultcount" aria-live="polite">
+{{- if .Rows}}Showing {{.Shown}} submission{{if ne .Shown 1}}s{{end}} (page {{.Page}}){{else}}No submissions recorded for the current filters.{{end -}}
+</p>
+{{if .Rows}}
+<table class="admin-table">
+<thead>
+<tr><th scope="col">Created</th><th scope="col">Author</th><th scope="col">Slug</th><th scope="col">Content hash</th><th scope="col">Scopes</th><th scope="col">Idempotency key</th></tr>
+</thead>
+<tbody>
+{{range .Rows}}
+<tr>
+<td class="admin-mono">{{.CreatedAt}}</td>
+<td>{{.Author}}</td>
+<td><a class="admin-title-link" href="{{.DetailURL}}">{{.Slug}}</a></td>
+<td class="admin-mono">{{.ContentHash}}</td>
+<td>{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{end}}</td>
+<td class="admin-mono">{{.IdempotencyKey}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+<nav class="admin-pager" aria-label="Pagination">
+{{if .HasPrev}}<a class="admin-btn admin-btn-ghost admin-prev" href="{{.PrevURL}}" hx-get="{{.PrevURL}}" hx-target="#audit-results" hx-push-url="true">Prev</a>{{end}}
+<span class="admin-pageinfo">Page {{.Page}}</span>
+{{if .HasNext}}<a class="admin-btn admin-btn-ghost admin-next" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#audit-results" hx-push-url="true">Next</a>{{end}}
+</nav>
+{{else}}
+<p class="admin-empty">No submissions recorded for the current filters.</p>
+{{end}}
+</div>
+{{end}}
