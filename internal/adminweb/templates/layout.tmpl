@@ -31,12 +31,11 @@
 <h1 class="admin-page-title">{{.Title}}</h1>
 </div>
 <div class="admin-topbar-actions">
-<label class="admin-theme-label" for="admin-theme">Theme</label>
-<select class="admin-theme-select" id="admin-theme" data-theme-control>
-<option value="system">System</option>
-<option value="light">Light</option>
-<option value="dark">Dark</option>
-</select>
+<div class="admin-theme-switch" role="group" aria-label="Theme">
+<button type="button" class="admin-theme-option" data-theme-choice="system" aria-pressed="true">System</button>
+<button type="button" class="admin-theme-option" data-theme-choice="light" aria-pressed="false">Light</button>
+<button type="button" class="admin-theme-option" data-theme-choice="dark" aria-pressed="false">Dark</button>
+</div>
 {{if .CSRFToken}}
 <form class="admin-logout" method="post" action="/admin/logout">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

@@ -1,7 +1,7 @@
 (function () {
   const storageKey = "admin-theme";
   const root = document.documentElement;
-  const controls = Array.from(document.querySelectorAll("[data-theme-control]"));
+  const choices = Array.from(document.querySelectorAll("[data-theme-choice]"));
 
   function preferredTheme() {
     try {
@@ -14,8 +14,8 @@
   function applyTheme(value) {
     const theme = value === "light" || value === "dark" ? value : "system";
     root.dataset.theme = theme;
-    controls.forEach((control) => {
-      control.value = theme;
+    choices.forEach((button) => {
+      button.setAttribute("aria-pressed", button.dataset.themeChoice === theme ? "true" : "false");
     });
   }
 
@@ -38,8 +38,8 @@
   }
 
   applyTheme(preferredTheme());
-  controls.forEach((control) => {
-    control.addEventListener("change", () => saveTheme(control.value));
+  choices.forEach((button) => {
+    button.addEventListener("click", () => saveTheme(button.dataset.themeChoice));
   });
   markActiveNav();
 })();

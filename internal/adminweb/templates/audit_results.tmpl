@@ -1,9 +1,9 @@
 {{define "audit_results"}}
 <div class="admin-results">
-<p class="admin-resultcount" aria-live="polite">
-{{- if .Rows}}Showing {{.Shown}} submission{{if ne .Shown 1}}s{{end}} (page {{.Page}}){{else}}No submissions recorded for the current filters.{{end -}}
-</p>
 {{if .Rows}}
+<p class="admin-resultcount" aria-live="polite">
+Showing {{.Shown}} submission{{if ne .Shown 1}}s{{end}} (page {{.Page}})
+</p>
 <table class="admin-table">
 <thead>
 <tr><th scope="col">Created</th><th scope="col">Author</th><th scope="col">Slug</th><th scope="col">Content hash</th><th scope="col">Scopes</th><th scope="col">Idempotency key</th></tr>
@@ -27,7 +27,7 @@
 {{if .HasNext}}<a class="admin-btn admin-btn-ghost admin-next" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#audit-results" hx-push-url="true">Next</a>{{end}}
 </nav>
 {{else}}
-<p class="admin-empty">No submissions recorded for the current filters.</p>
+<p class="admin-empty" aria-live="polite">No submissions recorded for the current filters.</p>
 {{end}}
 </div>
 {{end}}
