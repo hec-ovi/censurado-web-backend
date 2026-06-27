@@ -141,6 +141,7 @@ type layoutData struct {
 type loginView struct {
 	Title string
 	Error string // generic message; never echoes the submitted token
+	Token string // optional default for local rigs that intentionally prefill login
 }
 
 // facetOption is one selectable filter value with its article count and whether

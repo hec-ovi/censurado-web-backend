@@ -3,16 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} | Censurado Admin</title>
+<title>{{.Title}} | Admin Panel</title>
 <link rel="stylesheet" href="/admin/assets/admin.css">
+<script src="/admin/assets/theme.js" defer></script>
 </head>
 <body class="admin-body admin-login-body">
 <main class="admin-login-card">
-<h1 class="admin-login-title"><span class="admin-mark">Censurado</span> Admin</h1>
+<div class="admin-login-head">
+<span class="admin-mark">AP</span>
+<div>
+<p class="admin-kicker">Control panel</p>
+<h1 class="admin-login-title">Admin Panel</h1>
+</div>
+</div>
+<div class="admin-login-theme-row">
+<label class="admin-theme-label" for="admin-theme">Theme</label>
+<select class="admin-theme-select" id="admin-theme" data-theme-control>
+<option value="system">System</option>
+<option value="light">Light</option>
+<option value="dark">Dark</option>
+</select>
+</div>
 {{if .Error}}<p class="admin-error" role="alert">{{.Error}}</p>{{end}}
 <form class="admin-login-form" method="post" action="/admin/login">
 <label class="admin-label" for="token">Operator token</label>
-<input class="admin-input" id="token" name="token" type="password" autocomplete="current-password" autofocus required>
+<input class="admin-input" id="token" name="token" type="password" autocomplete="current-password" value="{{.Token}}" autofocus required>
 <button class="admin-btn" type="submit">Sign in</button>
 </form>
 </main>

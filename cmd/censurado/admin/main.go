@@ -151,15 +151,17 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 func buildConfig(getenv func(string) string) (adminweb.Config, error) {
 	var cfg adminweb.Config
 
+	token := strings.TrimSpace(getenv("CENSURADO_ADMIN_TOKEN"))
 	tokenHash := strings.TrimSpace(getenv("CENSURADO_ADMIN_TOKEN_HASH"))
-	if tokenHash == "" {
-		token := getenv("CENSURADO_ADMIN_TOKEN")
-		if strings.TrimSpace(token) == "" {
+	if token != "" {
+		cfg.TokenHash = hashTokenHex(token)
+		cfg.LoginToken = token
+	} else {
+		if tokenHash == "" {
 			return cfg, errors.New("set CENSURADO_ADMIN_TOKEN_HASH (hex sha256 of the operator token) or CENSURADO_ADMIN_TOKEN")
 		}
-		tokenHash = hashTokenHex(token)
+		cfg.TokenHash = tokenHash
 	}
-	cfg.TokenHash = tokenHash
 
 	keyRaw := strings.TrimSpace(getenv("CENSURADO_ADMIN_SESSION_KEY"))
 	if keyRaw == "" {

@@ -119,6 +119,26 @@ func TestBuildConfig(t *testing.T) {
 		if cfg.TokenHash != hashTokenHex("operator-token-fixture") {
 			t.Errorf("TokenHash = %q, want hash of the cleartext token", cfg.TokenHash)
 		}
+		if cfg.LoginToken != "operator-token-fixture" {
+			t.Errorf("LoginToken = %q, want cleartext token for local prefill", cfg.LoginToken)
+		}
+	})
+
+	t.Run("clear token wins over hash for local prefill", func(t *testing.T) {
+		cfg, err := buildConfig(envFromMap(map[string]string{
+			"CENSURADO_ADMIN_TOKEN":       "admin",
+			"CENSURADO_ADMIN_TOKEN_HASH":  strings.Repeat("0", 64),
+			"CENSURADO_ADMIN_SESSION_KEY": validKey,
+		}))
+		if err != nil {
+			t.Fatalf("buildConfig: %v", err)
+		}
+		if cfg.TokenHash != hashTokenHex("admin") {
+			t.Errorf("TokenHash = %q, want hash of cleartext token", cfg.TokenHash)
+		}
+		if cfg.LoginToken != "admin" {
+			t.Errorf("LoginToken = %q, want admin", cfg.LoginToken)
+		}
 	})
 
 	t.Run("explicit hash + secure cookies off", func(t *testing.T) {

@@ -34,6 +34,7 @@ type Config struct {
 	Repo          store.Repository
 	Now           func() time.Time // injectable clock; default time.Now
 	TokenHash     string           // hex sha256 of the operator login token
+	LoginToken    string           // optional local-rig convenience default for the login field
 	SessionKey    []byte           // HMAC signing key for session+csrf (>=32 bytes)
 	SessionTTL    time.Duration    // default 12h if zero
 	SecureCookies bool             // set Secure on cookies (true in prod)
@@ -140,6 +141,7 @@ type Handler struct {
 	repo          store.Repository
 	now           func() time.Time
 	tokenHash     string
+	loginToken    string
 	sessionKey    []byte
 	sessionTTL    time.Duration
 	secureCookies bool
@@ -187,6 +189,7 @@ func New(cfg Config) (*Handler, error) {
 		repo:          cfg.Repo,
 		now:           now,
 		tokenHash:     cfg.TokenHash,
+		loginToken:    cfg.LoginToken,
 		sessionKey:    append([]byte(nil), cfg.SessionKey...),
 		sessionTTL:    ttl,
 		secureCookies: cfg.SecureCookies,
@@ -343,7 +346,7 @@ func (h *Handler) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/articles", http.StatusSeeOther)
 		return
 	}
-	h.renderTemplate(w, http.StatusOK, loginTmpl, "login", loginView{Title: "Sign in"})
+	h.renderTemplate(w, http.StatusOK, loginTmpl, "login", loginView{Title: "Sign in", Token: h.loginToken})
 }
 
 func (h *Handler) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
@@ -363,6 +366,7 @@ func (h *Handler) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	h.renderTemplate(w, http.StatusOK, loginTmpl, "login", loginView{
 		Title: "Sign in",
 		Error: "Invalid token.",
+		Token: h.loginToken,
 	})
 }
 
@@ -845,6 +849,7 @@ func parseMetadataObject(s string) (map[string]any, error) {
 var assetTypes = map[string]string{
 	"htmx.min.js": "application/javascript; charset=utf-8",
 	"admin.css":   "text/css; charset=utf-8",
+	"theme.js":    "application/javascript; charset=utf-8",
 }
 
 func (h *Handler) handleAsset(w http.ResponseWriter, r *http.Request) {
