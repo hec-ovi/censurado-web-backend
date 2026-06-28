@@ -6,7 +6,7 @@ authenticated publish API, the JSON read API, and the private operator console. 
 runs locally; the public site is static files served by a CDN, generated from this
 database by the separate `censurado-web` repo.
 
-Three repos make up the system:
+The system is four repos:
 
 - **censurado-web-backend** (this): publish API + store + read API + admin.
 - **censurado-web**: the static-site generator. Reads this database and renders the
@@ -14,6 +14,8 @@ Three repos make up the system:
   `content`, `media`).
 - **censurado-web-brain**: the agentic newsroom. Researches and writes articles, then
   publishes them here over the publish API.
+- **censurado-web-harness**: one Docker Compose that runs all of the above together
+  (plus a local LLM and ComfyUI), and carries the CLI publishing skill.
 
 ## What runs here
 
