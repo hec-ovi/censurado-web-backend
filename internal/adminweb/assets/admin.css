@@ -265,6 +265,50 @@ a {
   color: #ffffff;
 }
 
+.admin-lang-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(44px, 1fr));
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.admin-lang-option {
+  min-height: 36px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 720;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.admin-lang-option:last-child {
+  border-right: 0;
+}
+
+.admin-lang-option[aria-pressed="true"] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.admin-lang-option:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+}
+
+.admin-lang-option[aria-pressed="true"]:hover {
+  background: var(--accent-strong);
+  color: #ffffff;
+}
+
+.admin-lang-option:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .admin-main {
   width: min(100%, 1280px);
   margin: 0 auto;

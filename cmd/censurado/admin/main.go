@@ -184,6 +184,14 @@ func buildConfig(getenv func(string) string) (adminweb.Config, error) {
 		}
 		cfg.SecureCookies = b
 	}
+
+	// The panel is Spanish-first in production. CENSURADO_ADMIN_LANG can override
+	// the served default ("en" or "es"); anything else falls back to Spanish. An
+	// operator can still switch per-session via the in-page EN/ES toggle (cookie).
+	cfg.DefaultLocale = "es"
+	if v := strings.TrimSpace(getenv("CENSURADO_ADMIN_LANG")); v == "en" || v == "es" {
+		cfg.DefaultLocale = v
+	}
 	return cfg, nil
 }
 

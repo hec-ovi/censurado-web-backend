@@ -40,6 +40,11 @@ type Config struct {
 	SecureCookies bool             // set Secure on cookies (true in prod)
 	PageSize      int              // default 50
 
+	// DefaultLocale is the served UI language when no admin_lang cookie is set.
+	// "es" makes the panel Spanish-first; anything else (including the zero value)
+	// resolves to English, which keeps the tests on English assertions unchanged.
+	DefaultLocale string
+
 	// Log backs the operator audit view (/admin/audit). When nil, that route
 	// returns a friendly "not configured" page instead of an error.
 	Log store.SubmissionLog
@@ -146,6 +151,7 @@ type Handler struct {
 	sessionTTL    time.Duration
 	secureCookies bool
 	pageSize      int
+	defaultLocale string
 	log           store.SubmissionLog
 	regenerate    func(ctx context.Context) (RegenResult, error)
 	publish       func(ctx context.Context, in CreateArticleInput) (CreateArticleResult, error)
@@ -194,13 +200,14 @@ func New(cfg Config) (*Handler, error) {
 		sessionTTL:    ttl,
 		secureCookies: cfg.SecureCookies,
 		pageSize:      pageSize,
-		log:           cfg.Log,         // optional; nil disables the audit view
-		regenerate:    cfg.Regenerate,  // optional; nil disables the regenerate action
-		publish:       cfg.Publish,     // optional; nil disables the create action
-		uploadMedia:   cfg.UploadMedia, // optional; nil hides the upload control
-		authors:       cfg.Authors,     // optional; nil disables the authors registry
-		topics:        cfg.Topics,      // optional; nil disables the topics registry
-		operator:      cfg.Operator,    // optional; nil disables all operator mutations
+		defaultLocale: cfg.DefaultLocale, // "es" serves Spanish by default; "" -> en
+		log:           cfg.Log,           // optional; nil disables the audit view
+		regenerate:    cfg.Regenerate,    // optional; nil disables the regenerate action
+		publish:       cfg.Publish,       // optional; nil disables the create action
+		uploadMedia:   cfg.UploadMedia,   // optional; nil hides the upload control
+		authors:       cfg.Authors,       // optional; nil disables the authors registry
+		topics:        cfg.Topics,        // optional; nil disables the topics registry
+		operator:      cfg.Operator,      // optional; nil disables all operator mutations
 	}
 	h.routes()
 	return h, nil
@@ -346,7 +353,11 @@ func (h *Handler) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/articles", http.StatusSeeOther)
 		return
 	}
-	h.renderTemplate(w, http.StatusOK, loginTmpl, "login", loginView{Title: "Sign in", Token: h.loginToken})
+	h.renderTemplate(w, http.StatusOK, h.set(r).login, "login", loginView{
+		Title: h.tr(r, "Sign in"),
+		Lang:  h.localeFor(r),
+		Token: h.loginToken,
+	})
 }
 
 func (h *Handler) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
@@ -363,8 +374,10 @@ func (h *Handler) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Generic error; never reflect the submitted token. No session cookie is set.
-	h.renderTemplate(w, http.StatusOK, loginTmpl, "login", loginView{
-		Title: "Sign in",
+	// Error stays the English key; the template translates it via {{T .Error}}.
+	h.renderTemplate(w, http.StatusOK, h.set(r).login, "login", loginView{
+		Title: h.tr(r, "Sign in"),
+		Lang:  h.localeFor(r),
 		Error: "Invalid token.",
 		Token: h.loginToken,
 	})
@@ -395,7 +408,7 @@ func (h *Handler) handleArticles(w http.ResponseWriter, r *http.Request) {
 	// stay shareable: a full reload of the same URL hits the else branch below and
 	// reproduces the identical state.
 	if r.Header.Get("HX-Request") == "true" {
-		h.renderPartial(w, "results", results)
+		h.renderPartial(w, h.set(r).results, "results", results)
 		return
 	}
 
@@ -416,7 +429,7 @@ func (h *Handler) handleArticles(w http.ResponseWriter, r *http.Request) {
 		Chips:      h.chipsFor(sel),
 		Results:    results,
 	}
-	h.renderPage(w, browseTmpl, view)
+	h.renderPage(w, h.set(r).browse, view)
 }
 
 func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
@@ -451,7 +464,7 @@ func (h *Handler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		EditEnabled:  h.operator != nil,
 		Deleted:      a.Deleted,
 	}
-	h.renderPage(w, detailTmpl, view)
+	h.renderPage(w, h.set(r).detail, view)
 }
 
 // handleAudit renders the operator audit log: recorded submissions newest first,
@@ -464,7 +477,7 @@ func (h *Handler) handleAudit(w http.ResponseWriter, r *http.Request) {
 			layoutData:    h.layoutFor(r, "Audit log"),
 			NotConfigured: true,
 		}
-		h.renderTemplate(w, http.StatusServiceUnavailable, auditTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusServiceUnavailable, h.set(r).audit, "layout", view)
 		return
 	}
 	ctx := r.Context()
@@ -486,7 +499,7 @@ func (h *Handler) handleAudit(w http.ResponseWriter, r *http.Request) {
 	results := h.buildAuditResults(sel, subs)
 
 	if r.Header.Get("HX-Request") == "true" {
-		h.renderTemplate(w, http.StatusOK, auditResultsTmpl, "audit_results", results)
+		h.renderTemplate(w, http.StatusOK, h.set(r).auditResults, "audit_results", results)
 		return
 	}
 	view := auditView{
@@ -496,7 +509,7 @@ func (h *Handler) handleAudit(w http.ResponseWriter, r *http.Request) {
 		To:         sel.To,
 		Results:    results,
 	}
-	h.renderPage(w, auditTmpl, view)
+	h.renderPage(w, h.set(r).audit, view)
 }
 
 // handleRegenerateForm renders the regenerate page: a POST form with the CSRF
@@ -507,7 +520,7 @@ func (h *Handler) handleRegenerateForm(w http.ResponseWriter, r *http.Request) {
 		layoutData: h.layoutFor(r, "Regenerate"),
 		Configured: h.regenerate != nil,
 	}
-	h.renderPage(w, regenerateTmpl, view)
+	h.renderPage(w, h.set(r).regenerate, view)
 }
 
 // handleRegenerateSubmit runs the regenerate closure (under requireSession +
@@ -522,7 +535,7 @@ func (h *Handler) handleRegenerateSubmit(w http.ResponseWriter, r *http.Request)
 	if h.regenerate == nil {
 		// Feature disabled: render the full page (with its disabled note) so the
 		// operator sees a clear, friendly state. Not an error.
-		h.renderPage(w, regenerateTmpl, view)
+		h.renderPage(w, h.set(r).regenerate, view)
 		return
 	}
 	view.Ran = true
@@ -539,17 +552,17 @@ func (h *Handler) handleRegenerateSubmit(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if r.Header.Get("HX-Request") == "true" {
-		h.renderTemplate(w, http.StatusOK, regenResultTmpl, "regen_result", view)
+		h.renderTemplate(w, http.StatusOK, h.set(r).regenResult, "regen_result", view)
 		return
 	}
-	h.renderPage(w, regenerateTmpl, view)
+	h.renderPage(w, h.set(r).regenerate, view)
 }
 
 // handleCreateForm renders the manual "new article" form. The form posts to the
 // publish service (the single db writer); the admin never writes the store. When
 // no Publish closure is wired the page shows a friendly disabled note instead.
 func (h *Handler) handleCreateForm(w http.ResponseWriter, r *http.Request) {
-	h.renderPage(w, createTmpl, h.newCreateView(r.Context(), r))
+	h.renderPage(w, h.set(r).create, h.newCreateView(r.Context(), r))
 }
 
 // handleCreateSubmit validates the operator's input, calls the Publish closure
@@ -560,7 +573,7 @@ func (h *Handler) handleCreateForm(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreateSubmit(w http.ResponseWriter, r *http.Request) {
 	view := h.newCreateView(r.Context(), r)
 	if h.publish == nil {
-		h.renderPage(w, createTmpl, view)
+		h.renderPage(w, h.set(r).create, view)
 		return
 	}
 	view.Ran = true
@@ -587,7 +600,7 @@ func (h *Handler) handleCreateSubmit(w http.ResponseWriter, r *http.Request) {
 	uploadedImageURL, uploadErr := h.uploadFormImage(r)
 	if uploadErr != "" {
 		view.Fields = map[string]string{"image": uploadErr}
-		h.renderTemplate(w, http.StatusUnprocessableEntity, createTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).create, "layout", view)
 		return
 	}
 	// Preserve a successful upload across a field-error re-render: echo the stored URL
@@ -602,7 +615,7 @@ func (h *Handler) handleCreateSubmit(w http.ResponseWriter, r *http.Request) {
 	in, fields := buildCreateInput(form, uploadedImageURL)
 	if len(fields) > 0 {
 		view.Fields = fields
-		h.renderTemplate(w, http.StatusUnprocessableEntity, createTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).create, "layout", view)
 		return
 	}
 
@@ -615,12 +628,12 @@ func (h *Handler) handleCreateSubmit(w http.ResponseWriter, r *http.Request) {
 			if len(ve.Fields) == 0 {
 				view.Error = ve.Error()
 			}
-			h.renderTemplate(w, http.StatusUnprocessableEntity, createTmpl, "layout", view)
+			h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).create, "layout", view)
 			return
 		}
 		// Auth / network / 5xx: a server-side problem, not the operator's input.
 		view.Error = err.Error()
-		h.renderTemplate(w, http.StatusBadGateway, createTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusBadGateway, h.set(r).create, "layout", view)
 		return
 	}
 
@@ -632,7 +645,7 @@ func (h *Handler) handleCreateSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	// Clear the form on success so the next entry starts blank.
 	view.Form = createForm{}
-	h.renderPage(w, createTmpl, view)
+	h.renderPage(w, h.set(r).create, view)
 }
 
 // newCreateView seeds the create view with the layout, the configured flag, and
@@ -850,6 +863,7 @@ var assetTypes = map[string]string{
 	"htmx.min.js": "application/javascript; charset=utf-8",
 	"admin.css":   "text/css; charset=utf-8",
 	"theme.js":    "application/javascript; charset=utf-8",
+	"lang.js":     "application/javascript; charset=utf-8",
 }
 
 func (h *Handler) handleAsset(w http.ResponseWriter, r *http.Request) {
@@ -870,10 +884,13 @@ func (h *Handler) handleAsset(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// layoutFor builds the shared layout data, deriving the CSRF token from the
-// session expiry stashed by requireSession.
+// layoutFor builds the shared layout data, resolving the locale, translating the
+// (English) page-title key for it, and deriving the CSRF token from the session
+// expiry stashed by requireSession. Callers keep passing the English title key;
+// a dynamic title (e.g. an article's own title) simply falls through untranslated.
 func (h *Handler) layoutFor(r *http.Request, title string) layoutData {
-	ld := layoutData{Title: title}
+	loc := h.localeFor(r)
+	ld := layoutData{Title: translate(loc, title), Lang: loc}
 	if exp, ok := sessionExpFromContext(r); ok {
 		ld.CSRFToken = h.csrfToken(exp)
 	}

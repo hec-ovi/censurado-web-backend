@@ -110,11 +110,11 @@ func (h *Handler) renderAuthorsList(w http.ResponseWriter, r *http.Request, show
 			})
 		}
 	}
-	h.renderPage(w, authorsTmpl, view)
+	h.renderPage(w, h.set(r).authors, view)
 }
 
 func (h *Handler) handleAuthorNew(w http.ResponseWriter, r *http.Request) {
-	h.renderPage(w, authorFormTmpl, authorFormView{
+	h.renderPage(w, h.set(r).authorForm, authorFormView{
 		layoutData: h.layoutFor(r, "New author"),
 		Configured: h.operator != nil,
 		ActionURL:  "/admin/authors",
@@ -142,7 +142,7 @@ func (h *Handler) handleAuthorEdit(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Name, view.Bio, view.Avatar = a.Name, a.Bio, a.Avatar
 	}
-	h.renderPage(w, authorFormTmpl, view)
+	h.renderPage(w, h.set(r).authorForm, view)
 }
 
 func (h *Handler) handleAuthorCreate(w http.ResponseWriter, r *http.Request) {
@@ -172,18 +172,18 @@ func (h *Handler) submitAuthor(w http.ResponseWriter, r *http.Request, handle st
 		Avatar:     r.PostFormValue("avatar"),
 	}
 	if h.operator == nil {
-		h.renderPage(w, authorFormTmpl, view)
+		h.renderPage(w, h.set(r).authorForm, view)
 		return
 	}
 	if strings.TrimSpace(handle) == "" {
 		view.Error = "handle is required"
-		h.renderTemplate(w, http.StatusUnprocessableEntity, authorFormTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).authorForm, "layout", view)
 		return
 	}
 	body := operatorAuthorBody{Handle: handle, Name: view.Name, Bio: view.Bio, Avatar: view.Avatar}
 	if _, err := h.operator(r.Context(), http.MethodPost, "/authors", body); err != nil {
 		view.Error = operatorMessage(err)
-		h.renderTemplate(w, operatorRenderStatus(err), authorFormTmpl, "layout", view)
+		h.renderTemplate(w, operatorRenderStatus(err), h.set(r).authorForm, "layout", view)
 		return
 	}
 	http.Redirect(w, r, "/admin/authors", http.StatusSeeOther)
@@ -226,11 +226,11 @@ func (h *Handler) renderTopicsList(w http.ResponseWriter, r *http.Request, showD
 			})
 		}
 	}
-	h.renderPage(w, topicsTmpl, view)
+	h.renderPage(w, h.set(r).topics, view)
 }
 
 func (h *Handler) handleTopicNew(w http.ResponseWriter, r *http.Request) {
-	h.renderPage(w, topicFormTmpl, topicFormView{
+	h.renderPage(w, h.set(r).topicForm, topicFormView{
 		layoutData: h.layoutFor(r, "New topic"),
 		Configured: h.operator != nil,
 		ActionURL:  "/admin/topics",
@@ -258,7 +258,7 @@ func (h *Handler) handleTopicEdit(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Label, view.Description = t.Label, t.Description
 	}
-	h.renderPage(w, topicFormTmpl, view)
+	h.renderPage(w, h.set(r).topicForm, view)
 }
 
 func (h *Handler) handleTopicCreate(w http.ResponseWriter, r *http.Request) {
@@ -284,18 +284,18 @@ func (h *Handler) submitTopic(w http.ResponseWriter, r *http.Request, slug strin
 		Description: r.PostFormValue("description"),
 	}
 	if h.operator == nil {
-		h.renderPage(w, topicFormTmpl, view)
+		h.renderPage(w, h.set(r).topicForm, view)
 		return
 	}
 	if strings.TrimSpace(slug) == "" {
 		view.Error = "slug is required"
-		h.renderTemplate(w, http.StatusUnprocessableEntity, topicFormTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).topicForm, "layout", view)
 		return
 	}
 	body := operatorTopicBody{Slug: slug, Label: view.Label, Description: view.Description}
 	if _, err := h.operator(r.Context(), http.MethodPost, "/topics", body); err != nil {
 		view.Error = operatorMessage(err)
-		h.renderTemplate(w, operatorRenderStatus(err), topicFormTmpl, "layout", view)
+		h.renderTemplate(w, operatorRenderStatus(err), h.set(r).topicForm, "layout", view)
 		return
 	}
 	http.Redirect(w, r, "/admin/topics", http.StatusSeeOther)
@@ -339,7 +339,7 @@ func (h *Handler) handleArticleEdit(w http.ResponseWriter, r *http.Request) {
 			view.Metadata = string(raw)
 		}
 	}
-	h.renderPage(w, articleEditTmpl, view)
+	h.renderPage(w, h.set(r).articleEdit, view)
 }
 
 func (h *Handler) handleArticleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -357,7 +357,7 @@ func (h *Handler) handleArticleUpdate(w http.ResponseWriter, r *http.Request) {
 		Metadata:    r.PostFormValue("metadata"),
 	}
 	if h.operator == nil {
-		h.renderPage(w, articleEditTmpl, view)
+		h.renderPage(w, h.set(r).articleEdit, view)
 		return
 	}
 
@@ -399,13 +399,13 @@ func (h *Handler) handleArticleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(fields) > 0 {
 		view.Fields = fields
-		h.renderTemplate(w, http.StatusUnprocessableEntity, articleEditTmpl, "layout", view)
+		h.renderTemplate(w, http.StatusUnprocessableEntity, h.set(r).articleEdit, "layout", view)
 		return
 	}
 
 	if _, err := h.operator(r.Context(), http.MethodPut, "/articles/"+url.PathEscape(slug), in); err != nil {
 		view.Error = operatorMessage(err)
-		h.renderTemplate(w, operatorRenderStatus(err), articleEditTmpl, "layout", view)
+		h.renderTemplate(w, operatorRenderStatus(err), h.set(r).articleEdit, "layout", view)
 		return
 	}
 	http.Redirect(w, r, "/admin/articles/"+url.PathEscape(slug), http.StatusSeeOther)

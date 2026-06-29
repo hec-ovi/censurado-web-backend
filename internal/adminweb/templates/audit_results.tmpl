@@ -2,11 +2,11 @@
 <div class="admin-results">
 {{if .Rows}}
 <p class="admin-resultcount" aria-live="polite">
-Showing {{.Shown}} submission{{if ne .Shown 1}}s{{end}} (page {{.Page}})
+{{T "Showing"}} {{.Shown}} {{if eq .Shown 1}}{{T "submission"}}{{else}}{{T "submissions"}}{{end}} ({{T "page"}} {{.Page}})
 </p>
 <table class="admin-table">
 <thead>
-<tr><th scope="col">Created</th><th scope="col">Author</th><th scope="col">Slug</th><th scope="col">Content hash</th><th scope="col">Scopes</th><th scope="col">Idempotency key</th></tr>
+<tr><th scope="col">{{T "Created"}}</th><th scope="col">{{T "Author"}}</th><th scope="col">{{T "Slug"}}</th><th scope="col">{{T "Content hash"}}</th><th scope="col">{{T "Scopes"}}</th><th scope="col">{{T "Idempotency key"}}</th></tr>
 </thead>
 <tbody>
 {{range .Rows}}
@@ -21,13 +21,13 @@ Showing {{.Shown}} submission{{if ne .Shown 1}}s{{end}} (page {{.Page}})
 {{end}}
 </tbody>
 </table>
-<nav class="admin-pager" aria-label="Pagination">
-{{if .HasPrev}}<a class="admin-btn admin-btn-ghost admin-prev" href="{{.PrevURL}}" hx-get="{{.PrevURL}}" hx-target="#audit-results" hx-push-url="true">Prev</a>{{end}}
-<span class="admin-pageinfo">Page {{.Page}}</span>
-{{if .HasNext}}<a class="admin-btn admin-btn-ghost admin-next" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#audit-results" hx-push-url="true">Next</a>{{end}}
+<nav class="admin-pager" aria-label="{{T "Pagination"}}">
+{{if .HasPrev}}<a class="admin-btn admin-btn-ghost admin-prev" href="{{.PrevURL}}" hx-get="{{.PrevURL}}" hx-target="#audit-results" hx-push-url="true">{{T "Prev"}}</a>{{end}}
+<span class="admin-pageinfo">{{T "Page"}} {{.Page}}</span>
+{{if .HasNext}}<a class="admin-btn admin-btn-ghost admin-next" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#audit-results" hx-push-url="true">{{T "Next"}}</a>{{end}}
 </nav>
 {{else}}
-<p class="admin-empty" aria-live="polite">No submissions recorded for the current filters.</p>
+<p class="admin-empty" aria-live="polite">{{T "No submissions recorded for the current filters."}}</p>
 {{end}}
 </div>
 {{end}}

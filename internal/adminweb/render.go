@@ -14,37 +14,80 @@ var tmplFS embed.FS
 //go:embed assets/*
 var assetFS embed.FS
 
-// Template sets are parsed once at init. Each page kind that defines "content"
-// gets its own set paired with the shared layout, because two templates cannot
-// both define "content" in one set (same reason the generator splits its sets).
-// login renders its own standalone shell (no nav/logout), so it is parsed alone.
-// results is parsed both inside the browse set (the full page embeds it) and on
-// its own, so the HX-Request partial can render the fragment in isolation.
-var (
-	loginTmpl   = template.Must(template.New("login").ParseFS(tmplFS, "templates/login.tmpl"))
-	browseTmpl  = template.Must(template.New("browse").ParseFS(tmplFS, "templates/layout.tmpl", "templates/browse.tmpl", "templates/results.tmpl"))
-	detailTmpl  = template.Must(template.New("detail").ParseFS(tmplFS, "templates/layout.tmpl", "templates/detail.tmpl"))
-	resultsTmpl = template.Must(template.New("results").ParseFS(tmplFS, "templates/results.tmpl"))
-	// audit embeds its results fragment, which is also parsed standalone so the
-	// HX-Request partial renders in isolation (same split as browse/results).
-	auditTmpl        = template.Must(template.New("audit").ParseFS(tmplFS, "templates/layout.tmpl", "templates/audit.tmpl", "templates/audit_results.tmpl"))
-	auditResultsTmpl = template.Must(template.New("audit_results").ParseFS(tmplFS, "templates/audit_results.tmpl"))
-	// regenerate embeds its result fragment, also parsed standalone for the HX
-	// POST swap that updates only the result region.
-	regenerateTmpl  = template.Must(template.New("regenerate").ParseFS(tmplFS, "templates/layout.tmpl", "templates/regenerate.tmpl"))
-	regenResultTmpl = template.Must(template.New("regen_result").ParseFS(tmplFS, "templates/regenerate.tmpl"))
-	// create is a plain full-page form: the POST re-renders the whole page so field
-	// errors can repopulate inputs, so no standalone fragment is needed.
-	createTmpl = template.Must(template.New("create").ParseFS(tmplFS, "templates/layout.tmpl", "templates/create.tmpl"))
-	// The operator registry pages (managed authors/topics) and the article edit form.
-	// Each is a plain full-page form like create: the POST redirects on success and
-	// re-renders with an inline error on failure.
-	authorsTmpl     = template.Must(template.New("authors").ParseFS(tmplFS, "templates/layout.tmpl", "templates/authors.tmpl"))
-	authorFormTmpl  = template.Must(template.New("author_form").ParseFS(tmplFS, "templates/layout.tmpl", "templates/author_form.tmpl"))
-	topicsTmpl      = template.Must(template.New("topics").ParseFS(tmplFS, "templates/layout.tmpl", "templates/topics.tmpl"))
-	topicFormTmpl   = template.Must(template.New("topic_form").ParseFS(tmplFS, "templates/layout.tmpl", "templates/topic_form.tmpl"))
-	articleEditTmpl = template.Must(template.New("article_edit").ParseFS(tmplFS, "templates/layout.tmpl", "templates/article_edit.tmpl"))
-)
+// Template sets are parsed once at init, TWICE: one set per UI locale (en/es).
+// Each page kind that defines "content" gets its own template paired with the
+// shared layout, because two templates cannot both define "content" in one set
+// (same reason the generator splits its sets). login renders its own standalone
+// shell (no nav/logout), so it is parsed alone. results is parsed both inside the
+// browse set (the full page embeds it) and on its own, so the HX-Request partial
+// can render the fragment in isolation.
+//
+// Each locale's set binds the {{T}} func to that locale, so the same templates
+// render English (identity) or Spanish (catalog overlay) with no per-render cost.
+type templateSet struct {
+	login        *template.Template
+	browse       *template.Template
+	detail       *template.Template
+	results      *template.Template
+	audit        *template.Template
+	auditResults *template.Template
+	regenerate   *template.Template
+	regenResult  *template.Template
+	create       *template.Template
+	authors      *template.Template
+	authorForm   *template.Template
+	topics       *template.Template
+	topicForm    *template.Template
+	articleEdit  *template.Template
+}
+
+// funcsFor returns the template FuncMap for a locale: T translates a key for lang.
+func funcsFor(lang string) template.FuncMap {
+	return template.FuncMap{
+		"T": func(key string) string { return translate(lang, key) },
+	}
+}
+
+// buildSet parses every template under the given locale's FuncMap.
+func buildSet(lang string) templateSet {
+	f := funcsFor(lang)
+	must := func(name string, files ...string) *template.Template {
+		return template.Must(template.New(name).Funcs(f).ParseFS(tmplFS, files...))
+	}
+	return templateSet{
+		login:        must("login", "templates/login.tmpl"),
+		browse:       must("browse", "templates/layout.tmpl", "templates/browse.tmpl", "templates/results.tmpl"),
+		detail:       must("detail", "templates/layout.tmpl", "templates/detail.tmpl"),
+		results:      must("results", "templates/results.tmpl"),
+		audit:        must("audit", "templates/layout.tmpl", "templates/audit.tmpl", "templates/audit_results.tmpl"),
+		auditResults: must("audit_results", "templates/audit_results.tmpl"),
+		regenerate:   must("regenerate", "templates/layout.tmpl", "templates/regenerate.tmpl"),
+		regenResult:  must("regen_result", "templates/regenerate.tmpl"),
+		create:       must("create", "templates/layout.tmpl", "templates/create.tmpl"),
+		authors:      must("authors", "templates/layout.tmpl", "templates/authors.tmpl"),
+		authorForm:   must("author_form", "templates/layout.tmpl", "templates/author_form.tmpl"),
+		topics:       must("topics", "templates/layout.tmpl", "templates/topics.tmpl"),
+		topicForm:    must("topic_form", "templates/layout.tmpl", "templates/topic_form.tmpl"),
+		articleEdit:  must("article_edit", "templates/layout.tmpl", "templates/article_edit.tmpl"),
+	}
+}
+
+// templateSets holds the per-locale parsed templates. setFor picks one, defaulting
+// to English for any unknown locale.
+var templateSets = map[string]templateSet{
+	"en": buildSet("en"),
+	"es": buildSet("es"),
+}
+
+func setFor(lang string) templateSet {
+	if s, ok := templateSets[lang]; ok {
+		return s
+	}
+	return templateSets["en"]
+}
+
+// set returns the template set for this request's resolved locale.
+func (h *Handler) set(r *http.Request) templateSet { return setFor(h.localeFor(r)) }
 
 // authorRow is one managed author in the registry list.
 type authorRow struct {
@@ -131,15 +174,18 @@ type articleEditView struct {
 }
 
 // layoutData is embedded by every full-page view so the shared layout can read
-// the page title and the per-session CSRF token off the same dot.
+// the page title, the active UI locale, and the per-session CSRF token off the
+// same dot. Lang drives <html lang> and the language-switch aria-pressed state.
 type layoutData struct {
 	Title     string
+	Lang      string
 	CSRFToken string
 }
 
 // loginView models the standalone login page.
 type loginView struct {
 	Title string
+	Lang  string // active UI locale (drives <html lang> and the lang switch)
 	Error string // generic message; never echoes the submitted token
 	Token string // optional default for local rigs that intentionally prefill login
 }
@@ -348,7 +394,8 @@ func (h *Handler) renderPage(w http.ResponseWriter, t *template.Template, data a
 	h.renderTemplate(w, http.StatusOK, t, "layout", data)
 }
 
-// renderPartial writes only the named fragment (the HX-Request results region).
-func (h *Handler) renderPartial(w http.ResponseWriter, name string, data any) {
-	h.renderTemplate(w, http.StatusOK, resultsTmpl, name, data)
+// renderPartial writes only the named fragment (the HX-Request results region)
+// from the caller-selected, locale-bound template.
+func (h *Handler) renderPartial(w http.ResponseWriter, t *template.Template, name string, data any) {
+	h.renderTemplate(w, http.StatusOK, t, name, data)
 }
