@@ -176,10 +176,15 @@ type articleEditView struct {
 // layoutData is embedded by every full-page view so the shared layout can read
 // the page title, the active UI locale, and the per-session CSRF token off the
 // same dot. Lang drives <html lang> and the language-switch aria-pressed state.
+// AuthorsEnabled/TopicsEnabled gate the Autores/Temas nav links: they render only
+// when the matching registry is wired, so a backend that disables them (nil store)
+// shows no dead link to a 404 route.
 type layoutData struct {
-	Title     string
-	Lang      string
-	CSRFToken string
+	Title          string
+	Lang           string
+	CSRFToken      string
+	AuthorsEnabled bool
+	TopicsEnabled  bool
 }
 
 // loginView models the standalone login page.

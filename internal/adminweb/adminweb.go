@@ -236,22 +236,29 @@ func (h *Handler) routes() {
 	mux.HandleFunc("POST /admin/articles/{slug}", h.requireSession(h.requireCSRF(h.handleArticleUpdate)))
 	mux.HandleFunc("POST /admin/articles/{slug}/delete", h.requireSession(h.requireCSRF(h.handleArticleDelete)))
 	mux.HandleFunc("POST /admin/articles/{slug}/restore", h.requireSession(h.requireCSRF(h.handleArticleRestore)))
-	// Managed authors registry (CRUD via the operator API).
-	mux.HandleFunc("GET /admin/authors", h.requireSession(h.handleAuthors))
-	mux.HandleFunc("GET /admin/authors/new", h.requireSession(h.handleAuthorNew))
-	mux.HandleFunc("POST /admin/authors", h.requireSession(h.requireCSRF(h.handleAuthorCreate)))
-	mux.HandleFunc("GET /admin/authors/{handle}/edit", h.requireSession(h.handleAuthorEdit))
-	mux.HandleFunc("POST /admin/authors/{handle}", h.requireSession(h.requireCSRF(h.handleAuthorUpdate)))
-	mux.HandleFunc("POST /admin/authors/{handle}/delete", h.requireSession(h.requireCSRF(h.handleAuthorDelete)))
-	mux.HandleFunc("POST /admin/authors/{handle}/restore", h.requireSession(h.requireCSRF(h.handleAuthorRestore)))
-	// Managed topics registry (CRUD via the operator API).
-	mux.HandleFunc("GET /admin/topics", h.requireSession(h.handleTopics))
-	mux.HandleFunc("GET /admin/topics/new", h.requireSession(h.handleTopicNew))
-	mux.HandleFunc("POST /admin/topics", h.requireSession(h.requireCSRF(h.handleTopicCreate)))
-	mux.HandleFunc("GET /admin/topics/{slug}/edit", h.requireSession(h.handleTopicEdit))
-	mux.HandleFunc("POST /admin/topics/{slug}", h.requireSession(h.requireCSRF(h.handleTopicUpdate)))
-	mux.HandleFunc("POST /admin/topics/{slug}/delete", h.requireSession(h.requireCSRF(h.handleTopicDelete)))
-	mux.HandleFunc("POST /admin/topics/{slug}/restore", h.requireSession(h.requireCSRF(h.handleTopicRestore)))
+	// Managed authors registry (CRUD via the operator API). Registered only when an
+	// AuthorStore is wired; with a nil store the routes are absent (404) and the nav
+	// link is hidden, so the backend admin never shows an empty Autores tab.
+	if h.authors != nil {
+		mux.HandleFunc("GET /admin/authors", h.requireSession(h.handleAuthors))
+		mux.HandleFunc("GET /admin/authors/new", h.requireSession(h.handleAuthorNew))
+		mux.HandleFunc("POST /admin/authors", h.requireSession(h.requireCSRF(h.handleAuthorCreate)))
+		mux.HandleFunc("GET /admin/authors/{handle}/edit", h.requireSession(h.handleAuthorEdit))
+		mux.HandleFunc("POST /admin/authors/{handle}", h.requireSession(h.requireCSRF(h.handleAuthorUpdate)))
+		mux.HandleFunc("POST /admin/authors/{handle}/delete", h.requireSession(h.requireCSRF(h.handleAuthorDelete)))
+		mux.HandleFunc("POST /admin/authors/{handle}/restore", h.requireSession(h.requireCSRF(h.handleAuthorRestore)))
+	}
+	// Managed topics registry (CRUD via the operator API). Same gate as authors: a nil
+	// TopicStore leaves the routes unregistered (404) and the nav link hidden.
+	if h.topics != nil {
+		mux.HandleFunc("GET /admin/topics", h.requireSession(h.handleTopics))
+		mux.HandleFunc("GET /admin/topics/new", h.requireSession(h.handleTopicNew))
+		mux.HandleFunc("POST /admin/topics", h.requireSession(h.requireCSRF(h.handleTopicCreate)))
+		mux.HandleFunc("GET /admin/topics/{slug}/edit", h.requireSession(h.handleTopicEdit))
+		mux.HandleFunc("POST /admin/topics/{slug}", h.requireSession(h.requireCSRF(h.handleTopicUpdate)))
+		mux.HandleFunc("POST /admin/topics/{slug}/delete", h.requireSession(h.requireCSRF(h.handleTopicDelete)))
+		mux.HandleFunc("POST /admin/topics/{slug}/restore", h.requireSession(h.requireCSRF(h.handleTopicRestore)))
+	}
 	mux.HandleFunc("GET /admin/audit", h.requireSession(h.handleAudit))
 	mux.HandleFunc("GET /admin/regenerate", h.requireSession(h.handleRegenerateForm))
 	mux.HandleFunc("POST /admin/regenerate", h.requireSession(h.requireCSRF(h.handleRegenerateSubmit)))
@@ -890,7 +897,12 @@ func (h *Handler) handleAsset(w http.ResponseWriter, r *http.Request) {
 // a dynamic title (e.g. an article's own title) simply falls through untranslated.
 func (h *Handler) layoutFor(r *http.Request, title string) layoutData {
 	loc := h.localeFor(r)
-	ld := layoutData{Title: translate(loc, title), Lang: loc}
+	ld := layoutData{
+		Title:          translate(loc, title),
+		Lang:           loc,
+		AuthorsEnabled: h.authors != nil,
+		TopicsEnabled:  h.topics != nil,
+	}
 	if exp, ok := sessionExpFromContext(r); ok {
 		ld.CSRFToken = h.csrfToken(exp)
 	}

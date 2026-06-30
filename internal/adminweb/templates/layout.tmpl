@@ -18,8 +18,8 @@
 <nav class="admin-nav" aria-label="{{T "Sections"}}">
 <a class="admin-nav-link" href="/admin/articles">{{T "Dashboard"}}</a>
 <a class="admin-nav-link" href="/admin/create">{{T "Create"}}</a>
-<a class="admin-nav-link" href="/admin/authors">{{T "Authors"}}</a>
-<a class="admin-nav-link" href="/admin/topics">{{T "Topics"}}</a>
+{{if .AuthorsEnabled}}<a class="admin-nav-link" href="/admin/authors">{{T "Authors"}}</a>{{end}}
+{{if .TopicsEnabled}}<a class="admin-nav-link" href="/admin/topics">{{T "Topics"}}</a>{{end}}
 <a class="admin-nav-link" href="/admin/audit">{{T "Audit"}}</a>
 <a class="admin-nav-link" href="/admin/regenerate">{{T "Regenerate"}}</a>
 </nav>

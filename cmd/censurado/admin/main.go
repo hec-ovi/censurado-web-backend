@@ -95,10 +95,14 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	// token; nil when those are unset, which hides the upload control.
 	cfg.UploadMedia = buildUploadMedia(getenv)
 
-	// The managed author/topic registries are READ directly off the store (the same
-	// repo), like the article browse; reads never break the single-writer invariant.
-	cfg.Authors = repo
-	cfg.Topics = repo
+	// The author/topic registries are intentionally DISABLED in the backend admin.
+	// Authors live in the brain personas store and topics are derived from the article
+	// corpus by the generator; the backend authors/topics tables stay empty by design.
+	// Leaving these nil hides the Autores/Temas tabs (their routes 404) so the admin
+	// never shows an empty registry. Article edit/delete/restore still work because the
+	// Operator closure below is non-nil.
+	cfg.Authors = nil
+	cfg.Topics = nil
 	// Operator mutations (authors/topics CRUD, article edit/delete) POST to the same
 	// publish service over HTTP, so the admin stays a NON-WRITER. The operator token
 	// must additionally hold the admin:write scope. nil when the publish URL/token are

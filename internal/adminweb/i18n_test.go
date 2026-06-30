@@ -118,10 +118,35 @@ func TestSpanishCookieRendersSpanish(t *testing.T) {
 		"Restablecer",        // reset
 		"Más recientes primero",
 	)
-	// The nav links translate too.
-	mustContain(t, body, `>Autores<`, `>Artículos<`, `>Auditoría<`)
+	// The nav links translate too. newTestHandler wires no Authors/Topics store, so
+	// the Autores/Temas links are gated off; the always-present links still translate.
+	mustContain(t, body, `>Artículos<`, `>Auditoría<`)
 	// English source strings must not leak on the translated page.
 	mustNotContain(t, body, "Browse articles", "Log out", ">Dashboard<")
+}
+
+// TestRegistryDisabledHidesNavAnd404s proves that a Handler built with nil
+// Authors/Topics stores (the backend admin's article-CRUD-only config) renders the
+// nav without the Autores/Temas links and 404s their routes, while keeping the
+// always-present Articulos/Auditoria links. This is the "make the admin honest"
+// guarantee: no empty registry tab, no dead link to an unregistered route.
+func TestRegistryDisabledHidesNavAnd404s(t *testing.T) {
+	h := newTestHandler(t) // builds with Authors=nil, Topics=nil
+	c := loginCookie(t, h)
+	body := getPath(t, h, c, "es", "/admin/articles")
+	mustContain(t, body, `>Artículos<`, `>Auditoría<`)
+	// The Autores nav text and both registry nav hrefs must be absent. ">Temas<" is
+	// NOT asserted: it is also the results-table "Topics" column header, not just nav.
+	mustNotContain(t, body, `>Autores<`, `href="/admin/authors"`, `href="/admin/topics"`)
+
+	for _, path := range []string{"/admin/authors", "/admin/topics"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(c)
+		rec := do(h, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404 (route should be unregistered)", path, rec.Code)
+		}
+	}
 }
 
 // TestSpanishFormRendersSpanish proves a configured form (the author edit form)
