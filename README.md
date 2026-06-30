@@ -12,10 +12,10 @@ The system is four repos:
 - **censurado-web**: the static-site generator. Reads this database and renders the
   HTML/JSON the CDN serves. Imports this repo's shared libraries (`domain`, `store`,
   `content`, `media`).
-- **censurado-web-brain**: the agentic newsroom. Researches and writes articles, then
-  publishes them here over the publish API.
+- **censurado-web-brain**: the newsroom config plane (authors, sources, prompts). A CLI
+  agent reads it and publishes articles here over the publish API.
 - **censurado-web-harness**: one Docker Compose that runs all of the above together
-  (plus a local LLM and ComfyUI), and carries the CLI publishing skill.
+  (plus ComfyUI), and carries the CLI publishing skill.
 
 ## What runs here
 
