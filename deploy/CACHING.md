@@ -1,10 +1,10 @@
 # CDN caching and purge
 
 The static site is built to be cached hard at the edge and corrected by an exact
-purge after each generate batch, so it can serve millions of readers from the CDN
-while still showing new articles quickly. Three URL classes, three policies. The
-canonical header values live in one place in code, `internal/cachepolicy`, so a
-deploy step can apply them programmatically; the table below mirrors it.
+purge after each generate batch, so the edge serves most requests and new articles
+still appear quickly. Three URL classes, three policies. The canonical header values
+live in the generator's cache policy (`internal/cachepolicy` in the censurado-web
+repo); the table below mirrors it.
 
 | URL class | examples | Cache-Control |
 |---|---|---|
@@ -19,15 +19,14 @@ deploy step can apply them programmatically; the table below mirrors it.
   same, and the publish service already serves it with this exact immutable header,
   the one place this repo sets a header itself.
 - **Listings and client data** are mutable. The short fresh window plus
-  `stale-while-revalidate` lets the edge serve a stale copy instantly while it
-  refetches once in the background, so one background fetch shields the origin from a
-  spike while every user still gets a sub-second response. `stale-if-error` rides out
-  an origin blip. If a purge is ever missed, the short window self-heals it by the
+  `stale-while-revalidate` lets the edge serve a stale copy while it
+  refetches once in the background, so a traffic spike triggers one origin fetch, not
+  one per reader. `stale-if-error` rides out an origin blip. If a purge is ever missed, the short window self-heals it by the
   next batch instead of pinning stale content.
 - **The version sentinel** (`/latest/version.json`) is a tiny file clients poll with
   `If-None-Match` to learn when new content landed (see the live-refresh client). The
-  edge answers almost every poll as a `304` with no body, so even millions of pollers
-  barely touch the origin. Its tight window bounds the worst-case staleness for a
+  edge answers almost every poll as a `304` with no body, so repeated polls do not
+  reach the origin. Its tight window bounds the worst-case staleness for a
   reader who is not actively polling. The generator emits it as a byte-stable
   fingerprint of the latest window, so it returns `304` until content actually
   changes.
@@ -41,11 +40,11 @@ absorbs the load and the per-batch purge corrects the exact changed set immediat
 
 Two paths keep the edge correct after a publish:
 
-- **Automatic:** the publish service can run a debounced in-process regenerate and
-  purge after each publish (set `-out` and `-base-url`, env `CENSURADO_PUBLISH_OUT`
-  and `CENSURADO_BASE_URL`; `-regen-debounce` tunes the window). A burst of publishes,
-  or a 100-item batch followed by a breaking single, collapses to one rebuild. The
-  purge is a dry run unless `CENSURADO_PURGE_ENDPOINT` is set.
+- **Automatic:** the censurado-web generate service runs with `-watch` (as in the
+  compose stack) and rebuilds shortly after each publish, so a burst of publishes, or a
+  100-item batch followed by a breaking single, collapses into one rebuild. The backend
+  publish service does not regenerate or purge itself. The purge over the emitted
+  manifest is a dry run unless `CENSURADO_PURGE_ENDPOINT` is set.
 - **Manual / scheduled:** run a generate batch, then `censurado-purge` over the
   emitted manifest (below).
 
@@ -81,7 +80,8 @@ directives. Confirm these when you wire up your CDN:
 
 ## Usage
 
-Run a generate batch, then purge exactly what it changed:
+Run a generate batch (from the censurado-web repo, where these commands live), then
+purge exactly what it changed:
 
 ```
 go run ./cmd/censurado/generate -out ./public
@@ -92,10 +92,10 @@ go run ./cmd/censurado/purge -provider http \
 ```
 
 The generator writes the manifest under `<out>/.generated/` (its state dir), so the
-purge `-file` default is `./public/.generated/purge.json`. When the generate batch
-runs in Docker (`docker compose run --rm generate`, which writes `-out /site`), the
-manifest lands at `/site/.generated/purge.json` on the site-data volume; point
-`-file` (or `CENSURADO_PURGE_FILE`) there.
+purge `-file` default is `./public/.generated/purge.json`. When the generator runs in
+Docker against the site-data volume (writing `-out /site`), the manifest lands at
+`/site/.generated/purge.json`; point `-file` (or `CENSURADO_PURGE_FILE`) there. The
+generator and the purge tool live in the `censurado-web` repo, not this one.
 
 The default provider is `dryrun`, which lists the URLs it would purge and makes no
 network calls. Drop `-provider http` to preview a batch safely. The auth secret is

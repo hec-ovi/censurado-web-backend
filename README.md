@@ -1,10 +1,16 @@
 # censurado-web-backend
 
 The data and API server for Censurado, a static news site. This repo owns the
-sqlite store (the source of truth for articles, authors, and topics), the
-authenticated publish API, the JSON read API, and the private operator console. It
-runs locally; the public site is static files served by a CDN, generated from this
-database by the separate `censurado-web` repo.
+sqlite store (the source of truth for articles), the authenticated publish API, the
+JSON read API, and the private operator console. It runs locally; the public site is
+static files served by a CDN, generated from this database by the separate
+`censurado-web` repo.
+
+The store also carries author and topic registry tables and serves them over the
+read and operator APIs, but they stay empty in the current deployment. Author
+identity lives in the `censurado-web-brain` personas store and is stamped into each
+article's `metadata` at publish; the generator builds the author and topic pages
+from that metadata, not from these tables.
 
 The system is four repos:
 
@@ -32,7 +38,10 @@ writer, concurrent readers):
     topics) behind the `admin:write` scope.
 - **admin** (`cmd/censurado/admin`) is the private operator console (`/admin/*`). It
   reads the store directly and proxies writes to publish over the network, so publish
-  stays the sole writer.
+  stays the sole writer. The console browses and inspects articles and runs article
+  create/edit/delete/restore plus the audit log. The author and topic registry tabs
+  are disabled in this binary (`cfg.Authors`/`cfg.Topics` are nil), so the console is
+  article-only; those tables are empty by design.
 
 Plus the `cli` publish client (what an author agent uses to POST an article) and the
 `replay`/`restorecheck` operator tools.

@@ -37,9 +37,9 @@ tofu apply \
 
 Then put the outputs into `deploy/.env` as `LITESTREAM_S3_BUCKET`,
 `LITESTREAM_S3_REGION`, and `LITESTREAM_S3_ENDPOINT`, and uncomment the s3 block in
-`deploy/litestream.yml`. After any change to the backup target, run the restore
-drill (`scripts/restore-drill.sh`) against it: a bucket that exists is not a
-backup until a restore from it passes.
+`deploy/litestream.yml`. After any change to the backup target, validate a restore
+from it (run `litestream restore` against the replica, then `cmd/censurado/restorecheck`
+on the result): a bucket that exists is not a backup until a restore from it passes.
 
 ## What it creates
 

@@ -1,11 +1,18 @@
-# Censurado deploy (Phase 6B)
+# Censurado deploy
 
-Self-hosting topology for the three Go binaries. Single-writer sqlite on one shared
-volume in WAL mode:
+Self-hosting topology for the backend. Single-writer sqlite on one shared volume in
+WAL mode. The compose runs two long-running services plus a backup sidecar:
 
-- publish: the only db writer. Authenticated write API (POST /articles, GET /healthz).
-- admin: a db reader. Private operator console (/admin/*); writes the site only on regenerate.
-- generate: a db reader. One-shot static site builder, run on demand.
+- publish: the only db writer. Authenticated write API (POST /articles, POST
+  /articles:batch), the JSON read API (GET /authors, /topics, /articles,
+  /articles/{slug}), the media store (POST /media, GET /media/{name}), the operator
+  mutation lane (admin:write), and an unauthenticated GET /healthz.
+- admin: a db reader. Private operator console (/admin/*). It proxies writes to
+  publish over the network and never writes the site or the db directly.
+- litestream: a backup sidecar that continuously replicates the sqlite db.
+
+The static-site generator lives in the separate `censurado-web` repo, not this
+compose. Point it at the same db-data volume to build the site.
 
 publish also runs a small self-hosted image store ("CDN"): it accepts authenticated
 image uploads (POST /media) and serves them (GET /media/{name}) from the media-data
@@ -74,11 +81,8 @@ docker compose up -d
 
 publish is on 127.0.0.1:8080, admin on 127.0.0.1:8081.
 
-Run a static site build on demand (writes the site-data volume, then exits):
-
-```
-docker compose run --rm generate
-```
+To build the static site, run the generator from the `censurado-web` repo against the
+same db-data volume. It is not a service in this compose.
 
 ## Media (self-hosted images)
 
@@ -107,25 +111,16 @@ publish stays the only writer. Config is `deploy/litestream.yml`. For off-site
 backups, set the `LITESTREAM_S3_*` vars in `.env` and uncomment the s3 block in
 `litestream.yml`.
 
-Backups are only worth having if a restore is proven, so `scripts/restore-drill.sh`
-restores a replica end to end and asserts the restored db is good (integrity,
-row counts, latest article slug) via `cmd/censurado/restorecheck`. It runs in CI on
-every push/PR (the `restore-drill` job) and can be run locally with Docker:
-
-```
-./scripts/restore-drill.sh
-```
-
-It prints `RESTORE DRILL: PASS (RTO=Ns)` and exits 0 only when every check passes.
-The drill is teeth-proved: `DRILL_BREAK=mismatch|garbage|truncate ./scripts/restore-drill.sh`
-deliberately breaks the restore and confirms it exits nonzero with `RESTORE DRILL:
-FAIL (sev1)`. Point it at a copy of a real db with `DRILL_SEED_DB=/path/to/db`.
+To validate a restore, run `litestream restore` against the replica and then check
+the restored file with `cmd/censurado/restorecheck`, which asserts integrity,
+row counts, and the latest article slug and exits nonzero on any mismatch.
 
 ## Notes
 
-- The db-data volume is mounted read-write for all four services. WAL readers (admin,
-  generate) and litestream need to touch the -wal/-shm sidecars, so a read-only mount
-  would break them. Only publish writes article data.
+- The db-data volume is mounted read-write for every service that touches it (publish,
+  admin, litestream, and the external censurado-web generator). WAL readers and
+  litestream need to touch the -wal/-shm sidecars, so a read-only mount would break
+  them. Only publish writes article data.
 - Images are distroless, non-root, and cgo-free static builds (modernc.org/sqlite is
   pure Go). The litestream sidecar runs as root because it shares the WAL index with
   the nonroot publish writer and writes a Docker-initialized replica volume; it is
