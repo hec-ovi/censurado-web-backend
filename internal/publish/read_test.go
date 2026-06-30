@@ -13,6 +13,7 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
 	"github.com/hec-ovi/censurado-web-backend/store"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
+	"github.com/hec-ovi/censurado-web-backend/store/storetest"
 )
 
 // newReadServer wires the full server WITH the JSON read API over a real sqlite
@@ -122,13 +123,13 @@ func TestReadAuthors(t *testing.T) {
 	ctx := context.Background()
 	roToken := "ak_ro." + roSecret
 
-	if _, err := repo.UpsertAuthor(ctx, store.Author{Handle: "ada", Name: "Ada Lovelace", Bio: "tech", Metadata: map[string]any{"beat": "tech"}}); err != nil {
+	if _, err := repo.UpsertAuthor(ctx, storetest.SampleAuthor("author-a")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.UpsertAuthor(ctx, store.Author{Handle: "bo", Name: "Borges"}); err != nil {
+	if _, err := repo.UpsertAuthor(ctx, storetest.SampleAuthor("author-b")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.UpsertAuthor(ctx, store.Author{Handle: "gone", Name: "Removed"}); err != nil {
+	if _, err := repo.UpsertAuthor(ctx, storetest.SampleAuthor("gone")); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.DeleteAuthor(ctx, "gone"); err != nil {
@@ -145,14 +146,14 @@ func TestReadAuthors(t *testing.T) {
 			t.Fatal(err)
 		}
 		handles := authorHandles(got)
-		if !handles["ada"] || !handles["bo"] {
+		if !handles["author-a"] || !handles["author-b"] {
 			t.Errorf("missing seeded authors: %v", handles)
 		}
 		if handles["gone"] {
 			t.Error("tombstoned author leaked into the default listing")
 		}
 		for _, a := range got.Authors {
-			if a.Handle == "ada" && a.Metadata["beat"] != "tech" {
+			if a.Handle == "author-a" && a.Metadata["beat"] != "general" {
 				t.Errorf("metadata did not round-trip: %+v", a.Metadata)
 			}
 		}

@@ -10,8 +10,8 @@ import (
 
 	"github.com/hec-ovi/censurado-web-backend/domain"
 	"github.com/hec-ovi/censurado-web-backend/internal/adminweb"
-	"github.com/hec-ovi/censurado-web-backend/store"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
+	"github.com/hec-ovi/censurado-web-backend/store/storetest"
 )
 
 // newLocaleHandler builds an admin handler with a configurable DefaultLocale over a
@@ -27,11 +27,11 @@ func newLocaleHandler(t *testing.T, defaultLocale string) *adminweb.Handler {
 	t.Cleanup(func() { _ = repo.Close() })
 
 	ctx := context.Background()
-	if _, err := repo.UpsertAuthor(ctx, store.Author{Handle: "lara", Name: "Lara Arianna", Bio: "Politics desk."}); err != nil {
+	if _, err := repo.UpsertAuthor(ctx, storetest.SampleAuthor("author-a")); err != nil {
 		t.Fatalf("seed author: %v", err)
 	}
 	art, err := domain.NewArticle(domain.PublishInput{
-		Title: "Edit Me Please", Body: "original body text", Author: "lara", Section: "politics",
+		Title: "Edit Me Please", Body: "original body text", Author: "author-a", Section: "politics",
 	}, fixedNow())
 	if err != nil {
 		t.Fatalf("NewArticle: %v", err)
@@ -129,7 +129,7 @@ func TestSpanishCookieRendersSpanish(t *testing.T) {
 func TestSpanishFormRendersSpanish(t *testing.T) {
 	h := newLocaleHandler(t, "")
 	c := loginCookie(t, h)
-	body := getPath(t, h, c, "es", "/admin/authors/lara/edit")
+	body := getPath(t, h, c, "es", "/admin/authors/author-a/edit")
 	mustContain(t, body,
 		"Editar autor",    // h1 + title
 		"Guardar cambios", // submit button

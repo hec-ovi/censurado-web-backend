@@ -97,43 +97,43 @@ func TestOperator_AuthorLifecycle(t *testing.T) {
 	srv, trig := newOperatorServer(t)
 	op := "ak_op." + opSecret
 
-	if rec := doReq(t, srv, http.MethodPost, op, "/authors", `{"handle":"lara","name":"Lara","bio":"politics"}`); rec.Code != http.StatusOK {
+	if rec := doReq(t, srv, http.MethodPost, op, "/authors", `{"handle":"author-a","name":"Sample Author","bio":"general"}`); rec.Code != http.StatusOK {
 		t.Fatalf("create: %d (%s)", rec.Code, rec.Body.String())
 	}
 	var got authorsResp
 	decodeBody(t, getAuth(t, srv, op, "/authors"), &got)
-	if !authorHandles(got)["lara"] {
+	if !authorHandles(got)["author-a"] {
 		t.Fatal("created author missing from the listing")
 	}
 
 	// Upsert again updates in place (no duplicate; name changes).
-	if rec := doReq(t, srv, http.MethodPost, op, "/authors", `{"handle":"lara","name":"Lara Arianna"}`); rec.Code != http.StatusOK {
+	if rec := doReq(t, srv, http.MethodPost, op, "/authors", `{"handle":"author-a","name":"Sample Author (edited)"}`); rec.Code != http.StatusOK {
 		t.Fatalf("update: %d", rec.Code)
 	}
 	decodeBody(t, getAuth(t, srv, op, "/authors"), &got)
 	count, name := 0, ""
 	for _, a := range got.Authors {
-		if a.Handle == "lara" {
+		if a.Handle == "author-a" {
 			count++
 			name = a.Name
 		}
 	}
-	if count != 1 || name != "Lara Arianna" {
-		t.Errorf("after update: count=%d name=%q, want 1 / Lara Arianna", count, name)
+	if count != 1 || name != "Sample Author (edited)" {
+		t.Errorf("after update: count=%d name=%q, want 1 / Sample Author (edited)", count, name)
 	}
 
 	// Delete hides it from the default listing but include_deleted shows it flagged.
-	if rec := doReq(t, srv, http.MethodDelete, op, "/authors/lara", ""); rec.Code != http.StatusNoContent {
+	if rec := doReq(t, srv, http.MethodDelete, op, "/authors/author-a", ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d", rec.Code)
 	}
 	decodeBody(t, getAuth(t, srv, op, "/authors"), &got)
-	if authorHandles(got)["lara"] {
+	if authorHandles(got)["author-a"] {
 		t.Error("deleted author still in the default listing")
 	}
 	decodeBody(t, getAuth(t, srv, op, "/authors?include_deleted=true"), &got)
 	sawDeleted := false
 	for _, a := range got.Authors {
-		if a.Handle == "lara" && a.Deleted {
+		if a.Handle == "author-a" && a.Deleted {
 			sawDeleted = true
 		}
 	}
@@ -142,11 +142,11 @@ func TestOperator_AuthorLifecycle(t *testing.T) {
 	}
 
 	// Restore brings it back.
-	if rec := doReq(t, srv, http.MethodPost, op, "/authors/lara/restore", ""); rec.Code != http.StatusOK {
+	if rec := doReq(t, srv, http.MethodPost, op, "/authors/author-a/restore", ""); rec.Code != http.StatusOK {
 		t.Fatalf("restore: %d", rec.Code)
 	}
 	decodeBody(t, getAuth(t, srv, op, "/authors"), &got)
-	if !authorHandles(got)["lara"] {
+	if !authorHandles(got)["author-a"] {
 		t.Error("restored author missing from the default listing")
 	}
 

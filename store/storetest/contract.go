@@ -1075,13 +1075,12 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		}
 	})
 
-	lara := store.Author{
-		Handle: "lara-arianna", Name: "Lara Arianna", Bio: "Soy Lara.", Avatar: "/a/lara.png",
-		Metadata: map[string]any{"beat": "politics"}, CreatedAt: base, UpdatedAt: base,
-	}
+	first := SampleAuthor("author-a")
+	first.CreatedAt = base
+	first.UpdatedAt = base
 
 	t.Run("UpsertAuthor creates then AuthorByHandle round-trips every field", func(t *testing.T) {
-		stored, err := as.UpsertAuthor(ctx, lara)
+		stored, err := as.UpsertAuthor(ctx, first)
 		if err != nil {
 			t.Fatalf("UpsertAuthor: %v", err)
 		}
@@ -1091,22 +1090,22 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		if stored.Deleted {
 			t.Errorf("Deleted = true on create, want false")
 		}
-		got, found, err := as.AuthorByHandle(ctx, lara.Handle)
+		got, found, err := as.AuthorByHandle(ctx, first.Handle)
 		if err != nil {
 			t.Fatalf("AuthorByHandle: %v", err)
 		}
 		if !found {
 			t.Fatalf("found = false after create, want true")
 		}
-		assertAuthorEqual(t, got, lara)
+		assertAuthorEqual(t, got, first)
 	})
 
 	t.Run("UpsertAuthor on an existing handle updates in place (created_at preserved, updated_at advances)", func(t *testing.T) {
-		before, _, _ := as.AuthorByHandle(ctx, lara.Handle)
-		edit := lara
-		edit.Name = "Lara A."
+		before, _, _ := as.AuthorByHandle(ctx, first.Handle)
+		edit := first
+		edit.Name = "Sample Author (edited)"
 		edit.Bio = "Bio editada."
-		edit.Metadata = map[string]any{"beat": "politics", "edited": "yes"}
+		edit.Metadata = map[string]any{"beat": "general", "edited": "yes"}
 		edit.UpdatedAt = base.Add(48 * time.Hour)
 		stored, err := as.UpsertAuthor(ctx, edit)
 		if err != nil {
@@ -1115,7 +1114,7 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		if stored.ID != before.ID {
 			t.Errorf("ID changed on update: %s -> %s (want same row)", before.ID, stored.ID)
 		}
-		if stored.Name != "Lara A." || stored.Bio != "Bio editada." {
+		if stored.Name != "Sample Author (edited)" || stored.Bio != "Bio editada." {
 			t.Errorf("mutable fields not updated: %+v", stored)
 		}
 		if !stored.CreatedAt.UTC().Equal(base) {
@@ -1130,57 +1129,59 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		}
 		n := 0
 		for _, a := range all {
-			if a.Handle == lara.Handle {
+			if a.Handle == first.Handle {
 				n++
 			}
 		}
 		if n != 1 {
-			t.Errorf("rows for handle %q = %d, want 1 (update, not a second insert)", lara.Handle, n)
+			t.Errorf("rows for handle %q = %d, want 1 (update, not a second insert)", first.Handle, n)
 		}
 	})
 
-	borge := store.Author{Handle: "borge-luis-jorge", Name: "Borge", CreatedAt: base, UpdatedAt: base}
+	second := SampleAuthor("author-b")
+	second.CreatedAt = base
+	second.UpdatedAt = base
 
 	t.Run("ListAuthors orders by handle ascending (byte order)", func(t *testing.T) {
-		if _, err := as.UpsertAuthor(ctx, borge); err != nil {
+		if _, err := as.UpsertAuthor(ctx, second); err != nil {
 			t.Fatalf("UpsertAuthor: %v", err)
 		}
 		got, err := as.ListAuthors(ctx, false)
 		if err != nil {
 			t.Fatalf("ListAuthors: %v", err)
 		}
-		want := []string{"borge-luis-jorge", "lara-arianna"}
+		want := []string{"author-a", "author-b"}
 		if h := handlesOf(got); !equalOrdered(h, want) {
 			t.Errorf("order = %v, want %v", h, want)
 		}
 	})
 
 	t.Run("DeleteAuthor tombstones: excluded by default, included with includeDeleted, re-upsert re-activates", func(t *testing.T) {
-		if err := as.DeleteAuthor(ctx, borge.Handle); err != nil {
+		if err := as.DeleteAuthor(ctx, second.Handle); err != nil {
 			t.Fatalf("DeleteAuthor: %v", err)
 		}
 		def, err := as.ListAuthors(ctx, false)
 		if err != nil {
 			t.Fatalf("ListAuthors(false): %v", err)
 		}
-		if contains(handlesOf(def), borge.Handle) {
-			t.Errorf("deleted author %q still listed by default", borge.Handle)
+		if contains(handlesOf(def), second.Handle) {
+			t.Errorf("deleted author %q still listed by default", second.Handle)
 		}
 		all, err := as.ListAuthors(ctx, true)
 		if err != nil {
 			t.Fatalf("ListAuthors(true): %v", err)
 		}
-		if !contains(handlesOf(all), borge.Handle) {
-			t.Errorf("deleted author %q missing from includeDeleted list", borge.Handle)
+		if !contains(handlesOf(all), second.Handle) {
+			t.Errorf("deleted author %q missing from includeDeleted list", second.Handle)
 		}
-		got, found, err := as.AuthorByHandle(ctx, borge.Handle)
+		got, found, err := as.AuthorByHandle(ctx, second.Handle)
 		if err != nil {
 			t.Fatalf("AuthorByHandle(deleted): %v", err)
 		}
 		if !found || !got.Deleted {
 			t.Errorf("AuthorByHandle(deleted) found=%v Deleted=%v, want true/true", found, got.Deleted)
 		}
-		reborn := borge
+		reborn := second
 		reborn.UpdatedAt = base.Add(72 * time.Hour)
 		stored, err := as.UpsertAuthor(ctx, reborn)
 		if err != nil {
@@ -1193,8 +1194,8 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		if err != nil {
 			t.Fatalf("ListAuthors(false) after re-upsert: %v", err)
 		}
-		if !contains(handlesOf(def2), borge.Handle) {
-			t.Errorf("re-activated author %q missing from default list", borge.Handle)
+		if !contains(handlesOf(def2), second.Handle) {
+			t.Errorf("re-activated author %q missing from default list", second.Handle)
 		}
 	})
 

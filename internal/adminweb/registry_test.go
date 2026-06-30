@@ -14,6 +14,7 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/domain"
 	"github.com/hec-ovi/censurado-web-backend/store"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
+	"github.com/hec-ovi/censurado-web-backend/store/storetest"
 )
 
 // operatorCall records one invocation of the injected Operator closure. body is the
@@ -53,8 +54,8 @@ func newRegistryHandler(t *testing.T, op func(context.Context, string, string, a
 
 	ctx := context.Background()
 	for _, a := range []store.Author{
-		{Handle: "lara", Name: "Lara Arianna", Bio: "Politics desk."},
-		{Handle: "vector", Name: "Vector Omni", Bio: "Tech desk."},
+		storetest.SampleAuthor("author-a"),
+		storetest.SampleAuthor("author-b"),
 	} {
 		if _, err := repo.UpsertAuthor(ctx, a); err != nil {
 			t.Fatalf("seed author %q: %v", a.Handle, err)
@@ -68,7 +69,7 @@ func newRegistryHandler(t *testing.T, op func(context.Context, string, string, a
 		}
 	}
 	art, err := domain.NewArticle(domain.PublishInput{
-		Title: "Edit Me Please", Body: "original body text", Author: "lara",
+		Title: "Edit Me Please", Body: "original body text", Author: "author-a",
 		Section: "politics", Topics: []string{"economia"},
 	}, fixedNow())
 	if err != nil {
@@ -147,7 +148,7 @@ func TestAuthorsListRenders(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"lara", "Lara Arianna", "vector", `href="/admin/authors/new"`, `href="/admin/authors/lara/edit"`} {
+	for _, want := range []string{"author-a", "Sample Author", "author-b", `href="/admin/authors/new"`, `href="/admin/authors/author-a/edit"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("authors list missing %q", want)
 		}
@@ -176,13 +177,13 @@ func TestAuthorsListNotConfigured(t *testing.T) {
 }
 
 func TestAuthorCreateCallsOperator(t *testing.T) {
-	op := &operatorStub{respBody: []byte(`{"handle":"nova"}`)}
+	op := &operatorStub{respBody: []byte(`{"handle":"author-c"}`)}
 	h, _ := newRegistryHandler(t, op.fn)
 	c := loginCookie(t, h)
 	csrf := pageCSRF(t, h, c, "/admin/authors/new")
 
 	rec := postForm(h, c, csrf, "/admin/authors", url.Values{
-		"handle": {"nova"}, "name": {"Nova Reporter"}, "bio": {"Covers science."}, "avatar": {"/media/n.png"},
+		"handle": {"author-c"}, "name": {"Sample Author"}, "bio": {"Sample author bio."}, "avatar": {"/media/avatar.png"},
 	})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (%s)", rec.Code, rec.Body.String())
@@ -197,7 +198,7 @@ func TestAuthorCreateCallsOperator(t *testing.T) {
 	if call.method != http.MethodPost || call.path != "/authors" {
 		t.Errorf("operator called %s %s, want POST /authors", call.method, call.path)
 	}
-	for _, want := range []string{`"handle":"nova"`, `"name":"Nova Reporter"`, `"bio":"Covers science."`, `"avatar":"/media/n.png"`} {
+	for _, want := range []string{`"handle":"author-c"`, `"name":"Sample Author"`, `"bio":"Sample author bio."`, `"avatar":"/media/avatar.png"`} {
 		if !strings.Contains(call.body, want) {
 			t.Errorf("operator body %q missing %q", call.body, want)
 		}
@@ -223,19 +224,19 @@ func TestAuthorCreateMissingHandle(t *testing.T) {
 }
 
 func TestAuthorEditPrefillsAndUpdates(t *testing.T) {
-	op := &operatorStub{respBody: []byte(`{"handle":"lara"}`)}
+	op := &operatorStub{respBody: []byte(`{"handle":"author-a"}`)}
 	h, _ := newRegistryHandler(t, op.fn)
 	c := loginCookie(t, h)
 
 	// The edit form prefills the stored author and locks the handle.
-	editPage := httptest.NewRequest(http.MethodGet, "/admin/authors/lara/edit", nil)
+	editPage := httptest.NewRequest(http.MethodGet, "/admin/authors/author-a/edit", nil)
 	editPage.AddCookie(c)
 	rec := do(h, editPage)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET edit = %d, want 200 (%s)", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `value="Lara Arianna"`) {
+	if !strings.Contains(body, `value="Sample Author"`) {
 		t.Errorf("edit form did not prefill the name")
 	}
 	if !strings.Contains(body, "readonly") {
@@ -243,14 +244,14 @@ func TestAuthorEditPrefillsAndUpdates(t *testing.T) {
 	}
 	csrf := metaCSRF(t, body)
 
-	rec = postForm(h, c, csrf, "/admin/authors/lara", url.Values{"name": {"Lara A. Updated"}, "bio": {"Updated."}})
+	rec = postForm(h, c, csrf, "/admin/authors/author-a", url.Values{"name": {"Sample Author Updated"}, "bio": {"Updated."}})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("update status = %d, want 303 (%s)", rec.Code, rec.Body.String())
 	}
 	if len(op.calls) != 1 || op.calls[0].path != "/authors" {
 		t.Fatalf("operator calls = %+v, want one POST /authors", op.calls)
 	}
-	if !strings.Contains(op.calls[0].body, `"handle":"lara"`) || !strings.Contains(op.calls[0].body, `"name":"Lara A. Updated"`) {
+	if !strings.Contains(op.calls[0].body, `"handle":"author-a"`) || !strings.Contains(op.calls[0].body, `"name":"Sample Author Updated"`) {
 		t.Errorf("update body %q missing the path handle or new name", op.calls[0].body)
 	}
 }
@@ -261,22 +262,22 @@ func TestAuthorDeleteAndRestoreCallOperator(t *testing.T) {
 	c := loginCookie(t, h)
 	csrf := pageCSRF(t, h, c, "/admin/authors")
 
-	rec := postForm(h, c, csrf, "/admin/authors/vector/delete", nil)
+	rec := postForm(h, c, csrf, "/admin/authors/author-b/delete", nil)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("delete status = %d, want 303", rec.Code)
 	}
-	rec = postForm(h, c, csrf, "/admin/authors/vector/restore", nil)
+	rec = postForm(h, c, csrf, "/admin/authors/author-b/restore", nil)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("restore status = %d, want 303", rec.Code)
 	}
 	if len(op.calls) != 2 {
 		t.Fatalf("operator calls = %d, want 2", len(op.calls))
 	}
-	if op.calls[0].method != http.MethodDelete || op.calls[0].path != "/authors/vector" {
-		t.Errorf("delete called %s %s, want DELETE /authors/vector", op.calls[0].method, op.calls[0].path)
+	if op.calls[0].method != http.MethodDelete || op.calls[0].path != "/authors/author-b" {
+		t.Errorf("delete called %s %s, want DELETE /authors/author-b", op.calls[0].method, op.calls[0].path)
 	}
-	if op.calls[1].method != http.MethodPost || op.calls[1].path != "/authors/vector/restore" {
-		t.Errorf("restore called %s %s, want POST /authors/vector/restore", op.calls[1].method, op.calls[1].path)
+	if op.calls[1].method != http.MethodPost || op.calls[1].path != "/authors/author-b/restore" {
+		t.Errorf("restore called %s %s, want POST /authors/author-b/restore", op.calls[1].method, op.calls[1].path)
 	}
 }
 
@@ -376,7 +377,7 @@ func TestArticleUpdateCallsOperator(t *testing.T) {
 	csrf := pageCSRF(t, h, c, "/admin/articles/"+slug+"/edit")
 
 	rec := postForm(h, c, csrf, "/admin/articles/"+slug, url.Values{
-		"title": {"New Title"}, "body": {"new body text"}, "author": {"lara"}, "section": {"politics"},
+		"title": {"New Title"}, "body": {"new body text"}, "author": {"author-a"}, "section": {"politics"},
 		"topics": {"economia, ai"},
 	})
 	if rec.Code != http.StatusSeeOther {
@@ -400,7 +401,7 @@ func TestArticleUpdateRequiredField(t *testing.T) {
 	csrf := pageCSRF(t, h, c, "/admin/articles/"+slug+"/edit")
 
 	rec := postForm(h, c, csrf, "/admin/articles/"+slug, url.Values{
-		"title": {"   "}, "body": {"b"}, "author": {"lara"}, "section": {"politics"},
+		"title": {"   "}, "body": {"b"}, "author": {"author-a"}, "section": {"politics"},
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -420,7 +421,7 @@ func TestArticleUpdateConflictIsFriendly(t *testing.T) {
 	csrf := pageCSRF(t, h, c, "/admin/articles/"+slug+"/edit")
 
 	rec := postForm(h, c, csrf, "/admin/articles/"+slug, url.Values{
-		"title": {"Clashing Title"}, "body": {"clashing body"}, "author": {"lara"}, "section": {"politics"},
+		"title": {"Clashing Title"}, "body": {"clashing body"}, "author": {"author-a"}, "section": {"politics"},
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422 (recoverable, shown inline)", rec.Code)
