@@ -1,14 +1,12 @@
 # Censurado deploy
 
 Self-hosting topology for the backend. Single-writer sqlite on one shared volume in
-WAL mode. The compose runs two long-running services plus a backup sidecar:
+WAL mode. The compose runs one long-running service plus a backup sidecar:
 
 - publish: the only db writer. Authenticated write API (POST /articles, POST
-  /articles:batch), the JSON read API (GET /authors, /topics, /articles,
+  /articles:batch), the JSON read API (GET /authors, /topics, /portadas, /articles,
   /articles/{slug}), the media store (POST /media, GET /media/{name}), the operator
-  mutation lane (admin:write), and an unauthenticated GET /healthz.
-- admin: a db reader. Private operator console (/admin/*). It proxies writes to
-  publish over the network and never writes the site or the db directly.
+  mutation lane (behind the `admin:write` scope), and an unauthenticated GET /healthz.
 - litestream: a backup sidecar that continuously replicates the sqlite db.
 
 The static-site generator lives in the separate `censurado-web` repo, not this
@@ -18,10 +16,10 @@ publish also runs a small self-hosted image store ("CDN"): it accepts authentica
 image uploads (POST /media) and serves them (GET /media/{name}) from the media-data
 volume. The external web server serves /media/ from that same volume on the public origin.
 
-publish and admin are private: their host ports bind to 127.0.0.1 only (reach them
-over an SSH tunnel or private network). The only public surface is the generated
-static site on the site-data volume, served by an external CDN or web server that is
-not part of this compose.
+publish is private: its host port binds to 127.0.0.1 only (reach it over an SSH
+tunnel or private network). The only public surface is the generated static site on
+the site-data volume, served by an external CDN or web server that is not part of
+this compose.
 
 ## Setup
 
@@ -33,16 +31,7 @@ Everything below runs from the `deploy/` directory.
    cp .env.example .env
    ```
 
-2. Generate the admin credentials (prints token, hash, and session key once):
-
-   ```
-   docker compose run --rm admin -gen-credentials
-   ```
-
-   Put `CENSURADO_ADMIN_TOKEN_HASH` and `CENSURADO_ADMIN_SESSION_KEY` in `.env`.
-   Keep the `CENSURADO_ADMIN_TOKEN` for the operator; do not store it on the server.
-
-3. Create the publish keys file, then mint at least one key:
+2. Create the publish keys file, then mint at least one key:
 
    ```
    printf '[]\n' > keys.json
@@ -56,30 +45,28 @@ Everything below runs from the `deploy/` directory.
    (the file is a JSON array of entries), and hand the printed `TOKEN` to the agent
    as `CENSURADO_PUBLISH_TOKEN`.
 
-4. (Optional) Enable the admin's manual "New article" form. The form publishes
-   through the write API, so the admin never writes the database directly. Mint an
-   operator key with the privileged publish-any scope so the operator can author as
-   any persona, then set `CENSURADO_ADMIN_PUBLISH_TOKEN` in `.env`:
+3. (Optional) Mint an operator key for the edit lane. The operator mutation lane
+   (edit, soft-delete, restore, portada management) sits behind the `admin:write`
+   scope, and authoring as any persona needs the privileged `articles:publish-any`
+   scope. Mint an operator key with both:
 
    ```
-   docker compose run --rm publish -gen-key -author editor -scope articles:write -scope articles:publish-any
+   docker compose run --rm publish -gen-key -author editor -scope articles:write -scope articles:publish-any -scope admin:write
    ```
 
-   Add the printed entry to `keys.json` (next to the agent keys) and put the printed
-   `TOKEN` in `.env` as `CENSURADO_ADMIN_PUBLISH_TOKEN`. Leave it blank to keep the
-   create form disabled. `CENSURADO_ADMIN_PUBLISH_URL` is already set in the compose
-   file. Only the operator key gets `articles:publish-any`; agent keys carry
-   `articles:write` alone and stay locked to their own author.
+   Add the printed entry to `keys.json` (next to the agent keys) and hand the printed
+   `TOKEN` to the operator. Only the operator key gets `articles:publish-any`; agent
+   keys carry `articles:write` alone and stay locked to their own author.
 
 ## Run
 
-Bring up the private services (publish + admin):
+Bring up the private service (publish + a litestream backup sidecar):
 
 ```
 docker compose up -d
 ```
 
-publish is on 127.0.0.1:8080, admin on 127.0.0.1:8081.
+publish is on 127.0.0.1:8080.
 
 To build the static site, run the generator from the `censurado-web` repo against the
 same db-data volume. It is not a service in this compose.
@@ -93,10 +80,9 @@ is, in the compose), it accepts an authenticated image upload at `POST /media` (
 image always maps to one immutable, cacheable URL, and an upload is at most 10 MiB of
 JPEG, PNG, GIF, or WebP (the type is sniffed from the bytes, not the client's claim).
 
-The admin's New-article form uploads through this endpoint, so the admin stays a
-non-writer (it proxies the bytes to publish). An article references its image and a
-YouTube video through the open `metadata` object (`image`, `image_alt`, `youtube`),
-which the generator already renders, so attaching media needs no contract change.
+An article references its image and a YouTube video through the open `metadata` object
+(`image`, `image_alt`, `youtube`), which the generator already renders, so attaching
+media needs no contract change.
 
 In production, point the external web server at the media-data volume so it serves
 `/media/` on the public origin (next to `/` from site-data). The publish service's own
@@ -118,10 +104,12 @@ row counts, and the latest article slug and exits nonzero on any mismatch.
 ## Notes
 
 - The db-data volume is mounted read-write for every service that touches it (publish,
-  admin, litestream, and the external censurado-web generator). WAL readers and
-  litestream need to touch the -wal/-shm sidecars, so a read-only mount would break
-  them. Only publish writes article data.
+  litestream, and the external censurado-web generator). WAL readers and litestream
+  need to touch the -wal/-shm sidecars, so a read-only mount would break them. Only
+  publish writes article data.
 - Images are distroless, non-root, and cgo-free static builds (modernc.org/sqlite is
   pure Go). The litestream sidecar runs as root because it shares the WAL index with
   the nonroot publish writer and writes a Docker-initialized replica volume; it is
   still cap-dropped, no-new-privileges, and read-only-rootfs.
+</content>
+</invoke>

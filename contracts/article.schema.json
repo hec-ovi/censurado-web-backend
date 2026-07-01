@@ -52,7 +52,7 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Open-ended extensible attributes. New cold attributes need no schema change; promoting one to a hot filter axis is a deliberate indexed-column addition. The keys below are recognized and rendered by the static-site generator; any other key is stored and ignored.",
+      "description": "Open-ended extensible attributes. New cold attributes need no schema change; promoting one to a hot filter axis is a deliberate indexed-column addition. Commonly recognized keys include those below, which the static-site generator renders; any other key is stored and ignored.",
       "properties": {
         "subtitle": {
           "type": "string",
@@ -81,6 +81,33 @@
         "image_alt": {
           "type": "string",
           "description": "Alt text for the hero/card image; falls back to the title."
+        },
+        "youtube": {
+          "type": "string",
+          "description": "YouTube URL or bare video id. Rendered as a privacy (nocookie) embed and takes precedence over the image; the image, when present, becomes the embed poster."
+        },
+        "youtube_id": {
+          "type": "string",
+          "description": "Bare YouTube video id, an alternative to youtube. Rendered as the same nocookie embed; used when youtube is absent."
+        },
+        "video": {
+          "type": "string",
+          "description": "Self-hosted video media URL (/media/<sha256>.<ext> or an absolute http(s) URL), rendered as an HTML5 video player. Used when no youtube/youtube_id is set."
+        },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Article-specific search terms (named people, places, organizations, and distinctive concepts). Folded into the article page's <meta name=\"keywords\"> alongside its topic facets."
+        },
+        "tweets": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true },
+          "description": "Embedded post snapshots for the {{tweet:id}} body markers: one captured object per referenced X post or Truth Social status (id, handle, name, text, url, stats, ...), so the widget renders from stored data, not a live fetch."
+        },
+        "media_checks": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Per-media availability map keyed by video/tweet id: each value records whether the referenced media is still available (e.g. {\"available\": false}), so a {{video:id}} or {{tweet:id}} whose source was taken down renders a \"removed\" placeholder instead of a dead embed."
         }
       }
     }
