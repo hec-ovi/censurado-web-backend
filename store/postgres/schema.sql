@@ -75,3 +75,18 @@ CREATE TABLE IF NOT EXISTS topics (
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
+
+-- portadas is the operator-owned front-page registry (see the SQLite schema for the
+-- contract). date is the natural YYYY-MM-DD key. entries and recomendado are JSONB
+-- (mirroring the metadata columns), defaulting to '[]'. created_at/updated_at/
+-- deleted_at are whole-second RFC3339 TEXT (not TIMESTAMPTZ) for byte-identical
+-- parity with the SQLite adapter and so deleted_at can use '' as the active sentinel.
+CREATE TABLE IF NOT EXISTS portadas (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  date        TEXT NOT NULL UNIQUE,
+  entries     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  recomendado JSONB NOT NULL DEFAULT '[]'::jsonb,
+  deleted_at  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);

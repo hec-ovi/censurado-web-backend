@@ -22,7 +22,7 @@ func resetPostgres(t *testing.T, dsn string) {
 		t.Fatalf("reset open: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`TRUNCATE articles, article_topics, submissions, authors, topics RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := db.Exec(`TRUNCATE articles, article_topics, submissions, authors, topics, portadas RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("reset truncate: %v", err)
 	}
 }
@@ -179,6 +179,26 @@ func TestPostgresTopicStore(t *testing.T) {
 	resetPostgres(t, dsn)
 
 	storetest.RunTopicStore(t, repo)
+}
+
+// TestPostgresPortadaStore runs the shared PortadaStore conformance suite against a
+// real Postgres when CENSURADO_TEST_POSTGRES_DSN is set, proving the managed
+// front-page registry round-trips (entry order + role, recomendado order), orders
+// (date COLLATE "C"), replaces entries wholesale on upsert, and tombstones/re-activates
+// byte-identically to SQLite.
+func TestPostgresPortadaStore(t *testing.T) {
+	dsn := os.Getenv("CENSURADO_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set CENSURADO_TEST_POSTGRES_DSN to run the Postgres conformance suite")
+	}
+	repo, err := postgres.Open(dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+	resetPostgres(t, dsn)
+
+	storetest.RunPortadaStore(t, repo)
 }
 
 // TestPostgresArticleMutations runs the shared article soft-delete + edit

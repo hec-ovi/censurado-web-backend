@@ -300,3 +300,50 @@ type TopicStore interface {
 	// slug returns ErrNotFound.
 	DeleteTopic(ctx context.Context, slug string) error
 }
+
+// PortadaEntry is one slot on a day's front page: a reference to an article by
+// slug plus its layout role. Role is "" for a normal entry and "important" for a
+// full-row emphasis; the lead is entries[0]. Slug is a soft string reference to
+// articles.slug (not a foreign key), so a front page can be planned before or
+// independently of the article it points at.
+type PortadaEntry struct {
+	Slug string
+	Role string // "" = normal, "important" = full-row emphasis; the lead is entries[0]
+}
+
+// PortadaDay is the operator-owned front-page plan for one calendar day: the
+// ordered list of entries the site renders plus a Recomendado sidebar list. Date
+// ("YYYY-MM-DD") is the stable, natural unique key, like Author.Handle and
+// Topic.Slug. Deleted reports whether the day is soft-deleted (tombstoned); a
+// tombstoned day is hidden from the default listing but kept for audit and
+// re-activation.
+type PortadaDay struct {
+	Date        string // "YYYY-MM-DD", the natural unique key (like Author.Handle / Topic.Slug)
+	Entries     []PortadaEntry
+	Recomendado []string
+	Deleted     bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// PortadaStore is the operator-owned front-page registry. It is a separate concern
+// from the article Repository (like SubmissionLog, AuthorStore, and TopicStore) so
+// the article contract stays focused even when one adapter implements them all.
+// Writes go through the same single writer as the publish path.
+type PortadaStore interface {
+	// UpsertPortada creates or updates a day plan keyed on Date. On create it sets
+	// CreatedAt and UpdatedAt from the supplied values (defaulting to now when
+	// zero); on an existing date it replaces the entries and recomendado, advances
+	// UpdatedAt, preserves the stored CreatedAt, and clears any tombstone
+	// (re-activating a previously deleted date). It returns the stored row.
+	UpsertPortada(ctx context.Context, p PortadaDay) (PortadaDay, error)
+	// PortadaByDate returns the day plan for the date, or found=false. A soft-deleted
+	// day is still returned (found=true, Deleted=true).
+	PortadaByDate(ctx context.Context, date string) (PortadaDay, bool, error)
+	// ListPortadas returns day plans ordered by date ascending in byte order, so the
+	// two adapters agree. Tombstoned days are excluded unless includeDeleted.
+	ListPortadas(ctx context.Context, includeDeleted bool) ([]PortadaDay, error)
+	// DeletePortada soft-deletes the day plan by setting a tombstone. Deleting an
+	// absent date returns ErrNotFound.
+	DeletePortada(ctx context.Context, date string) error
+}

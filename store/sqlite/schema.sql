@@ -78,3 +78,20 @@ CREATE TABLE IF NOT EXISTS topics (
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 ) STRICT;
+
+-- portadas is the operator-owned front-page registry: one row per calendar day,
+-- keyed by its natural YYYY-MM-DD date. entries (an ordered list of {slug, role})
+-- and recomendado (a slug list) are stored as JSON TEXT, defaulting to '[]', the
+-- same self-contained encoding the metadata columns use. deleted_at is a tombstone
+-- ('' = active) so a removed day is hidden from the default listing but kept for
+-- audit and re-activation; the timestamps are whole-second RFC3339 TEXT, the same
+-- encoding the submissions ledger uses.
+CREATE TABLE IF NOT EXISTS portadas (
+  id          INTEGER PRIMARY KEY,
+  date        TEXT NOT NULL UNIQUE,
+  entries     TEXT NOT NULL DEFAULT '[]',
+  recomendado TEXT NOT NULL DEFAULT '[]',
+  deleted_at  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+) STRICT;

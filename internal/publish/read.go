@@ -10,13 +10,14 @@ import (
 )
 
 // ReadStore is the read surface the JSON read API needs: the article Repository
-// plus the operator-owned author and topic registries. Both *sqlite.Store and
-// *postgres.Store satisfy it, so the same concrete store backs the write path and
-// these reads.
+// plus the operator-owned author, topic, and portada registries. Both *sqlite.Store
+// and *postgres.Store satisfy it, so the same concrete store backs the write path
+// and these reads.
 type ReadStore interface {
 	store.Repository
 	store.AuthorStore
 	store.TopicStore
+	store.PortadaStore
 }
 
 // ReadHandler serves the authenticated JSON read API: GET /authors, /topics,
@@ -120,6 +121,55 @@ func (rh *ReadHandler) ServeTopics(w http.ResponseWriter, r *http.Request) {
 			Metadata: coalesceMeta(tp.Metadata), Deleted: tp.Deleted,
 			CreatedAt: rfc3339(tp.CreatedAt), UpdatedAt: rfc3339(tp.UpdatedAt),
 		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type portadaEntryJSON struct {
+	Slug string `json:"slug"`
+	Role string `json:"role"`
+}
+
+type portadaJSON struct {
+	Date        string             `json:"date"`
+	Entries     []portadaEntryJSON `json:"entries"`
+	Recomendado []string           `json:"recomendado"`
+	Deleted     bool               `json:"deleted"`
+	CreatedAt   string             `json:"created_at"`
+	UpdatedAt   string             `json:"updated_at"`
+}
+
+type portadasResponse struct {
+	Portadas []portadaJSON `json:"portadas"`
+}
+
+// toPortadaJSON maps a stored day plan to its JSON shape, coalescing Entries and
+// Recomendado to [] (never null) so the wire form is always a JSON array.
+func toPortadaJSON(p store.PortadaDay) portadaJSON {
+	entries := make([]portadaEntryJSON, 0, len(p.Entries))
+	for _, e := range p.Entries {
+		entries = append(entries, portadaEntryJSON{Slug: e.Slug, Role: e.Role})
+	}
+	return portadaJSON{
+		Date: p.Date, Entries: entries, Recomendado: coalesceTopics(p.Recomendado),
+		Deleted: p.Deleted, CreatedAt: rfc3339(p.CreatedAt), UpdatedAt: rfc3339(p.UpdatedAt),
+	}
+}
+
+// ServePortadas answers GET /portadas with the managed front-page registry.
+// ?include_deleted=true includes tombstoned days (default excludes them).
+func (rh *ReadHandler) ServePortadas(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	portadas, err := rh.store.ListPortadas(r.Context(), includeDeleted(r))
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	out := portadasResponse{Portadas: make([]portadaJSON, 0, len(portadas))}
+	for _, p := range portadas {
+		out.Portadas = append(out.Portadas, toPortadaJSON(p))
 	}
 	writeJSON(w, http.StatusOK, out)
 }

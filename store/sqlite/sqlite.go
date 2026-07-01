@@ -1052,3 +1052,201 @@ func (s *Store) DeleteTopic(ctx context.Context, slug string) error {
 	}
 	return nil
 }
+
+const portadaCols = "date,entries,recomendado,deleted_at,created_at,updated_at"
+
+// marshalEntries encodes the ordered entries as a JSON array, defaulting to "[]"
+// (never "null") so the column round-trips an empty plan. The {slug, role} shape
+// is byte-identical to the Postgres adapter's, so a row written by one reads the
+// same in the other.
+func marshalEntries(entries []store.PortadaEntry) (string, error) {
+	if len(entries) == 0 {
+		return "[]", nil
+	}
+	rows := make([]portadaEntryRow, len(entries))
+	for i, e := range entries {
+		rows[i] = portadaEntryRow{Slug: e.Slug, Role: e.Role}
+	}
+	b, err := json.Marshal(rows)
+	if err != nil {
+		return "", fmt.Errorf("marshal entries: %w", err)
+	}
+	return string(b), nil
+}
+
+func unmarshalEntries(s string) ([]store.PortadaEntry, error) {
+	if s == "" || s == "[]" {
+		return []store.PortadaEntry{}, nil
+	}
+	var rows []portadaEntryRow
+	if err := json.Unmarshal([]byte(s), &rows); err != nil {
+		return nil, fmt.Errorf("unmarshal entries: %w", err)
+	}
+	out := make([]store.PortadaEntry, len(rows))
+	for i, r := range rows {
+		out[i] = store.PortadaEntry{Slug: r.Slug, Role: r.Role}
+	}
+	return out, nil
+}
+
+// portadaEntryRow is the on-disk JSON shape of a store.PortadaEntry. role is
+// omitted when empty so a normal entry stays compact.
+type portadaEntryRow struct {
+	Slug string `json:"slug"`
+	Role string `json:"role,omitempty"`
+}
+
+// marshalStrings encodes a slug list as a JSON array, defaulting to "[]".
+func marshalStrings(ss []string) (string, error) {
+	if len(ss) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(ss)
+	if err != nil {
+		return "", fmt.Errorf("marshal strings: %w", err)
+	}
+	return string(b), nil
+}
+
+func unmarshalStrings(s string) ([]string, error) {
+	if s == "" || s == "[]" {
+		return []string{}, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return nil, fmt.Errorf("unmarshal strings: %w", err)
+	}
+	return out, nil
+}
+
+// scanPortada decodes one portadas row, mirroring scanTopic: entries and
+// recomendado round-trip through the JSON helpers; the timestamps are whole-second
+// RFC3339 TEXT (deleted_at "" means active), so Deleted is the tombstone being
+// non-empty. Shared by PortadaByDate and ListPortadas.
+func scanPortada(sc scanner) (store.PortadaDay, error) {
+	var (
+		date, entries, recomendado string
+		deleted, created, updated  string
+	)
+	if err := sc.Scan(&date, &entries, &recomendado, &deleted, &created, &updated); err != nil {
+		return store.PortadaDay{}, err
+	}
+	es, err := unmarshalEntries(entries)
+	if err != nil {
+		return store.PortadaDay{}, err
+	}
+	rec, err := unmarshalStrings(recomendado)
+	if err != nil {
+		return store.PortadaDay{}, err
+	}
+	createdT, err := time.Parse(timeLayout, created)
+	if err != nil {
+		return store.PortadaDay{}, fmt.Errorf("parse portada created_at: %w", err)
+	}
+	updatedT, err := time.Parse(timeLayout, updated)
+	if err != nil {
+		return store.PortadaDay{}, fmt.Errorf("parse portada updated_at: %w", err)
+	}
+	return store.PortadaDay{
+		Date:        date,
+		Entries:     es,
+		Recomendado: rec,
+		Deleted:     deleted != "",
+		CreatedAt:   createdT,
+		UpdatedAt:   updatedT,
+	}, nil
+}
+
+// UpsertPortada creates or updates a day plan keyed on date, mirroring UpsertTopic:
+// on an existing date it replaces entries and recomendado, advances updated_at,
+// preserves created_at, and clears the tombstone (re-activating a previously
+// deleted date). The entries and recomendado are replaced wholesale, never merged.
+func (s *Store) UpsertPortada(ctx context.Context, p store.PortadaDay) (store.PortadaDay, error) {
+	entries, err := marshalEntries(p.Entries)
+	if err != nil {
+		return store.PortadaDay{}, err
+	}
+	rec, err := marshalStrings(p.Recomendado)
+	if err != nil {
+		return store.PortadaDay{}, err
+	}
+	created := p.CreatedAt
+	if created.IsZero() {
+		created = time.Now()
+	}
+	updated := p.UpdatedAt
+	if updated.IsZero() {
+		updated = created
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO portadas (date,entries,recomendado,deleted_at,created_at,updated_at)
+		 VALUES (?,?,?,'',?,?)
+		 ON CONFLICT(date) DO UPDATE SET
+		   entries=excluded.entries, recomendado=excluded.recomendado,
+		   deleted_at='', updated_at=excluded.updated_at`,
+		p.Date, entries, rec,
+		created.UTC().Truncate(time.Second).Format(timeLayout),
+		updated.UTC().Truncate(time.Second).Format(timeLayout),
+	); err != nil {
+		return store.PortadaDay{}, fmt.Errorf("upsert portada: %w", err)
+	}
+	got, _, err := s.PortadaByDate(ctx, p.Date)
+	if err != nil {
+		return store.PortadaDay{}, err
+	}
+	return got, nil
+}
+
+// PortadaByDate returns the day plan for the date, or found=false. A soft-deleted
+// day is still returned (found=true, Deleted=true) so callers can re-activate it.
+func (s *Store) PortadaByDate(ctx context.Context, date string) (store.PortadaDay, bool, error) {
+	p, err := scanPortada(s.db.QueryRowContext(ctx,
+		`SELECT `+portadaCols+` FROM portadas WHERE date = ?`, date))
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.PortadaDay{}, false, nil
+	}
+	if err != nil {
+		return store.PortadaDay{}, false, err
+	}
+	return p, true, nil
+}
+
+// ListPortadas returns day plans ordered by date ascending (SQLite BINARY default;
+// the Postgres adapter pins COLLATE "C" to match). Tombstoned days are excluded
+// unless includeDeleted.
+func (s *Store) ListPortadas(ctx context.Context, includeDeleted bool) ([]store.PortadaDay, error) {
+	q := `SELECT ` + portadaCols + ` FROM portadas`
+	if !includeDeleted {
+		q += ` WHERE deleted_at = ''`
+	}
+	q += ` ORDER BY date ASC`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.PortadaDay
+	for rows.Next() {
+		p, err := scanPortada(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// DeletePortada soft-deletes the day plan by setting a whole-second RFC3339
+// tombstone. Deleting an absent date returns store.ErrNotFound.
+func (s *Store) DeletePortada(ctx context.Context, date string) error {
+	now := time.Now().UTC().Truncate(time.Second).Format(timeLayout)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE portadas SET deleted_at = ?, updated_at = ? WHERE date = ?`, now, now, date)
+	if err != nil {
+		return fmt.Errorf("delete portada: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}

@@ -21,14 +21,14 @@ import "net/http"
 // leaves media off entirely.
 //
 // When readH is non-nil, the authenticated JSON read API is mounted: GET /authors,
-// GET /topics, GET /articles, and GET /articles/{slug}. These are method-specific
-// patterns, so GET /articles takes precedence over the method-less /articles write
-// route for GET while POST still reaches the write handler; reads are not rate
-// limited (idempotent, cacheable). A nil readH leaves the read API off, so the
-// write handler keeps answering 405 for a GET /articles.
+// GET /topics, GET /portadas, GET /articles, and GET /articles/{slug}. These are
+// method-specific patterns, so GET /articles takes precedence over the method-less
+// /articles write route for GET while POST still reaches the write handler; reads
+// are not rate limited (idempotent, cacheable). A nil readH leaves the read API off,
+// so the write handler keeps answering 405 for a GET /articles.
 //
 // When opH is non-nil, the operator mutation lane is mounted behind ScopeAdminWrite:
-// POST/DELETE/restore for /authors and /topics, and PUT /articles/{slug},
+// POST/DELETE/restore for /authors, /topics, and /portadas, and PUT /articles/{slug},
 // DELETE /articles/{slug}, POST /articles/{slug}/restore. These are method-specific
 // patterns that coexist with the method-less /articles write route (PUT/DELETE reach
 // the operator handler, POST still reaches the append-only write handler) and with
@@ -54,6 +54,7 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 	if readH != nil {
 		mux.HandleFunc("GET /authors", readH.ServeAuthors)
 		mux.HandleFunc("GET /topics", readH.ServeTopics)
+		mux.HandleFunc("GET /portadas", readH.ServePortadas)
 		mux.HandleFunc("GET /articles", readH.ServeArticles)
 		mux.HandleFunc("GET /articles/{slug}", readH.ServeArticle)
 	}
@@ -65,6 +66,9 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 		mux.HandleFunc("POST /topics", opH.ServeUpsertTopic)
 		mux.HandleFunc("DELETE /topics/{slug}", opH.ServeDeleteTopic)
 		mux.HandleFunc("POST /topics/{slug}/restore", opH.ServeRestoreTopic)
+		mux.HandleFunc("POST /portadas", opH.ServeUpsertPortada)
+		mux.HandleFunc("DELETE /portadas/{date}", opH.ServeDeletePortada)
+		mux.HandleFunc("POST /portadas/{date}/restore", opH.ServeRestorePortada)
 		mux.HandleFunc("PUT /articles/{slug}", opH.ServeUpdateArticle)
 		mux.HandleFunc("DELETE /articles/{slug}", opH.ServeDeleteArticle)
 		mux.HandleFunc("POST /articles/{slug}/restore", opH.ServeRestoreArticle)

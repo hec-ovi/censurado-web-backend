@@ -1391,6 +1391,216 @@ func RunTopicStore(t *testing.T, ts store.TopicStore) {
 	})
 }
 
+func portadaDatesOf(ps []store.PortadaDay) []string {
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.Date
+	}
+	return out
+}
+
+// assertPortadaEqual checks the observable fields round-trip, including entry
+// order and role and the recomendado list order (both are ordered, not sets).
+func assertPortadaEqual(t *testing.T, got, want store.PortadaDay) {
+	t.Helper()
+	if got.Date != want.Date {
+		t.Errorf("Date = %q, want %q", got.Date, want.Date)
+	}
+	if len(got.Entries) != len(want.Entries) {
+		t.Fatalf("Entries len = %d, want %d (got %+v)", len(got.Entries), len(want.Entries), got.Entries)
+	}
+	for i := range want.Entries {
+		if got.Entries[i] != want.Entries[i] {
+			t.Errorf("Entries[%d] = %+v, want %+v (order + role must round-trip)", i, got.Entries[i], want.Entries[i])
+		}
+	}
+	if !equalOrdered(got.Recomendado, want.Recomendado) {
+		t.Errorf("Recomendado = %v, want %v (order preserved)", got.Recomendado, want.Recomendado)
+	}
+	if !got.CreatedAt.UTC().Equal(want.CreatedAt.UTC().Truncate(time.Second)) {
+		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt.UTC(), want.CreatedAt.UTC().Truncate(time.Second))
+	}
+}
+
+// RunPortadaStore executes the PortadaStore conformance suite against ps, which
+// must back an empty portadas table. Running the identical suite against both
+// SQLite and Postgres proves the front-page registry round-trips every field
+// (entry order + role, recomendado order), orders by date in byte order (SQLite
+// BINARY default; Postgres COLLATE "C" pin), replaces entries wholesale on upsert
+// (never merges), and tombstones and re-activates identically on the two engines.
+// Subtests run sequentially and share the seeded state; it does not call
+// t.Parallel. It mirrors RunAuthorStore / RunTopicStore.
+func RunPortadaStore(t *testing.T, ps store.PortadaStore) {
+	ctx := context.Background()
+	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("PortadaByDate on a missing date reports not found", func(t *testing.T) {
+		got, found, err := ps.PortadaByDate(ctx, "2000-01-01")
+		if err != nil {
+			t.Fatalf("PortadaByDate: %v", err)
+		}
+		if found {
+			t.Errorf("found = true for missing date, want false")
+		}
+		if got.Date != "" || len(got.Entries) != 0 {
+			t.Errorf("got = %+v for missing date, want zero PortadaDay", got)
+		}
+	})
+
+	first := store.PortadaDay{
+		Date: "2026-06-01",
+		Entries: []store.PortadaEntry{
+			{Slug: "lead-story", Role: "important"},
+			{Slug: "second-story"},
+			{Slug: "third-story"},
+		},
+		Recomendado: []string{"rec-one", "rec-two"},
+		CreatedAt:   base,
+		UpdatedAt:   base,
+	}
+
+	t.Run("UpsertPortada creates then PortadaByDate round-trips every field (entry order + role + recomendado)", func(t *testing.T) {
+		stored, err := ps.UpsertPortada(ctx, first)
+		if err != nil {
+			t.Fatalf("UpsertPortada: %v", err)
+		}
+		if stored.Deleted {
+			t.Errorf("Deleted = true on create, want false")
+		}
+		got, found, err := ps.PortadaByDate(ctx, first.Date)
+		if err != nil {
+			t.Fatalf("PortadaByDate: %v", err)
+		}
+		if !found {
+			t.Fatalf("found = false after create, want true")
+		}
+		assertPortadaEqual(t, got, first)
+		// The lead is entries[0] and carries the full-row emphasis role.
+		if got.Entries[0].Slug != "lead-story" || got.Entries[0].Role != "important" {
+			t.Errorf("lead entry = %+v, want {lead-story important}", got.Entries[0])
+		}
+		// A normal entry has an empty role.
+		if got.Entries[1].Role != "" {
+			t.Errorf("Entries[1].Role = %q, want \"\" (normal)", got.Entries[1].Role)
+		}
+	})
+
+	t.Run("UpsertPortada on an existing date updates in place (created_at preserved, updated_at advances, entries replaced not merged, no dup row)", func(t *testing.T) {
+		edit := store.PortadaDay{
+			Date: first.Date,
+			Entries: []store.PortadaEntry{
+				{Slug: "new-lead", Role: "important"},
+				{Slug: "new-second"},
+			},
+			Recomendado: []string{"rec-three"},
+			CreatedAt:   base, // ignored on update: the stored created_at is preserved
+			UpdatedAt:   base.Add(48 * time.Hour),
+		}
+		stored, err := ps.UpsertPortada(ctx, edit)
+		if err != nil {
+			t.Fatalf("UpsertPortada update: %v", err)
+		}
+		if !stored.CreatedAt.UTC().Equal(base) {
+			t.Errorf("CreatedAt = %v, want preserved %v", stored.CreatedAt.UTC(), base)
+		}
+		if !stored.UpdatedAt.UTC().Equal(base.Add(48 * time.Hour)) {
+			t.Errorf("UpdatedAt = %v, want advanced to %v", stored.UpdatedAt.UTC(), base.Add(48*time.Hour))
+		}
+		// Entries and recomendado are replaced wholesale, not appended/merged.
+		if len(stored.Entries) != 2 || stored.Entries[0].Slug != "new-lead" || stored.Entries[1].Slug != "new-second" {
+			t.Errorf("entries not replaced: %+v", stored.Entries)
+		}
+		if !equalOrdered(stored.Recomendado, []string{"rec-three"}) {
+			t.Errorf("recomendado not replaced: %v, want [rec-three]", stored.Recomendado)
+		}
+		// No duplicate row: still exactly one row for the date.
+		all, err := ps.ListPortadas(ctx, true)
+		if err != nil {
+			t.Fatalf("ListPortadas: %v", err)
+		}
+		n := 0
+		for _, p := range all {
+			if p.Date == first.Date {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("rows for date %q = %d, want 1 (update, not a second insert)", first.Date, n)
+		}
+	})
+
+	second := store.PortadaDay{
+		Date:        "2026-06-02",
+		Entries:     []store.PortadaEntry{{Slug: "solo-story"}},
+		Recomendado: []string{},
+		CreatedAt:   base,
+		UpdatedAt:   base,
+	}
+
+	t.Run("ListPortadas orders by date ascending (byte order), excludes deleted by default", func(t *testing.T) {
+		if _, err := ps.UpsertPortada(ctx, second); err != nil {
+			t.Fatalf("UpsertPortada: %v", err)
+		}
+		got, err := ps.ListPortadas(ctx, false)
+		if err != nil {
+			t.Fatalf("ListPortadas: %v", err)
+		}
+		want := []string{"2026-06-01", "2026-06-02"}
+		if d := portadaDatesOf(got); !equalOrdered(d, want) {
+			t.Errorf("order = %v, want %v", d, want)
+		}
+	})
+
+	t.Run("DeletePortada tombstones: excluded by default, included with includeDeleted, re-upsert re-activates", func(t *testing.T) {
+		if err := ps.DeletePortada(ctx, second.Date); err != nil {
+			t.Fatalf("DeletePortada: %v", err)
+		}
+		def, err := ps.ListPortadas(ctx, false)
+		if err != nil {
+			t.Fatalf("ListPortadas(false): %v", err)
+		}
+		if contains(portadaDatesOf(def), second.Date) {
+			t.Errorf("deleted portada %q still listed by default", second.Date)
+		}
+		all, err := ps.ListPortadas(ctx, true)
+		if err != nil {
+			t.Fatalf("ListPortadas(true): %v", err)
+		}
+		if !contains(portadaDatesOf(all), second.Date) {
+			t.Errorf("deleted portada %q missing from includeDeleted list", second.Date)
+		}
+		got, found, err := ps.PortadaByDate(ctx, second.Date)
+		if err != nil {
+			t.Fatalf("PortadaByDate(deleted): %v", err)
+		}
+		if !found || !got.Deleted {
+			t.Errorf("PortadaByDate(deleted) found=%v Deleted=%v, want true/true", found, got.Deleted)
+		}
+		reborn := second
+		reborn.UpdatedAt = base.Add(72 * time.Hour)
+		stored, err := ps.UpsertPortada(ctx, reborn)
+		if err != nil {
+			t.Fatalf("re-upsert: %v", err)
+		}
+		if stored.Deleted {
+			t.Errorf("Deleted = true after re-upsert, want re-activated")
+		}
+		def2, err := ps.ListPortadas(ctx, false)
+		if err != nil {
+			t.Fatalf("ListPortadas(false) after re-upsert: %v", err)
+		}
+		if !contains(portadaDatesOf(def2), second.Date) {
+			t.Errorf("re-activated portada %q missing from default list", second.Date)
+		}
+	})
+
+	t.Run("DeletePortada on a missing date returns ErrNotFound", func(t *testing.T) {
+		if err := ps.DeletePortada(ctx, "1999-12-31"); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("DeletePortada(missing) = %v, want ErrNotFound", err)
+		}
+	})
+}
+
 // RunArticleMutations executes the article soft-delete + edit conformance suite
 // against repo, which must be empty. Running the identical suite against both
 // SQLite and Postgres proves DeleteArticle/RestoreArticle/UpdateArticle and the

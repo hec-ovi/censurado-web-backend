@@ -248,6 +248,94 @@ func (oh *OperatorHandler) ServeRestoreTopic(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, toTopicJSON(restored))
 }
 
+// ----- portadas -----
+
+type portadaEntryInput struct {
+	Slug string `json:"slug"`
+	Role string `json:"role"`
+}
+
+type portadaInput struct {
+	Date        string              `json:"date"`
+	Entries     []portadaEntryInput `json:"entries"`
+	Recomendado []string            `json:"recomendado"`
+}
+
+// ServeUpsertPortada answers POST /portadas: create or update a day plan keyed on
+// date. date is required; a missing one is a 400. Entries and recomendado are
+// replaced wholesale.
+func (oh *OperatorHandler) ServeUpsertPortada(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	var in portadaInput
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.Date) == "" {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "date is required"})
+		return
+	}
+	entries := make([]store.PortadaEntry, 0, len(in.Entries))
+	for _, e := range in.Entries {
+		entries = append(entries, store.PortadaEntry{Slug: e.Slug, Role: e.Role})
+	}
+	p, err := oh.store.UpsertPortada(r.Context(), store.PortadaDay{
+		Date: strings.TrimSpace(in.Date), Entries: entries, Recomendado: in.Recomendado,
+	})
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	oh.triggerRegen()
+	writeJSON(w, http.StatusOK, toPortadaJSON(p))
+}
+
+// ServeDeletePortada answers DELETE /portadas/{date}: soft-delete the day plan. 404
+// on a missing date.
+func (oh *OperatorHandler) ServeDeletePortada(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	err := oh.store.DeletePortada(r.Context(), r.PathValue("date"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	oh.triggerRegen()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ServeRestorePortada answers POST /portadas/{date}/restore: clear the tombstone by
+// re-upserting the stored row. 404 on a missing date.
+func (oh *OperatorHandler) ServeRestorePortada(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	p, found, err := oh.store.PortadaByDate(r.Context(), r.PathValue("date"))
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	if !found {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	restored, err := oh.store.UpsertPortada(r.Context(), store.PortadaDay{
+		Date: p.Date, Entries: p.Entries, Recomendado: p.Recomendado,
+	})
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	oh.triggerRegen()
+	writeJSON(w, http.StatusOK, toPortadaJSON(restored))
+}
+
 // ----- articles -----
 
 // ServeUpdateArticle answers PUT /articles/{slug}: edit an article in place. The
