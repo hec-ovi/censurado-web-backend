@@ -79,16 +79,26 @@ var slugTranslit = strings.NewReplacer(
 	"ñ", "n", "ç", "c", "ý", "y", "ÿ", "y",
 )
 
+// slugMaxLen caps a slug's length. 200 keeps permalinks sane and matches the
+// widest key downstream consumers accept (the reactions API validates slugs
+// against ^[a-z0-9][a-z0-9-]{0,199}$; a longer slug would silently lose its
+// like/dislike bar).
+const slugMaxLen = 200
+
 // Slugify turns arbitrary text into a URL-safe slug: lowercase ASCII
-// alphanumerics joined by single hyphens, with no leading or trailing hyphen.
-// Common Latin accents are transliterated (á->a, ñ->n, ...); other non-ASCII
-// characters are dropped. Returns "" when nothing usable remains; callers supply
-// a fallback.
+// alphanumerics joined by single hyphens, with no leading or trailing hyphen,
+// at most slugMaxLen characters. Common Latin accents are transliterated
+// (á->a, ñ->n, ...); other non-ASCII characters are dropped. Returns "" when
+// nothing usable remains; callers supply a fallback.
 func Slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = slugTranslit.Replace(s)
 	s = slugNonAlnum.ReplaceAllString(s, "-")
-	return strings.Trim(s, "-")
+	s = strings.Trim(s, "-")
+	if len(s) > slugMaxLen {
+		s = strings.Trim(s[:slugMaxLen], "-")
+	}
+	return s
 }
 
 // ContentHash is the stable dedup and idempotency identity of an article: a

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -127,6 +128,22 @@ func TestSlugify(t *testing.T) {
 		if got := Slugify(in); got != want {
 			t.Errorf("Slugify(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A slug is capped at 200 chars (the widest key the reactions API accepts) and
+// the cut never leaves a trailing hyphen.
+func TestSlugifyCapsLength(t *testing.T) {
+	long := strings.Repeat("palabra ", 60) // slugifies to ~479 chars
+	got := Slugify(long)
+	if len(got) > 200 {
+		t.Errorf("Slugify length = %d, want <= 200", len(got))
+	}
+	if strings.HasSuffix(got, "-") || strings.HasPrefix(got, "-") {
+		t.Errorf("Slugify(%q) has a dangling hyphen: %q", long[:20], got)
+	}
+	if !strings.HasPrefix(got, "palabra-palabra") {
+		t.Errorf("unexpected slug head: %q", got[:20])
 	}
 }
 
