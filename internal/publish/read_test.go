@@ -88,12 +88,13 @@ type topicsResp struct {
 
 type articlesResp struct {
 	Articles []struct {
-		Slug    string   `json:"slug"`
-		Title   string   `json:"title"`
-		Section string   `json:"section"`
-		Author  string   `json:"author"`
-		Topics  []string `json:"topics"`
-		Deleted bool     `json:"deleted"`
+		Slug     string   `json:"slug"`
+		Title    string   `json:"title"`
+		Section  string   `json:"section"`
+		Author   string   `json:"author"`
+		Topics   []string `json:"topics"`
+		HasMedia bool     `json:"has_media"`
+		Deleted  bool     `json:"deleted"`
 	} `json:"articles"`
 	Total int `json:"total"`
 }
@@ -241,6 +242,65 @@ func TestReadTopics(t *testing.T) {
 	if !found {
 		t.Error("tombstoned topic missing or not flagged deleted with include_deleted=true")
 	}
+}
+
+// TestReadArticles_HasMedia proves the server-derived has_media flag: an article
+// with a metadata image, one whose body carries a {{video:...}} marker, and a
+// plain-text piece (whose only markers are {{relacionado}}/{{tweet}}, which are NOT
+// image/video media) are seeded through the real publish path, then the flag is
+// asserted on BOTH the light list (/articles) and the single article (/articles/{slug}).
+func TestReadArticles_HasMedia(t *testing.T) {
+	srv, _ := newReadServer(t)
+	opToken := "ak_op." + opSecret
+
+	seed := func(idem, title, body string, meta map[string]any) string {
+		t.Helper()
+		payload := map[string]any{
+			"title": title, "body": body, "author": "ada", "section": "tech",
+		}
+		if meta != nil {
+			payload["metadata"] = meta
+		}
+		b, _ := json.Marshal(payload)
+		rec := post(t, srv, opToken, idem, string(b))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("seed %q: status = %d (%s)", title, rec.Code, rec.Body.String())
+		}
+		_, slug := decodeCreate(t, rec)
+		return slug
+	}
+
+	imgSlug := seed("m1", "Hero image piece", "# H\n\nplain body", map[string]any{"image": "/media/abc.jpg"})
+	vidSlug := seed("m2", "Body video piece", "# H\n\nlead\n\n{{video:wD0ay7ttFTg}}\n\nmore", nil)
+	txtSlug := seed("m3", "Plain text piece", "# H\n\nwords {{relacionado:other-slug}} and {{tweet:12345}}", nil)
+
+	want := map[string]bool{imgSlug: true, vidSlug: true, txtSlug: false}
+
+	t.Run("light list carries has_media", func(t *testing.T) {
+		var got articlesResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles"), &got)
+		seen := map[string]bool{}
+		for _, a := range got.Articles {
+			seen[a.Slug] = a.HasMedia
+		}
+		for slug, exp := range want {
+			if seen[slug] != exp {
+				t.Errorf("list has_media[%s] = %v, want %v", slug, seen[slug], exp)
+			}
+		}
+	})
+
+	t.Run("single article carries has_media", func(t *testing.T) {
+		for slug, exp := range want {
+			var got struct {
+				HasMedia bool `json:"has_media"`
+			}
+			decodeBody(t, getAuth(t, srv, opToken, "/articles/"+slug), &got)
+			if got.HasMedia != exp {
+				t.Errorf("article %s has_media = %v, want %v", slug, got.HasMedia, exp)
+			}
+		}
+	})
 }
 
 func TestReadArticles_FilterPagingAndBodyOmitted(t *testing.T) {

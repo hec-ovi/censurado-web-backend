@@ -35,6 +35,34 @@ type Article struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// videoMarkerRe matches an inline {{video:...}} body marker, the same marker the
+// generator renders as an embedded video. Only the video marker counts as media:
+// {{relacionado:...}} (a related-article link) and {{tweet:...}} (an embedded post)
+// are not image or video media.
+var videoMarkerRe = regexp.MustCompile(`\{\{\s*video\s*:\s*[^}]+?\s*\}\}`)
+
+// mediaMetadataKeys are the metadata keys that carry an image or video: a hero
+// image, or a video (YouTube by url/id, or a self-hosted file). They mirror the
+// keys the generator reads when it builds a card's media.
+var mediaMetadataKeys = []string{"image", "youtube", "youtube_id", "video"}
+
+// HasMedia reports whether the article carries image or video media: a metadata
+// image, a metadata video (youtube / youtube_id / video), or an inline {{video:...}}
+// body marker. It is SERVER-DERIVED and never stored: it is a pure function of the
+// article's own body and metadata (both already loaded on every read), so it always
+// reflects the current article and needs no schema column or backfill. The front-page
+// card the site renders keys off the same signals (a metadata.image, or a body
+// YouTube video), so has_media tracks whether a listing card shows a picture rather
+// than plain text, which is what the portada layout alternates on.
+func (a Article) HasMedia() bool {
+	for _, key := range mediaMetadataKeys {
+		if s, ok := a.Metadata[key].(string); ok && strings.TrimSpace(s) != "" {
+			return true
+		}
+	}
+	return videoMarkerRe.MatchString(a.Body)
+}
+
 // PublishInput is what an author agent submits. It mirrors
 // contracts/article.schema.json. Server-owned fields (id, content_hash,
 // created_at) are never accepted from input.

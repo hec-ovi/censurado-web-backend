@@ -175,7 +175,10 @@ func (rh *ReadHandler) ServePortadas(w http.ResponseWriter, r *http.Request) {
 }
 
 // articleListItem is the light list shape: everything an index needs EXCEPT the
-// body, so a listing of many articles stays small.
+// body, so a listing of many articles stays small. HasMedia is derived from the body
+// and metadata (which the store loads even though the body is dropped from this
+// shape), so a listing consumer knows whether a piece carries an image or video
+// without pulling the full article.
 type articleListItem struct {
 	Slug        string         `json:"slug"`
 	Title       string         `json:"title"`
@@ -184,6 +187,7 @@ type articleListItem struct {
 	PublishedAt string         `json:"published_at"`
 	Topics      []string       `json:"topics"`
 	Metadata    map[string]any `json:"metadata"`
+	HasMedia    bool           `json:"has_media"`
 	Deleted     bool           `json:"deleted"`
 	ContentHash string         `json:"content_hash"`
 }
@@ -221,13 +225,16 @@ func (rh *ReadHandler) ServeArticles(w http.ResponseWriter, r *http.Request) {
 		out.Articles = append(out.Articles, articleListItem{
 			Slug: a.Slug, Title: a.Title, Section: a.Section, Author: a.Author,
 			PublishedAt: rfc3339(a.PublishedAt), Topics: coalesceTopics(a.Topics),
-			Metadata: coalesceMeta(a.Metadata), Deleted: a.Deleted, ContentHash: a.ContentHash,
+			Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(),
+			Deleted: a.Deleted, ContentHash: a.ContentHash,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-// articleResponse is the full single-article shape, including the body.
+// articleResponse is the full single-article shape, including the body. HasMedia is
+// the same server-derived flag the light list carries, so a client reads it
+// consistently whether it fetched the list or the single article.
 type articleResponse struct {
 	ID          string         `json:"id"`
 	Slug        string         `json:"slug"`
@@ -238,6 +245,7 @@ type articleResponse struct {
 	PublishedAt string         `json:"published_at"`
 	Topics      []string       `json:"topics"`
 	Metadata    map[string]any `json:"metadata"`
+	HasMedia    bool           `json:"has_media"`
 	Deleted     bool           `json:"deleted"`
 	ContentHash string         `json:"content_hash"`
 	CreatedAt   string         `json:"created_at"`
@@ -262,7 +270,8 @@ func (rh *ReadHandler) ServeArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, articleResponse{
 		ID: a.ID, Slug: a.Slug, Title: a.Title, Body: a.Body, Section: a.Section,
 		Author: a.Author, PublishedAt: rfc3339(a.PublishedAt), Topics: coalesceTopics(a.Topics),
-		Metadata: coalesceMeta(a.Metadata), Deleted: a.Deleted, ContentHash: a.ContentHash,
+		Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(),
+		Deleted: a.Deleted, ContentHash: a.ContentHash,
 		CreatedAt: rfc3339(a.CreatedAt),
 	})
 }
