@@ -13,8 +13,8 @@
 //
 // The reference helpers (SafeMediaURL, YouTubeEmbedURL) are the single source of
 // truth for turning a stored reference or an operator-supplied URL into something
-// safe to render. The static generator (internal/generate) and the admin console
-// both use them, so what the admin accepts is exactly what the site will render.
+// safe to render. The static generator (censurado-web/internal/generate) consumes
+// them, so what publish validates on the way in is exactly what the site renders.
 package media
 
 import (

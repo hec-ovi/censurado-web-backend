@@ -59,6 +59,11 @@ make vet
 
 Without `make`, run the same command the Makefile wraps (`docker run ... go test ./...`).
 
+The container writes Go's module and build caches into repo-local `.gomodcache/` and
+`.gocache/` (both gitignored, a few hundred MB each). Treat `.gomodcache/` like a Go
+`node_modules`: it is vendored dependency code, not ours. Skip it when grepping, auditing,
+or counting tests; it is full of third-party `*_test.go` files that are not part of this repo.
+
 ## Run (self-hosting)
 
 `deploy/docker-compose.yml` brings up publish + a litestream backup sidecar,
