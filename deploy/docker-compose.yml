@@ -18,7 +18,7 @@
 # reads this database (the db-data volume) and renders the static site for the CDN;
 # it is not part of this compose. Point the generator at the same db-data volume
 # (mount it, or run on the same host) and let it write the site output the CDN
-# serves. The backend no longer regenerates the site in-process.
+# serves.
 #
 # Private by default: the publish API is bound to 127.0.0.1 on the host, reachable
 # only over a private network or an SSH tunnel. Secrets/config come from deploy/.env

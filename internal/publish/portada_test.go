@@ -26,7 +26,7 @@ func portadaDates(r portadasResp) map[string]bool {
 }
 
 func TestOperator_PortadaLifecycle(t *testing.T) {
-	srv, trig := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	op := "ak_op." + opSecret
 	ada := "ak_ada." + adaSecret // articles:write only, no admin:write
 
@@ -110,8 +110,5 @@ func TestOperator_PortadaLifecycle(t *testing.T) {
 	}
 	if rec := doReq(t, srv, http.MethodPost, op, "/portadas/1999-01-01/restore", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("restore missing date: status = %d, want 404", rec.Code)
-	}
-	if trig.count() == 0 {
-		t.Error("regenerate never fired on a portada mutation")
 	}
 }

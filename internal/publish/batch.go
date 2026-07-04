@@ -221,11 +221,6 @@ func (h *Handler) ServeBatch(w http.ResponseWriter, r *http.Request) {
 	// item, so a batch is recoverable by replay exactly like single publishes.
 	h.recordBatchArchive(ctx, items, results, now)
 
-	// One regenerate for the whole batch, only when it changed something on disk.
-	if anyCreated {
-		h.triggerRegen()
-	}
-
 	status := http.StatusOK // all items deduplicated (or an empty batch)
 	if anyCreated {
 		status = http.StatusCreated

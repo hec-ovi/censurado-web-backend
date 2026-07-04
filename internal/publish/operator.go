@@ -21,13 +21,11 @@ const ScopeAdminWrite = "admin:write"
 // OperatorHandler serves the operator mutation lane: the registry CRUD and the
 // article edit/delete/restore endpoints behind ScopeAdminWrite. It is the second,
 // audited write lane alongside the append-only publish path, and like that path it
-// goes through the same single store writer and fires the SAME off-request
-// regenerate+purge after a change so the public site reflects it.
+// goes through the same single store writer.
 type OperatorHandler struct {
 	store ReadStore // Repository + AuthorStore + TopicStore (the concrete *Store)
 	auth  Authenticator
 	now   func() time.Time
-	regen regenTrigger // optional; nil = no auto-regenerate
 }
 
 // NewOperatorHandler wires the operator mutation handler over a store and the same
@@ -37,21 +35,6 @@ func NewOperatorHandler(s ReadStore, auth Authenticator, now func() time.Time) *
 		now = time.Now
 	}
 	return &OperatorHandler{store: s, auth: auth, now: now}
-}
-
-// WithRegenerator attaches the SAME off-request regenerate trigger the publish
-// handler uses, so an author/topic/article mutation rebuilds and purges the static
-// site exactly like a create. nil leaves auto-regenerate off. Returns the handler
-// for chaining.
-func (oh *OperatorHandler) WithRegenerator(r regenTrigger) *OperatorHandler {
-	oh.regen = r
-	return oh
-}
-
-func (oh *OperatorHandler) triggerRegen() {
-	if oh.regen != nil {
-		oh.regen.Trigger()
-	}
 }
 
 // authz requires a valid bearer token AND the admin:write scope, writing the
@@ -120,7 +103,6 @@ func (oh *OperatorHandler) ServeUpsertAuthor(w http.ResponseWriter, r *http.Requ
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toAuthorJSON(a))
 }
 
@@ -139,7 +121,6 @@ func (oh *OperatorHandler) ServeDeleteAuthor(w http.ResponseWriter, r *http.Requ
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -165,7 +146,6 @@ func (oh *OperatorHandler) ServeRestoreAuthor(w http.ResponseWriter, r *http.Req
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toAuthorJSON(restored))
 }
 
@@ -199,7 +179,6 @@ func (oh *OperatorHandler) ServeUpsertTopic(w http.ResponseWriter, r *http.Reque
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toTopicJSON(tp))
 }
 
@@ -218,7 +197,6 @@ func (oh *OperatorHandler) ServeDeleteTopic(w http.ResponseWriter, r *http.Reque
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -244,7 +222,6 @@ func (oh *OperatorHandler) ServeRestoreTopic(w http.ResponseWriter, r *http.Requ
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toTopicJSON(restored))
 }
 
@@ -287,7 +264,6 @@ func (oh *OperatorHandler) ServeUpsertPortada(w http.ResponseWriter, r *http.Req
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toPortadaJSON(p))
 }
 
@@ -306,7 +282,6 @@ func (oh *OperatorHandler) ServeDeletePortada(w http.ResponseWriter, r *http.Req
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -332,7 +307,6 @@ func (oh *OperatorHandler) ServeRestorePortada(w http.ResponseWriter, r *http.Re
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toPortadaJSON(restored))
 }
 
@@ -382,7 +356,6 @@ func (oh *OperatorHandler) ServeUpdateArticle(w http.ResponseWriter, r *http.Req
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	writeJSON(w, http.StatusOK, toArticleResponse(updated))
 }
 
@@ -401,7 +374,6 @@ func (oh *OperatorHandler) ServeDeleteArticle(w http.ResponseWriter, r *http.Req
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -420,7 +392,6 @@ func (oh *OperatorHandler) ServeRestoreArticle(w http.ResponseWriter, r *http.Re
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	oh.triggerRegen()
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,18 +13,11 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
 )
 
-// opTrigger is a fake regenerate trigger that counts how many times a mutation
-// fired it, so a test can assert the operator lane rebuilds the site like a publish.
-type opTrigger struct{ n int32 }
-
-func (c *opTrigger) Trigger()   { atomic.AddInt32(&c.n, 1) }
-func (c *opTrigger) count() int { return int(atomic.LoadInt32(&c.n)) }
-
 // newOperatorServer wires the full server with the read API AND the operator
 // mutation lane over a real sqlite store. ak_op holds admin:write (the operator
 // console key); ak_ada holds only articles:write (an agent key) so it is rejected by
-// the mutation lane. The regenerate trigger is counted.
-func newOperatorServer(t *testing.T) (http.Handler, *opTrigger) {
+// the mutation lane.
+func newOperatorServer(t *testing.T) http.Handler {
 	t.Helper()
 	repo, err := sqlite.Open(filepath.Join(t.TempDir(), "op.db"))
 	if err != nil {
@@ -41,10 +33,9 @@ func newOperatorServer(t *testing.T) (http.Handler, *opTrigger) {
 	now := func() time.Time { return time.Date(2026, 6, 22, 12, 0, 0, 0, time.UTC) }
 	h := publish.NewHandler(repo, repo, auth, now)
 	rh := publish.NewReadHandler(repo, auth)
-	trig := &opTrigger{}
-	oh := publish.NewOperatorHandler(repo, auth, now).WithRegenerator(trig)
+	oh := publish.NewOperatorHandler(repo, auth, now)
 	limiter := publish.NewRateLimiter(1000, 1000, now)
-	return publish.NewServerHandler(h, limiter, nil, rh, oh), trig
+	return publish.NewServerHandler(h, limiter, nil, rh, oh)
 }
 
 // doReq drives one request with an optional bearer token and JSON body against the
@@ -68,7 +59,7 @@ func doReq(t *testing.T, h http.Handler, method, token, path, body string) *http
 }
 
 func TestOperator_RequiresAdminWriteScope(t *testing.T) {
-	srv, _ := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	slug := seedArticle(t, srv, "ak_op."+opSecret, "seed1", "Target", "ada", "tech", []string{"go"})
 	ada := "ak_ada." + adaSecret // articles:write only, no admin:write
 
@@ -94,7 +85,7 @@ func TestOperator_RequiresAdminWriteScope(t *testing.T) {
 }
 
 func TestOperator_AuthorLifecycle(t *testing.T) {
-	srv, trig := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	op := "ak_op." + opSecret
 
 	if rec := doReq(t, srv, http.MethodPost, op, "/authors", `{"handle":"author-a","name":"Sample Author","bio":"general"}`); rec.Code != http.StatusOK {
@@ -156,13 +147,10 @@ func TestOperator_AuthorLifecycle(t *testing.T) {
 	if rec := doReq(t, srv, http.MethodPost, op, "/authors/nope/restore", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("restore missing handle: status = %d, want 404", rec.Code)
 	}
-	if trig.count() == 0 {
-		t.Error("regenerate never fired on an author mutation")
-	}
 }
 
 func TestOperator_TopicLifecycle(t *testing.T) {
-	srv, _ := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	op := "ak_op." + opSecret
 
 	if rec := doReq(t, srv, http.MethodPost, op, "/topics", `{"slug":"economia","label":"Economia","description":"plata"}`); rec.Code != http.StatusOK {
@@ -204,7 +192,7 @@ func topicSlugs(r topicsResp) map[string]bool {
 }
 
 func TestOperator_ArticleEditDeleteRestore(t *testing.T) {
-	srv, trig := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	op := "ak_op." + opSecret
 	slug := seedArticle(t, srv, op, "art1", "Original title", "ada", "tech", []string{"go"})
 
@@ -276,13 +264,10 @@ func TestOperator_ArticleEditDeleteRestore(t *testing.T) {
 	if rec := doReq(t, srv, http.MethodDelete, op, "/articles/nope", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("delete missing slug: status = %d, want 404", rec.Code)
 	}
-	if trig.count() == 0 {
-		t.Error("regenerate never fired on an article mutation")
-	}
 }
 
 func TestOperator_EditConflictReturns409(t *testing.T) {
-	srv, _ := newOperatorServer(t)
+	srv := newOperatorServer(t)
 	op := "ak_op." + opSecret
 	a1 := seedArticle(t, srv, op, "c1", "First article", "ada", "tech", nil)
 	seedArticle(t, srv, op, "c2", "Second article", "bo", "world", nil)

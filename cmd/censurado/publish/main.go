@@ -201,9 +201,8 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	readH := publish.NewReadHandler(repo, auth)
 
 	// ...and the operator mutation lane (authors/topics CRUD + article edit/delete/
-	// restore) behind the admin:write scope. Regenerating the static site is the
-	// censurado-web generator's job, not the backend's, so no regenerator is wired:
-	// this server is a pure data/API service.
+	// restore) behind the admin:write scope. This server is a pure data/API service;
+	// building the static site is the censurado-web generator's job.
 	opH := publish.NewOperatorHandler(repo, auth, time.Now)
 
 	limiter := publish.NewRateLimiter(*f.rate, *f.burst, time.Now)

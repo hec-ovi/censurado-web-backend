@@ -40,13 +40,6 @@ const defaultMaxBody = 8 << 20 // 8 MiB
 // CENSURADO_PUBLISH_BATCH_MAX_ITEMS).
 const defaultMaxBatchItems = 500
 
-// regenTrigger schedules an off-request regenerate after a successful write. The
-// *Regenerator satisfies it; tests inject a counter. It is an interface so the
-// handler never blocks on, or depends on, the regenerate machinery.
-type regenTrigger interface {
-	Trigger()
-}
-
 // Handler serves POST /articles and POST /articles:batch.
 type Handler struct {
 	repo          store.Repository
@@ -55,7 +48,6 @@ type Handler struct {
 	now           func() time.Time
 	archive       PayloadArchive                   // optional; nil = no payload archiving
 	logf          func(format string, args ...any) // optional; nil = log.Printf
-	regen         regenTrigger                     // optional; nil = no auto-regenerate
 	maxBody       int                              // request entity cap (bytes); defaultMaxBody if zero
 	maxBatchItems int                              // max items per batch; defaultMaxBatchItems if zero
 }
@@ -100,24 +92,6 @@ func (h *Handler) WithArchive(a PayloadArchive) *Handler {
 func (h *Handler) WithLogger(logf func(format string, args ...any)) *Handler {
 	h.logf = logf
 	return h
-}
-
-// WithRegenerator attaches an off-request regenerate trigger, returning the handler
-// for chaining. After a publish that creates new content (single or batch), the
-// handler calls Trigger, which never blocks the request: the regenerate and purge
-// run in the worker. A nil trigger leaves auto-regenerate off.
-func (h *Handler) WithRegenerator(r regenTrigger) *Handler {
-	h.regen = r
-	return h
-}
-
-// triggerRegen schedules an off-request regenerate when one is configured. Called
-// only after a publish that created new content, so a pure replay or content-hash
-// dedup (which changes nothing on disk) never triggers a rebuild.
-func (h *Handler) triggerRegen() {
-	if h.regen != nil {
-		h.regen.Trigger()
-	}
 }
 
 func (h *Handler) warnf(format string, args ...any) {
@@ -193,7 +167,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// A 200 replay/dedup is not re-archived, so retries do not bloat the sink.
 		if res.Created {
 			h.recordArchive(ctx, key, id.Author, now, raw)
-			h.triggerRegen()
 		}
 		status := http.StatusOK // article already existed (deduplicated)
 		if res.Created {
