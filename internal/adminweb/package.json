@@ -1,0 +1,17 @@
+{
+  "name": "censurado-adminweb",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Operator admin panel SPA, served by the Go backend (go:embed static). Buildless vanilla ES modules; the dev dependencies are a test runner only.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/user-event": "^14.6.1",
+    "global-jsdom": "^29.0.0",
+    "jsdom": "^29.1.1",
+    "msw": "^2.14.6"
+  }
+}

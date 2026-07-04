@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Same-origin scripts only (mirrors the brain console nginx CSP). The app is
+         buildless ES modules with no inline script, so it boots from this external
+         module rather than an inline <script>. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    />
+    <title>Panel de administración</title>
+    <link rel="stylesheet" href="./styles.css?v=admin-remaster-3" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./app.js?v=admin-remaster-3"></script>
+  </body>
+</html>

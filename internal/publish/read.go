@@ -41,16 +41,8 @@ func NewReadHandler(s ReadStore, auth Authenticator) *ReadHandler {
 // authenticated key). It writes the problem response and returns false on failure,
 // mirroring the write path's missing_token/invalid_token shape.
 func (rh *ReadHandler) authn(w http.ResponseWriter, r *http.Request) bool {
-	token := bearerToken(r.Header.Get("Authorization"))
-	if token == "" {
-		writeProblem(w, problem{Status: http.StatusUnauthorized, Code: "missing_token"})
-		return false
-	}
-	if _, err := rh.auth.Authenticate(token); err != nil {
-		writeProblem(w, problem{Status: http.StatusUnauthorized, Code: "invalid_token"})
-		return false
-	}
-	return true
+	_, ok := resolveIdentity(rh.auth, w, r)
+	return ok
 }
 
 // authorJSON is the wire shape of a managed author. Style is the private voice/writing

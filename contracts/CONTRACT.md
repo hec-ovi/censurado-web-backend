@@ -178,3 +178,25 @@ edit/delete.
 | PUT | `/articles/{slug}` | `{title,body,author,section,topics?,metadata?}`; `id/slug/created_at` preserved | 200 (404 not_found, 409 edit_conflict on content-hash collision) |
 | DELETE | `/articles/{slug}` | | 204 |
 | POST | `/articles/{slug}/restore` | | 204 |
+
+### Lane 5: browser session (the folded-in admin panel)
+
+The operator panel is served by this same process (`internal/adminweb`, an outer wrap around the
+Lanes 1-4 mux; enabled only when a panel session key + login-token hash are configured). It is an
+ADDITIONAL front door beside the bearer lanes, never a replacement: a request carrying
+`Authorization: Bearer ...` passes through untouched, so Lanes 1-4 are byte-identical for the CLI and
+the brain. This lane is exercised by `internal/adminweb/adminweb_test.go` (not the Seam B conformance
+test, which covers the bearer API only).
+
+| Method | Path | Behavior |
+|---|---|---|
+| GET | `/login` | Login page (open). A valid session redirects to `/`. |
+| POST | `/login` | Form/JSON `token`; on a constant-time hex-SHA-256 match sets the `cnz_panel` session cookie (HttpOnly) + `cnz_panel_csrf` cookie (readable), both signed HMACs bound to the expiry, then 303 `/`. A miss re-renders the form (no cookie). |
+| POST | `/logout` | Clears both cookies, 303 `/login`. |
+| GET | `/`, `/app.js`, `/api.js`, `/styles.css`, `/slugify.js`, `/components/*` | The embedded buildless SPA, behind the session gate (the login stylesheet stays open). |
+
+Session gate rules: a valid `cnz_panel` session maps the request to the operator identity in-process
+(scopes `articles:write` + `articles:publish-any` + `admin:write`) so the SPA reaches Lanes 3-4 with
+NO bearer token; any state-changing method from a session must carry a matching `X-CSRF-Token`
+(double-submit) or it is 403 `invalid_csrf`; an unauthenticated browser navigation is 303 `/login`,
+any other unauthenticated request is 401. `/healthz` and `/media/*` stay open (public keyless reads).

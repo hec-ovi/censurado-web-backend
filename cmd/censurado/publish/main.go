@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hec-ovi/censurado-web-backend/internal/adminweb"
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
 	"github.com/hec-ovi/censurado-web-backend/media"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
@@ -73,6 +74,11 @@ type cliFlags struct {
 	genKey   *bool
 	author   *string
 	scopes   *stringSlice
+
+	panelSessionKey *string
+	panelLoginHash  *string
+	panelLoginToken *string
+	panelSecure     *bool
 }
 
 // newFlagSet builds the flag set with env-derived defaults. It is factored out so a
@@ -94,6 +100,11 @@ func newFlagSet(getenv func(string) string, stderr io.Writer) (*flag.FlagSet, *c
 		maxItems: fs.Int("max-batch-items", envInt(getenv, "CENSURADO_PUBLISH_BATCH_MAX_ITEMS", 500), "max articles per POST /articles:batch (or CENSURADO_PUBLISH_BATCH_MAX_ITEMS)"),
 		genKey:   fs.Bool("gen-key", false, "mint a fresh key, print the token + keys-file entry, and exit without serving"),
 		author:   fs.String("author", "", "author the minted key publishes as (required with -gen-key)"),
+
+		panelSessionKey: fs.String("panel-session-key", envOr(getenv, "PANEL_SESSION_KEY", ""), "HMAC key (hex or base64) signing the admin panel session + CSRF cookies (or PANEL_SESSION_KEY); with -panel-login-token-hash, enables the folded-in admin panel"),
+		panelLoginHash:  fs.String("panel-login-token-hash", envOr(getenv, "PANEL_LOGIN_TOKEN_HASH", ""), "hex SHA-256 of the admin panel login token (or PANEL_LOGIN_TOKEN_HASH); with -panel-session-key, enables the panel"),
+		panelLoginToken: fs.String("panel-login-token", envOr(getenv, "PANEL_LOGIN_TOKEN", ""), "cleartext login token for local-box form prefill only (or PANEL_LOGIN_TOKEN); leave empty on any shared deployment"),
+		panelSecure:     fs.Bool("panel-secure-cookies", envBool(getenv, "PANEL_SECURE_COOKIES", false), "set the Secure attribute on the panel cookies (or PANEL_SECURE_COOKIES); enable behind TLS"),
 	}
 	fs.Var(&scopes, "scope", "scope to grant the minted key; repeatable (default articles:write)")
 	f.scopes = &scopes
@@ -208,6 +219,23 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	limiter := publish.NewRateLimiter(*f.rate, *f.burst, time.Now)
 	handler := publish.NewServerHandler(h, limiter, mediaH, readH, opH)
 
+	// Fold in the operator admin panel: when a session key + login hash are set, the
+	// same server also serves the buildless SPA and its signed-cookie login, so the
+	// backend is one deployable (API + admin UI + data). A valid session maps to the
+	// operator identity in-process; the bearer API lanes are untouched. Unset =
+	// pure-API deployment, byte-identical to before.
+	panelKey, keyOK := adminweb.DecodeKey(*f.panelSessionKey)
+	if *f.panelSessionKey != "" && !keyOK {
+		fmt.Fprintln(stderr, "config: -panel-session-key is not valid hex or base64")
+		return exitConfig
+	}
+	handler, panelOn := adminweb.Handler(adminweb.Config{
+		SessionKey:     panelKey,
+		LoginTokenHash: *f.panelLoginHash,
+		LoginToken:     *f.panelLoginToken,
+		SecureCookies:  *f.panelSecure,
+	}, handler)
+
 	srv := newServer(*f.addr, handler)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -224,7 +252,11 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		if mediaDir != "" {
 			mediaNote = mediaDir
 		}
-		fmt.Fprintf(stdout, "censurado-publish listening on %s (%d key(s) loaded, payload archive: %s, media store: %s)\n", *f.addr, len(entries), archiveNote, mediaNote)
+		panelNote := "off"
+		if panelOn {
+			panelNote = "on"
+		}
+		fmt.Fprintf(stdout, "censurado-publish listening on %s (%d key(s) loaded, payload archive: %s, media store: %s, admin panel: %s)\n", *f.addr, len(entries), archiveNote, mediaNote, panelNote)
 		return srv.ListenAndServe()
 	}
 	return serve(ctx, stop, srv, listen, shutdownGrace, stderr)
@@ -400,6 +432,15 @@ func envInt(getenv func(string) string, key string, def int) int {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
+	}
+	return def
+}
+func envBool(getenv func(string) string, key string, def bool) bool {
+	switch strings.ToLower(strings.TrimSpace(getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
 	}
 	return def
 }

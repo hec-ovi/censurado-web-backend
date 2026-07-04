@@ -41,14 +41,8 @@ func NewOperatorHandler(s ReadStore, auth Authenticator, now func() time.Time) *
 // problem response and returning false on failure. A key with a good token but
 // without admin:write gets 403 insufficient_scope, mirroring the write path.
 func (oh *OperatorHandler) authz(w http.ResponseWriter, r *http.Request) bool {
-	token := bearerToken(r.Header.Get("Authorization"))
-	if token == "" {
-		writeProblem(w, problem{Status: http.StatusUnauthorized, Code: "missing_token"})
-		return false
-	}
-	id, err := oh.auth.Authenticate(token)
-	if err != nil {
-		writeProblem(w, problem{Status: http.StatusUnauthorized, Code: "invalid_token"})
+	id, ok := resolveIdentity(oh.auth, w, r)
+	if !ok {
 		return false
 	}
 	if !id.HasScope(ScopeAdminWrite) {
