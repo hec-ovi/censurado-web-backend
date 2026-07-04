@@ -1,7 +1,7 @@
 // Package sqlite implements the store.Repository contract on SQLite using the
-// pure-Go modernc.org/sqlite driver (no cgo). It is the default source-of-truth
-// adapter: a single file in WAL mode, the stable hot axes indexed, and topics
-// normalized into a join table.
+// pure-Go modernc.org/sqlite driver (no cgo). It is the source-of-truth store: a
+// single file in WAL mode, the stable hot axes indexed, and topics normalized
+// into a join table.
 package sqlite
 
 import (
@@ -213,10 +213,10 @@ func upsertTx(ctx context.Context, tx *sql.Tx, a domain.Article) (domain.Article
 		 VALUES (?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(content_hash) DO NOTHING`,
 		a.Slug, a.Title, a.Body, a.Author, a.Section,
-		// Whole-second resolution so both adapters return the identical instant
-		// through the Repository interface. RFC3339 already drops sub-second
-		// precision, so the Truncate is documentary here, but it keeps the
-		// whole-second contract explicit and symmetric with the Postgres adapter.
+		// Whole-second resolution so the Repository interface always returns the
+		// identical instant it stored. RFC3339 already drops sub-second precision,
+		// so the Truncate is documentary here, but it keeps the whole-second
+		// contract explicit.
 		a.PublishedAt.UTC().Truncate(time.Second).Format(timeLayout), a.ContentHash, meta, a.CreatedAt.UTC().Truncate(time.Second).Format(timeLayout),
 	)
 	if err != nil {
@@ -405,9 +405,9 @@ func (s *Store) Count(ctx context.Context, f store.Filter) (int, error) {
 
 // Facets returns the distinct section, author, and topic values present with
 // their article counts, ordered Count DESC then Value ASC so the bytes are
-// deterministic and identical to the Postgres adapter. The value tie-break sorts
-// on the TEXT columns' default BINARY (byte) collation; the Postgres adapter
-// pins COLLATE "C" to match this exactly for any value set.
+// deterministic and stable run to run. The value tie-break sorts on the TEXT
+// columns' default BINARY (byte) collation, so the order is fixed for any value
+// set.
 func (s *Store) Facets(ctx context.Context) (store.Facets, error) {
 	// Tombstoned articles are excluded so the facet counts match what Find returns:
 	// a soft-deleted article is hidden from the public site, so it must not inflate
@@ -514,11 +514,11 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 		// ESCAPE char, so '%'/'_' are matched literally, never as wildcards.
 		//
 		// ACCEPTED BOUNDARY: this is ASCII-case-insensitive only. SQLite's lower()
-		// folds ASCII only, while Postgres's lower() is unicode-aware, so a
-		// non-ASCII case fold (e.g. 'É' vs 'é') would DIVERGE between the engines.
-		// The contract is therefore: case-insensitive for ASCII; non-ASCII
-		// (accented) letters match case-sensitively. An exact non-ASCII substring
-		// in the same case DOES match and is safe to rely on across both engines.
+		// folds ASCII only (it is not unicode-aware), so a non-ASCII case fold
+		// (e.g. 'É' vs 'é') does NOT match. The contract is therefore:
+		// case-insensitive for ASCII; non-ASCII (accented) letters match
+		// case-sensitively. An exact non-ASCII substring in the same case DOES
+		// match and is safe to rely on.
 		pat := "%" + likeEscape(q) + "%"
 		b.WriteString(" AND (lower(a.title) LIKE lower(?) ESCAPE '\\' OR lower(a.body) LIKE lower(?) ESCAPE '\\')")
 		args = append(args, pat, pat)
@@ -565,8 +565,8 @@ func placeholders(n int) string {
 
 // likeEscape escapes the LIKE wildcards in a user value so it is matched as a
 // literal substring under "ESCAPE '\'". The escape char is escaped first, then
-// the '%' and '_' metacharacters. Identical to the Postgres adapter's escaping
-// so the two engines bind byte-identical patterns.
+// the '%' and '_' metacharacters, so a user's literal '%'/'_' never acts as a
+// wildcard.
 func likeEscape(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "%", "\\%")
@@ -664,7 +664,7 @@ const submissionCols = "idempotency_key,content_hash,article_id,slug,author,scop
 
 // scanSubmission decodes one submissions row. Scopes are space-joined on write
 // (RecordSubmission), so they split back on the same separator; created_at is the
-// whole-second RFC3339 string both adapters store. Shared by FindSubmission and
+// whole-second RFC3339 string the store writes. Shared by FindSubmission and
 // ListSubmissions so every read path round-trips a submission identically.
 func scanSubmission(sc scanner) (store.Submission, error) {
 	var sub store.Submission
@@ -706,11 +706,9 @@ func findSubmissionTx(ctx context.Context, q querier, key string) (store.Submiss
 
 // ListSubmissions returns recorded submissions newest first for the admin audit
 // log. Ordering is created_at DESC then idempotency_key DESC (the table's primary
-// key) so it is deterministic, and identical to the Postgres adapter: the
-// idempotency_key tiebreak sorts on SQLite's default BINARY (byte) collation,
-// which the Postgres adapter pins with COLLATE "C". The Author filter is exact
-// equality; From/To bound created_at (>= From, < To). All values are bound as
-// parameters.
+// key) so it is deterministic: the idempotency_key tiebreak sorts on SQLite's
+// default BINARY (byte) collation. The Author filter is exact equality; From/To
+// bound created_at (>= From, < To). All values are bound as parameters.
 func (s *Store) ListSubmissions(ctx context.Context, f store.ListSubmissionsFilter) ([]store.Submission, error) {
 	var b strings.Builder
 	var args []any
@@ -768,10 +766,10 @@ func recordSubmissionTx(ctx context.Context, ex execer, sub store.Submission) er
 		`INSERT INTO submissions (idempotency_key,content_hash,article_id,slug,author,scopes,created_at)
 		 VALUES (?,?,?,?,?,?,?)`,
 		sub.IdempotencyKey, sub.ContentHash, sub.ArticleID, sub.Slug, sub.Author,
-		// Truncate to whole seconds, the shared second-granularity contract with
-		// the Postgres adapter. RFC3339 already drops sub-second precision, so
-		// this is explicit rather than load-bearing here, but it keeps both
-		// adapters visibly identical and guards against a future layout change.
+		// Truncate to whole seconds, the store's second-granularity contract.
+		// RFC3339 already drops sub-second precision, so this is explicit rather
+		// than load-bearing here, but it keeps the contract visible and guards
+		// against a future layout change.
 		strings.Join(sub.Scopes, " "), sub.CreatedAt.UTC().Truncate(time.Second).Format(timeLayout))
 	if err != nil {
 		return fmt.Errorf("record submission: %w", err)
@@ -914,9 +912,9 @@ func (s *Store) AuthorByHandle(ctx context.Context, handle string) (store.Author
 }
 
 // ListAuthors returns authors ordered by handle ascending. The tie-break sorts on
-// SQLite's default BINARY (byte) collation; the Postgres adapter pins COLLATE "C"
-// to match. Tombstoned authors are excluded unless includeDeleted. Each returned
-// author has its Sources hydrated from the author_sources join.
+// SQLite's default BINARY (byte) collation, so the order is deterministic.
+// Tombstoned authors are excluded unless includeDeleted. Each returned author has
+// its Sources hydrated from the author_sources join.
 func (s *Store) ListAuthors(ctx context.Context, includeDeleted bool) ([]store.Author, error) {
 	q := `SELECT ` + authorCols + ` FROM authors`
 	if !includeDeleted {
@@ -969,7 +967,7 @@ func (s *Store) DeleteAuthor(ctx context.Context, handle string) error {
 }
 
 // loadAuthorSources returns, per author handle, the attached source slugs ordered by
-// slug in byte order (SQLite BINARY default; the Postgres adapter pins COLLATE "C").
+// slug in byte order (SQLite's BINARY default), so the order is deterministic.
 // It mirrors loadTopics: one IN-query hydrates many authors, so ListAuthors does not
 // fan out a query per row. An empty handle set returns an empty map.
 func loadAuthorSources(ctx context.Context, q querier, handles []string) (map[string][]string, error) {
@@ -1152,9 +1150,9 @@ func (s *Store) TopicBySlug(ctx context.Context, slug string) (store.Topic, bool
 	return tp, true, nil
 }
 
-// ListTopics returns topics ordered by slug ascending (SQLite BINARY default; the
-// Postgres adapter pins COLLATE "C" to match). Tombstoned topics are excluded
-// unless includeDeleted.
+// ListTopics returns topics ordered by slug ascending (SQLite's BINARY default),
+// so the order is deterministic. Tombstoned topics are excluded unless
+// includeDeleted.
 func (s *Store) ListTopics(ctx context.Context, includeDeleted bool) ([]store.Topic, error) {
 	q := `SELECT ` + topicCols + ` FROM topics`
 	if !includeDeleted {
@@ -1196,8 +1194,7 @@ const portadaCols = "date,entries,recomendado,deleted_at,created_at,updated_at"
 
 // marshalEntries encodes the ordered entries as a JSON array, defaulting to "[]"
 // (never "null") so the column round-trips an empty plan. The {slug, role} shape
-// is byte-identical to the Postgres adapter's, so a row written by one reads the
-// same in the other.
+// is fixed, so an entry list always round-trips to the same JSON.
 func marshalEntries(entries []store.PortadaEntry) (string, error) {
 	if len(entries) == 0 {
 		return "[]", nil
@@ -1350,9 +1347,9 @@ func (s *Store) PortadaByDate(ctx context.Context, date string) (store.PortadaDa
 	return p, true, nil
 }
 
-// ListPortadas returns day plans ordered by date ascending (SQLite BINARY default;
-// the Postgres adapter pins COLLATE "C" to match). Tombstoned days are excluded
-// unless includeDeleted.
+// ListPortadas returns day plans ordered by date ascending (SQLite's BINARY
+// default), so the order is deterministic. Tombstoned days are excluded unless
+// includeDeleted.
 func (s *Store) ListPortadas(ctx context.Context, includeDeleted bool) ([]store.PortadaDay, error) {
 	q := `SELECT ` + portadaCols + ` FROM portadas`
 	if !includeDeleted {
@@ -1505,8 +1502,8 @@ func (s *Store) SourceBySlug(ctx context.Context, slug string) (store.Source, bo
 	return src, true, nil
 }
 
-// ListSources returns sources ordered by slug ascending (SQLite BINARY default; the
-// Postgres adapter pins COLLATE "C" to match). Tombstoned sources are excluded unless
+// ListSources returns sources ordered by slug ascending (SQLite's BINARY default),
+// so the order is deterministic. Tombstoned sources are excluded unless
 // includeDeleted.
 func (s *Store) ListSources(ctx context.Context, includeDeleted bool) ([]store.Source, error) {
 	q := `SELECT ` + sourceCols + ` FROM sources`

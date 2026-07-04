@@ -1,8 +1,9 @@
 // Package store defines the source-of-truth contract for articles. The interface
 // is expressed purely in domain terms; no SQL, dialect, or storage detail leaks
-// through it, which is what keeps the store swappable. SQLite is the default
-// adapter; a Postgres adapter satisfies the same interface and is exercised by
-// the same conformance suite (see storetest) so the swap is proven, not assumed.
+// through it, so its callers (the generator in Layer 1, the HTTP layer in Layer 2)
+// depend on behavior, not on storage internals. SQLite backs it; the shared
+// conformance suite (see storetest) is the executable spec the implementation must
+// pass.
 package store
 
 import (
@@ -57,8 +58,8 @@ type Filter struct {
 	// Query is an admin-only full-text filter: a case-insensitive substring match
 	// over title OR body. Blank/whitespace-only imposes no constraint. The match is
 	// ASCII case-insensitive only; non-ASCII (accented) letters match
-	// case-sensitively. See the adapters' buildSelect for why (sqlite vs postgres
-	// lower() differ on unicode folding) and the exact, parity-safe contract.
+	// case-sensitively. See buildSelect for why (SQLite's lower() folds ASCII only,
+	// not unicode) and the exact contract.
 	Query string
 
 	From   time.Time // inclusive lower bound on PublishedAt; zero = open
@@ -84,7 +85,7 @@ type Facet struct {
 // Facets is the distinct set of filter values present in the store, per axis,
 // each with its article count. It is a read-only aggregate for the admin filter
 // UI. Each slice is ordered Count DESC, then Value ASC, so the bytes are
-// deterministic and identical across the SQLite and Postgres adapters.
+// deterministic and stable run to run.
 type Facets struct {
 	Sections []Facet
 	Authors  []Facet
@@ -211,7 +212,7 @@ type ListSubmissionsFilter struct {
 
 // SubmissionLog records publish attempts and looks them up by idempotency key.
 // It is a separate concern from the article Repository so the article contract
-// stays focused, even when one adapter implements both.
+// stays focused, even though one store implements both.
 type SubmissionLog interface {
 	// FindSubmission returns a prior submission for the key, or found=false.
 	FindSubmission(ctx context.Context, idempotencyKey string) (Submission, bool, error)
@@ -253,7 +254,7 @@ type Author struct {
 
 // AuthorStore is the managed-author registry. It is a separate concern from the
 // article Repository (like SubmissionLog) so the article contract stays focused
-// even when one adapter implements both. Writes go through the same single writer
+// even though one store implements both. Writes go through the same single writer
 // as the publish path.
 type AuthorStore interface {
 	// UpsertAuthor creates or updates an author keyed on Handle. On create it sets
@@ -266,7 +267,7 @@ type AuthorStore interface {
 	// soft-deleted author is still returned (found=true, Deleted=true).
 	AuthorByHandle(ctx context.Context, handle string) (Author, bool, error)
 	// ListAuthors returns authors ordered by handle ascending in byte order, so
-	// the two adapters agree. Tombstoned authors are excluded unless includeDeleted.
+	// the ordering is deterministic. Tombstoned authors are excluded unless includeDeleted.
 	// Each returned Author has its Sources hydrated from the author_sources join.
 	ListAuthors(ctx context.Context, includeDeleted bool) ([]Author, error)
 	// DeleteAuthor soft-deletes the author by setting a tombstone. Deleting an
@@ -303,7 +304,7 @@ type Topic struct {
 
 // TopicStore is the managed-topic registry. It is a separate concern from the
 // article Repository (like SubmissionLog and AuthorStore) so the article contract
-// stays focused even when one adapter implements both. Writes go through the same
+// stays focused even though one store implements both. Writes go through the same
 // single writer as the publish path.
 type TopicStore interface {
 	// UpsertTopic creates or updates a topic keyed on Slug. On create it sets
@@ -315,8 +316,8 @@ type TopicStore interface {
 	// TopicBySlug returns the topic for the slug, or found=false. A soft-deleted
 	// topic is still returned (found=true, Deleted=true).
 	TopicBySlug(ctx context.Context, slug string) (Topic, bool, error)
-	// ListTopics returns topics ordered by slug ascending in byte order, so the two
-	// adapters agree. Tombstoned topics are excluded unless includeDeleted.
+	// ListTopics returns topics ordered by slug ascending in byte order, so the
+	// ordering is deterministic. Tombstoned topics are excluded unless includeDeleted.
 	ListTopics(ctx context.Context, includeDeleted bool) ([]Topic, error)
 	// DeleteTopic soft-deletes the topic by setting a tombstone. Deleting an absent
 	// slug returns ErrNotFound.
@@ -350,7 +351,7 @@ type PortadaDay struct {
 
 // PortadaStore is the operator-owned front-page registry. It is a separate concern
 // from the article Repository (like SubmissionLog, AuthorStore, and TopicStore) so
-// the article contract stays focused even when one adapter implements them all.
+// the article contract stays focused even though one store implements them all.
 // Writes go through the same single writer as the publish path.
 type PortadaStore interface {
 	// UpsertPortada creates or updates a day plan keyed on Date. On create it sets
@@ -363,7 +364,7 @@ type PortadaStore interface {
 	// day is still returned (found=true, Deleted=true).
 	PortadaByDate(ctx context.Context, date string) (PortadaDay, bool, error)
 	// ListPortadas returns day plans ordered by date ascending in byte order, so the
-	// two adapters agree. Tombstoned days are excluded unless includeDeleted.
+	// ordering is deterministic. Tombstoned days are excluded unless includeDeleted.
 	ListPortadas(ctx context.Context, includeDeleted bool) ([]PortadaDay, error)
 	// DeletePortada soft-deletes the day plan by setting a tombstone. Deleting an
 	// absent date returns ErrNotFound.
@@ -403,7 +404,7 @@ type Source struct {
 
 // SourceStore is the managed-source registry. It is a separate concern from the
 // article Repository (like the author, topic, and portada registries) so the article
-// contract stays focused even when one adapter implements them all. Writes go through
+// contract stays focused even though one store implements them all. Writes go through
 // the same single writer as the publish path.
 type SourceStore interface {
 	// UpsertSource creates or updates a source keyed on Slug. On create it sets
@@ -415,8 +416,8 @@ type SourceStore interface {
 	// SourceBySlug returns the source for the slug, or found=false. A soft-deleted
 	// source is still returned (found=true, Deleted=true).
 	SourceBySlug(ctx context.Context, slug string) (Source, bool, error)
-	// ListSources returns sources ordered by slug ascending in byte order, so the two
-	// adapters agree. Tombstoned sources are excluded unless includeDeleted.
+	// ListSources returns sources ordered by slug ascending in byte order, so the
+	// ordering is deterministic. Tombstoned sources are excluded unless includeDeleted.
 	ListSources(ctx context.Context, includeDeleted bool) ([]Source, error)
 	// DeleteSource soft-deletes the source by setting a tombstone AND detaches it from
 	// every author (removing its author_sources rows) in one transaction, so no author

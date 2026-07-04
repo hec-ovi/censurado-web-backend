@@ -10,9 +10,9 @@ import (
 )
 
 // ReadStore is the read surface the JSON read API needs: the article Repository
-// plus the operator-owned author, topic, portada, and source registries. Both
-// *sqlite.Store and *postgres.Store satisfy it, so the same concrete store backs the
-// write path and these reads.
+// plus the operator-owned author, topic, portada, and source registries. The
+// SQLite store satisfies it, so the same concrete store backs the write path and
+// these reads.
 type ReadStore interface {
 	store.Repository
 	store.AuthorStore

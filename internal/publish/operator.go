@@ -341,9 +341,10 @@ func (oh *OperatorHandler) ServeRestorePortada(w http.ResponseWriter, r *http.Re
 // ----- sources -----
 
 // validLeans and validFeedTypes are the closed vocabularies the source registry
-// enforces at the HTTP edge (the schema keeps them as plain TEXT for dialect and
-// ALTER neutrality, exactly like articles.section). They mirror the brain's portal
-// enums so a migrated source keeps the same lean and feed_type.
+// enforces at the HTTP edge (the schema keeps them as plain TEXT for ALTER
+// neutrality, so a new value needs no migration, exactly like articles.section).
+// They mirror the brain's portal enums so a migrated source keeps the same lean
+// and feed_type.
 var validLeans = map[string]bool{"right": true, "neutral": true, "left": true}
 var validFeedTypes = map[string]bool{"auto": true, "native_rss": true, "atom": true, "news_sitemap": true, "site_search": true}
 

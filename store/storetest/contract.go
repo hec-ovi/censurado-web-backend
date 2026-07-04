@@ -1,7 +1,9 @@
-// Package storetest provides a reusable conformance suite that every
-// store.Repository implementation must pass. Running the identical suite against
-// both SQLite and Postgres is what proves the store is swappable rather than
-// merely claimed to be.
+// Package storetest provides the conformance suite for the store: the executable
+// behavioral spec every store.Repository implementation must pass. It is the
+// single place that pins what the store guarantees (faithful round-trips,
+// deterministic byte-order sorting, whole-second timestamps, atomic batch writes,
+// tombstone and restore), so the sqlite package tests assert behavior against the
+// spec rather than re-deriving it.
 package storetest
 
 import (
@@ -195,13 +197,11 @@ func Run(t *testing.T, repo store.Repository) {
 
 	// Appended last so it never perturbs the seed-based count assertions above.
 	// Production feeds time.Now() (sub-second) for both published_at and
-	// created_at, where the engines would naturally diverge: SQLite's RFC3339
-	// drops sub-second, Postgres TIMESTAMPTZ keeps microseconds. Both adapters
-	// resolve this by truncating to whole seconds on write, so the instant
-	// returned through the Repository interface is engine-independent. This case
-	// fails if either adapter stops truncating (Postgres returning microseconds
-	// -> Nanosecond() != 0).
-	t.Run("Sub-second timestamps persist at whole-second resolution (engine-independent)", func(t *testing.T) {
+	// created_at. The store truncates to whole seconds on write (SQLite stores
+	// RFC3339 text at second precision), so the instant returned through the
+	// Repository interface is always whole-second. This case fails if the store
+	// ever stops truncating (Nanosecond() != 0).
+	t.Run("Sub-second timestamps persist at whole-second resolution", func(t *testing.T) {
 		subSec := time.Date(2026, 6, 5, 10, 20, 30, 123456789, time.UTC)
 		pub := time.Date(2026, 6, 4, 8, 15, 30, 987654321, time.UTC)
 		art := mustArticle(t, domain.PublishInput{
@@ -231,12 +231,10 @@ func Run(t *testing.T, repo store.Repository) {
 }
 
 // RunFilters executes the multi-value + full-text Filter conformance suite
-// against repo, which must be empty. Running the identical suite against both
-// SQLite and Postgres is what proves the widened Filter behaves identically on
-// the two engines, including the parity-critical LIKE-escaping and the ASCII
-// case-folding boundary. Subtests run sequentially and share the seeded state;
-// none of them mutate it after seeding, so order is irrelevant. It does not call
-// t.Parallel.
+// against repo, which must be empty. It pins the widened Filter's behavior,
+// including the LIKE-escaping and the ASCII case-folding boundary. Subtests run
+// sequentially and share the seeded state; none of them mutate it after seeding,
+// so order is irrelevant. It does not call t.Parallel.
 func RunFilters(t *testing.T, repo store.Repository) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -340,8 +338,8 @@ func RunFilters(t *testing.T, repo store.Repository) {
 	})
 
 	t.Run("Query: exact non-ASCII substring, same case", func(t *testing.T) {
-		// Same-case accented substring is parity-safe on both engines. (We do NOT
-		// assert upper-folding like "ECONOMÍA": sqlite would not fold it.)
+		// Same-case accented substring matches. (We do NOT assert upper-folding
+		// like "ECONOMÍA": SQLite's lower() would not fold it.)
 		got := findSlugs(t, store.Filter{Query: "economía"})
 		if !equalOrdered(got, []string{seed[1].Slug}) {
 			t.Errorf("Query=economía -> %v, want [%s]", got, seed[1].Slug)
@@ -421,10 +419,8 @@ func RunFilters(t *testing.T, repo store.Repository) {
 }
 
 // RunFacets executes the Facets conformance suite against repo, which must be
-// empty. Running the identical suite against both SQLite and Postgres is what
-// proves the aggregate values, counts, and the deterministic ordering (Count
-// DESC, then Value ASC) are byte-identical across the engines. It does not call
-// t.Parallel.
+// empty. It pins the aggregate values, counts, and the deterministic ordering
+// (Count DESC, then Value ASC). It does not call t.Parallel.
 func RunFacets(t *testing.T, repo store.Repository) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -432,16 +428,15 @@ func RunFacets(t *testing.T, repo store.Repository) {
 	// Six articles arranged so each axis exercises BOTH ordering keys: a clear
 	// Count-DESC winner and a Count tie broken by Value-ASC. The sixth article
 	// introduces a mixed-case value on every axis (Section "World", Author "Zara",
-	// Topic "Zen") whose ASCII byte order DIFFERS from a locale collation: under
-	// byte order (SQLite BINARY / Postgres COLLATE "C") every uppercase letter
-	// (0x41-0x5A) sorts before every lowercase one (0x61-0x7A), so "World" < the
-	// lowercase "economics", and "Zara"/"Zen" lead their count-tie groups; under a
-	// typical Postgres locale (en_US.UTF-8) those uppercase-initial values would
-	// instead sort case-blended (economics < World) or last (Zara, Zen at the 'z'
-	// position). The COLLATE "C" pin in postgres.go is what keeps Postgres on byte
-	// order, and these assertions FAIL on Postgres if that pin is ever removed.
-	// Section/author are stored verbatim (only trimmed) and topics preserve their
-	// original casing (domain.normalizeTopics), so the mixed case reaches the SQL.
+	// Topic "Zen") to pin that the tie-break is byte order, not a locale collation:
+	// under SQLite's BINARY collation every uppercase letter (0x41-0x5A) sorts
+	// before every lowercase one (0x61-0x7A), so "World" < the lowercase
+	// "economics", and "Zara"/"Zen" lead their count-tie groups. A locale collation
+	// (e.g. en_US.UTF-8) would instead order these case-blended (economics < World)
+	// or last (Zara, Zen at the 'z' position), so these assertions FAIL if the
+	// ordering ever stops being byte order. Section/author are stored verbatim
+	// (only trimmed) and topics preserve their original casing
+	// (domain.normalizeTopics), so the mixed case reaches the SQL.
 	//   Sections: tech=2, politics=2 (tie -> politics<tech), World=1, economics=1 (tie -> World<economics)
 	//   Authors:  ada=3, Zara=1, bo=1, cy=1 (tie -> Zara<bo<cy)
 	//   Topics:   go=3, election=2, Zen=1, markets=1, release=1 (tie -> Zen<markets<release)
@@ -481,8 +476,8 @@ func RunFacets(t *testing.T, repo store.Repository) {
 
 	// Value-ASC ties below are asserted in BYTE order ("World" before lowercase
 	// "economics"; "Zara"/"Zen" ahead of their lowercase peers). This is the
-	// ordering the COLLATE "C" pin guarantees on Postgres and SQLite's BINARY
-	// default gives for free; a locale collation would order these differently.
+	// ordering SQLite's BINARY default gives for free; a locale collation would
+	// order these differently.
 	assertFacets(t, "Sections", got.Sections, []store.Facet{
 		{Value: "politics", Count: 2}, {Value: "tech", Count: 2}, {Value: "World", Count: 1}, {Value: "economics", Count: 1},
 	})
@@ -509,15 +504,14 @@ func assertFacets(t *testing.T, axis string, got, want []store.Facet) {
 }
 
 // assertWholeSecond verifies the article's PublishedAt and CreatedAt carry no
-// sub-second component and equal the truncated inputs, regardless of which
-// engine stored them.
+// sub-second component and equal the truncated inputs.
 func assertWholeSecond(t *testing.T, stage string, a domain.Article, pub, created time.Time) {
 	t.Helper()
 	if ns := a.PublishedAt.Nanosecond(); ns != 0 {
-		t.Errorf("%s: PublishedAt sub-second = %dns, want 0 (both adapters must truncate)", stage, ns)
+		t.Errorf("%s: PublishedAt sub-second = %dns, want 0 (the store must truncate)", stage, ns)
 	}
 	if ns := a.CreatedAt.Nanosecond(); ns != 0 {
-		t.Errorf("%s: CreatedAt sub-second = %dns, want 0 (both adapters must truncate)", stage, ns)
+		t.Errorf("%s: CreatedAt sub-second = %dns, want 0 (the store must truncate)", stage, ns)
 	}
 	if !a.PublishedAt.UTC().Equal(pub.Truncate(time.Second)) {
 		t.Errorf("%s: PublishedAt = %v, want %v (truncated to whole second)", stage, a.PublishedAt.UTC(), pub.Truncate(time.Second))
@@ -528,15 +522,13 @@ func assertWholeSecond(t *testing.T, stage string, a domain.Article, pub, create
 }
 
 // RunSubmissionLog executes the SubmissionLog conformance suite against log,
-// which must back an empty submissions table. Running the identical suite
-// against both SQLite and Postgres is what proves the two adapters encode and
-// roundtrip submissions identically. The production caller writes
-// time.Now().UTC() (sub-second precision), where the engines would naturally
-// diverge: SQLite's RFC3339 drops sub-second, Postgres TIMESTAMPTZ keeps
-// microseconds. Both adapters resolve this by truncating CreatedAt to whole
-// seconds on write, so the roundtrip is engine-independent for any input. The
-// sub-second case below pins that contract: it fails if either adapter leaks a
-// sub-second component. It does not call t.Parallel so subtests share state.
+// which must back an empty submissions table. It pins that submissions encode and
+// round-trip faithfully. The production caller writes time.Now().UTC()
+// (sub-second precision); the store truncates CreatedAt to whole seconds on write
+// (SQLite stores RFC3339 text at second precision), so the round-trip is
+// whole-second for any input. The sub-second case below pins that contract: it
+// fails if the store leaks a sub-second component. It does not call t.Parallel so
+// subtests share state.
 func RunSubmissionLog(t *testing.T, log store.SubmissionLog) {
 	ctx := context.Background()
 
@@ -638,12 +630,11 @@ func RunSubmissionLog(t *testing.T, log store.SubmissionLog) {
 		assertSubmissionEqual(t, got, empty)
 	})
 
-	t.Run("Sub-second CreatedAt truncates to whole seconds identically", func(t *testing.T) {
+	t.Run("Sub-second CreatedAt truncates to whole seconds", func(t *testing.T) {
 		// Production writes h.now().UTC() with sub-second precision (publish.go).
-		// Both adapters must store it the same way; they agree by truncating to
-		// whole seconds, independent of the engine's native time resolution
-		// (SQLite RFC3339 vs Postgres microsecond TIMESTAMPTZ). This case fails
-		// if either adapter keeps a sub-second component.
+		// The store truncates to whole seconds on write (SQLite stores RFC3339 text
+		// at second precision). This case fails if the store keeps a sub-second
+		// component.
 		raw := time.Date(2026, 6, 4, 8, 15, 30, 123456789, time.UTC)
 		sub := store.Submission{
 			IdempotencyKey: "idem-subsecond",
@@ -666,10 +657,10 @@ func RunSubmissionLog(t *testing.T, log store.SubmissionLog) {
 		}
 		want := raw.Truncate(time.Second) // 2026-06-04T08:15:30Z, no sub-second
 		if !got.CreatedAt.UTC().Equal(want) {
-			t.Errorf("CreatedAt = %v, want %v (truncated to whole second; engines must agree)", got.CreatedAt.UTC(), want)
+			t.Errorf("CreatedAt = %v, want %v (truncated to whole second)", got.CreatedAt.UTC(), want)
 		}
 		if ns := got.CreatedAt.UTC().Nanosecond(); ns != 0 {
-			t.Errorf("CreatedAt sub-second = %dns, want 0 (both adapters must truncate identically)", ns)
+			t.Errorf("CreatedAt sub-second = %dns, want 0 (the store must truncate)", ns)
 		}
 	})
 
@@ -681,13 +672,12 @@ func RunSubmissionLog(t *testing.T, log store.SubmissionLog) {
 }
 
 // RunListSubmissions executes the ListSubmissions conformance suite against log,
-// which must back an empty submissions table. Running the identical suite against
-// both SQLite and Postgres is what proves the audit-log read path orders, filters,
-// pages, and round-trips submissions identically on the two engines. The seed
-// includes two submissions sharing one CreatedAt so the stable idempotency-key
-// DESC tiebreak is exercised in byte order (SQLite BINARY default; Postgres
-// COLLATE "C" pin), which is the same parity guarantee the Facets suite relies on.
-// It does not call t.Parallel so subtests share the seeded state; none mutate it.
+// which must back an empty submissions table. It pins that the audit-log read path
+// orders, filters, pages, and round-trips submissions correctly. The seed includes
+// two submissions sharing one CreatedAt so the stable idempotency-key DESC
+// tiebreak is exercised in byte order (SQLite's BINARY default), the same
+// determinism the Facets suite relies on. It does not call t.Parallel so subtests
+// share the seeded state; none mutate it.
 func RunListSubmissions(t *testing.T, log store.SubmissionLog) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
@@ -727,7 +717,7 @@ func RunListSubmissions(t *testing.T, log store.SubmissionLog) {
 
 	t.Run("Newest first with stable idempotency-key tiebreak", func(t *testing.T) {
 		// created_at DESC, then idempotency_key DESC. The +5h pair ties on time, so
-		// idem-z9 leads idem-z1 (byte order, DESC), identical on both engines.
+		// idem-z9 leads idem-z1 (byte order, DESC).
 		want := []string{"idem-z9", "idem-z1", "idem-a3", "idem-c1", "idem-a2", "idem-b1", "idem-a1"}
 		if got := keysOf(list(t, store.ListSubmissionsFilter{})); !equalOrdered(got, want) {
 			t.Errorf("order = %v, want %v", got, want)
@@ -750,11 +740,10 @@ func RunListSubmissions(t *testing.T, log store.SubmissionLog) {
 		}
 	})
 
-	t.Run("Sub-second From bound truncates to a whole second on both engines", func(t *testing.T) {
+	t.Run("Sub-second From bound truncates to a whole second", func(t *testing.T) {
 		// idem-a1 is stored at exactly base (whole second), so a From just past it
-		// (base+500ms) must still include it: the bound truncates down to base.
-		// Before truncation, Postgres bound the raw fractional instant and dropped
-		// idem-a1 while SQLite (RFC3339) kept it -- a cross-engine divergence.
+		// (base+500ms) must still include it: the bound truncates down to base. An
+		// untruncated fractional bound would exclude idem-a1.
 		want := []string{"idem-z9", "idem-z1", "idem-a3", "idem-c1", "idem-a2", "idem-b1", "idem-a1"}
 		if got := keysOf(list(t, store.ListSubmissionsFilter{From: base.Add(500 * time.Millisecond)})); !equalOrdered(got, want) {
 			t.Errorf("From=base+500ms -> %v, want %v (bound must truncate to whole second; idem-a1 stays)", got, want)
@@ -814,13 +803,11 @@ func assertSubmissionEqual(t *testing.T, got, want store.Submission) {
 }
 
 // RunUpsertMany executes the UpsertMany conformance suite against repo, which
-// must be empty and also implement store.SubmissionLog (both adapters do, since
-// the article and ledger writes must commit in one transaction). Running the
-// identical suite against both SQLite and Postgres is what proves the atomic
+// must be empty and also implement store.SubmissionLog (the store does, since the
+// article and ledger writes must commit in one transaction). It pins the atomic
 // batch write, the per-item created/deduplicated classification, idempotent
-// replay, and the all-or-nothing rollback are byte-identical across the engines.
-// Subtests run sequentially and share the seeded state, so each asserts the
-// running article count it expects.
+// replay, and the all-or-nothing rollback. Subtests run sequentially and share
+// the seeded state, so each asserts the running article count it expects.
 func RunUpsertMany(t *testing.T, repo store.Repository) {
 	ctx := context.Background()
 	log, ok := repo.(store.SubmissionLog)
@@ -1065,11 +1052,10 @@ func assertAuthorEqual(t *testing.T, got, want store.Author) {
 }
 
 // RunAuthorStore executes the AuthorStore conformance suite against as, which must
-// back an empty authors table. Running the identical suite against both SQLite and
-// Postgres is what proves the registry round-trips every field, orders by handle in
-// byte order (SQLite BINARY default; Postgres COLLATE "C" pin), and tombstones and
-// re-activates identically on the two engines. Subtests run sequentially and share
-// the seeded state; it does not call t.Parallel.
+// back an empty authors table. It pins that the registry round-trips every field,
+// orders by handle in byte order (SQLite's BINARY default), and tombstones and
+// re-activates correctly. Subtests run sequentially and share the seeded state; it
+// does not call t.Parallel.
 func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -1213,7 +1199,7 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 
 	t.Run("SetAuthorSources sets links, AuthorSources reads them slug-sorted, AuthorByHandle hydrates Sources", func(t *testing.T) {
 		// Insertion order is deliberately not sorted; the read must come back in slug
-		// byte order on both engines.
+		// byte order.
 		if err := as.SetAuthorSources(ctx, first.Handle, []string{"zeta-src", "alfa-src", "mid-src"}); err != nil {
 			t.Fatalf("SetAuthorSources: %v", err)
 		}
@@ -1304,11 +1290,10 @@ func assertTopicEqual(t *testing.T, got, want store.Topic) {
 }
 
 // RunTopicStore executes the TopicStore conformance suite against ts, which must
-// back an empty topics table. Running the identical suite against both SQLite and
-// Postgres proves the registry round-trips every field, orders by slug in byte
-// order (SQLite BINARY default; Postgres COLLATE "C" pin), and tombstones and
-// re-activates identically on the two engines. Subtests run sequentially and share
-// the seeded state; it does not call t.Parallel. It mirrors RunAuthorStore.
+// back an empty topics table. It pins that the registry round-trips every field,
+// orders by slug in byte order (SQLite's BINARY default), and tombstones and
+// re-activates correctly. Subtests run sequentially and share the seeded state; it
+// does not call t.Parallel. It mirrors RunAuthorStore.
 func RunTopicStore(t *testing.T, ts store.TopicStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -1488,13 +1473,12 @@ func assertPortadaEqual(t *testing.T, got, want store.PortadaDay) {
 }
 
 // RunPortadaStore executes the PortadaStore conformance suite against ps, which
-// must back an empty portadas table. Running the identical suite against both
-// SQLite and Postgres proves the front-page registry round-trips every field
-// (entry order + role, recomendado order), orders by date in byte order (SQLite
-// BINARY default; Postgres COLLATE "C" pin), replaces entries wholesale on upsert
-// (never merges), and tombstones and re-activates identically on the two engines.
-// Subtests run sequentially and share the seeded state; it does not call
-// t.Parallel. It mirrors RunAuthorStore / RunTopicStore.
+// must back an empty portadas table. It pins that the front-page registry
+// round-trips every field (entry order + role, recomendado order), orders by date
+// in byte order (SQLite's BINARY default), replaces entries wholesale on upsert
+// (never merges), and tombstones and re-activates correctly. Subtests run
+// sequentially and share the seeded state; it does not call t.Parallel. It mirrors
+// RunAuthorStore / RunTopicStore.
 func RunPortadaStore(t *testing.T, ps store.PortadaStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -1667,9 +1651,8 @@ func RunPortadaStore(t *testing.T, ps store.PortadaStore) {
 }
 
 // RunArticleMutations executes the article soft-delete + edit conformance suite
-// against repo, which must be empty. Running the identical suite against both
-// SQLite and Postgres proves DeleteArticle/RestoreArticle/UpdateArticle and the
-// critical replay-after-delete invariant behave identically on the two engines.
+// against repo, which must be empty. It pins that DeleteArticle/RestoreArticle/
+// UpdateArticle and the critical replay-after-delete invariant behave correctly.
 // Subtests run sequentially and share the seeded state; it does not call
 // t.Parallel.
 func RunArticleMutations(t *testing.T, repo store.Repository) {
@@ -1919,12 +1902,11 @@ func assertSourceEqual(t *testing.T, got, want store.Source) {
 
 // RunSourceStore executes the SourceStore conformance suite against ss, which must
 // back an empty sources table (and, for the detach case, an empty authors table:
-// ss must also implement store.AuthorStore, which both adapters do). Running the
-// identical suite against both SQLite and Postgres proves the registry round-trips
-// every field, orders by slug in byte order (SQLite BINARY default; Postgres COLLATE
-// "C" pin), tombstones and re-activates, and detaches from every author on delete,
-// identically on the two engines. Subtests run sequentially and share the seeded
-// state; it does not call t.Parallel. It mirrors RunTopicStore.
+// ss must also implement store.AuthorStore, which the store does). It pins that
+// the registry round-trips every field, orders by slug in byte order (SQLite's
+// BINARY default), tombstones and re-activates, and detaches from every author on
+// delete. Subtests run sequentially and share the seeded state; it does not call
+// t.Parallel. It mirrors RunTopicStore.
 func RunSourceStore(t *testing.T, ss store.SourceStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -2131,8 +2113,8 @@ type brainMigrationStore interface {
 // (gender/about/style/topics) carry persona gender/about/style/profile_topics; the
 // generation-recipe fields the brain also holds (who_i_am, beat, language, the
 // few-shots) ride in Metadata (the open-ended tail); each portal becomes a source;
-// and persona.sources becomes author_sources links. Running it against both engines
-// proves the migration target is engine-independent.
+// and persona.sources becomes author_sources links. It proves the migration target
+// holds every field the brain carries.
 func RunBrainDataMigration(t *testing.T, repo brainMigrationStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)

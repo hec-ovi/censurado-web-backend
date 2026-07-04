@@ -73,6 +73,6 @@ a private network or an SSH tunnel. Copy `deploy/.env.example` to `deploy/.env`,
 
 ## Public packages
 
-`domain`, `store` (+ `store/sqlite`, `store/postgres`), `content`, and `media` live at
+`domain`, `store` (+ `store/sqlite`), `content`, and `media` live at
 the module root (not under `internal/`) because the `censurado-web` generator imports
 them. The server-only `publish` package stays under `internal/`.

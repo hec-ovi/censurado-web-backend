@@ -1,6 +1,6 @@
 -- SQLite schema for the article source of truth.
--- STRICT tables reject the loose typing that a Postgres adapter would also
--- reject, keeping the two dialects honest. The stable hot axes (publish date,
+-- STRICT tables reject loose typing, so a wrong-typed value fails at write time
+-- instead of silently coercing. The stable hot axes (publish date,
 -- author, section) are indexed columns; topics are normalized into a join table
 -- so /topic/<slug> navigation is an indexed lookup. The open-ended tail lives in
 -- the metadata JSON column.
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS portadas (
 -- and the political-lean axis the sourcing floor balances across. slug is the stable
 -- key (the domain slugified, e.g. example-com); domain is the bare host and is unique.
 -- lean ('right'|'neutral'|'left') and feed_type are validated in the HTTP layer (an
--- ALTER-friendly, dialect-neutral choice, like articles.section). feed_urls is a JSON
+-- ALTER-friendly choice, like articles.section). feed_urls is a JSON
 -- array (defaulting to '[]'); enabled (1/0) is the discovery toggle, distinct from
 -- deleted_at, the tombstone. status/last_checked/last_ok carry the health-checker's
 -- last result. The timestamps are whole-second RFC3339 TEXT, as elsewhere.

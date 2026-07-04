@@ -66,7 +66,7 @@ Server-owned `id`/`content_hash`/`created_at` are never accepted. Mirrors
 ### The `store` interfaces the generator depends on
 
 Frozen method sets (see `store/contract_interface_test.go`). The generator reads via a subset; the
-whole set is frozen so an adapter swap stays proven:
+whole set is frozen so an internal store change cannot silently break Layer 1's build:
 
 - `Repository`: Upsert, UpsertMany, BySlug, **Find**, Count, Facets, UpdateArticle, DeleteArticle,
   RestoreArticle, Close. The generator uses **`Find(ctx, store.Filter{Order: OldestFirst})`** with the

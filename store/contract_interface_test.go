@@ -9,7 +9,7 @@ import (
 )
 
 // Seam A freeze: the store contract the generator (Layer 1) depends on. The method
-// sets and the Filter/overlay shapes are pinned so an internal adapter change cannot
+// sets and the Filter/overlay shapes are pinned so an internal store change cannot
 // silently break Layer 1's build. A deliberate change updates contracts/CONTRACT.md
 // and these expectations together.
 
