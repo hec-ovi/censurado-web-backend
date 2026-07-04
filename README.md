@@ -5,22 +5,23 @@ sqlite store (the source of truth for articles), the authenticated publish API, 
 the JSON read API. It runs locally; the public site is static files served by a CDN,
 generated from this database by the separate `censurado-web` repo.
 
-The store also carries author and topic registry tables and serves them over the
-read and operator APIs, but they stay empty in the current deployment. Author
-identity lives in the `censurado-web-brain` personas store and is stamped into each
-article's `metadata` at publish; the generator builds the author and topic pages
-from that metadata, not from these tables.
+The store also owns the author, source, topic, and portada registries and serves them
+over the read and operator APIs. Authors (name, voice/style, gender, topics, attached
+sources), sources, topics, and the front-page layout all live here; the CLI agent in
+`censurado-web-brain` reads and writes them over this API, and each published article
+also carries its author fields in `metadata` so the generator can render author and
+topic pages.
 
-The system is four repos:
+The system is three code repos plus an image backend:
 
-- **censurado-web-backend** (this): publish API + store + read API.
+- **censurado-web-backend** (this): publish API + store + read API + the operator admin panel.
 - **censurado-web**: the static-site generator. Reads this database and renders the
   HTML/JSON the CDN serves. Imports this repo's shared libraries (`domain`, `store`,
   `content`, `media`).
-- **censurado-web-brain**: the newsroom config plane (authors, sources, prompts). A CLI
-  agent reads it and publishes articles here over the publish API.
-- **censurado-web-harness**: one Docker Compose that runs all of the above together
-  (plus ComfyUI), and carries the CLI publishing skill.
+- **censurado-web-brain**: the agentic layer (CLI + SKILL + editorial prompts). A CLI
+  agent walks it to write and publish articles here over the API, and it carries the one
+  Docker Compose that wires the whole stack together (plus ComfyUI).
+- **comfyui-strix-docker**: ComfyUI on ROCm, the image backend for hero art.
 
 ## What runs here
 
@@ -76,3 +77,16 @@ a private network or an SSH tunnel. Copy `deploy/.env.example` to `deploy/.env`,
 `domain`, `store` (+ `store/sqlite`), `content`, and `media` live at
 the module root (not under `internal/`) because the `censurado-web` generator imports
 them. The server-only `publish` package stays under `internal/`.
+
+## Pending (panel)
+
+Two admin-panel features are on the roadmap, not built yet (the canonical list lives in
+the `censurado-web-brain` README under "Pending features"):
+
+- **Drag-and-drop layout organizer.** The portada organizer reorders with up/down
+  buttons today; a visual drag-and-drop swap is a nice-to-have.
+- **Analytics / BI dashboard.** One surface for growth: a most-popular-topics chart
+  (filtered totals, built to scale to thousands of topics), authors ranked by likes,
+  authors with the fewest articles, and statistical/growth modeling. Note: author-likes
+  needs a reactions data source the backend does not hold yet (reactions live in the
+  downstream Cloudflare Pages reactions function, not this store).

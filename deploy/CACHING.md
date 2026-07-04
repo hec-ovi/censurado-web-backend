@@ -1,7 +1,7 @@
 # CDN caching and purge
 
-The full cache policy lives in the harness, next to where the site is actually served:
-the `censurado-web-harness` repo, `deploy/CACHING.md`. The short version:
+The full cache policy lives next to the compose stack, in the `censurado-web-brain`
+repo, `deploy/CACHING.md`. The short version:
 
 - **HTML, JSON shards, and `/assets/*`** are served `no-store`. The asset URLs are
   stable (no content hash) so pages stay byte-identical across an asset change, but the
@@ -26,4 +26,4 @@ Regenerate and purge after a publish live in the generator repo, not here:
   or purge itself.
 - A generate batch writes `<out>/.generated/purge.json` (the exact changed paths), and
   the `censurado-purge` tool invalidates exactly those URLs. Both the generator and the
-  purge tool live in `censurado-web`; see that repo and the harness cache doc for usage.
+  purge tool live in `censurado-web`; see that repo and the `censurado-web-brain` cache doc for usage.
