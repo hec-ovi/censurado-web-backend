@@ -71,9 +71,13 @@ whole set is frozen so an adapter swap stays proven:
 - `Repository`: Upsert, UpsertMany, BySlug, **Find**, Count, Facets, UpdateArticle, DeleteArticle,
   RestoreArticle, Close. The generator uses **`Find(ctx, store.Filter{Order: OldestFirst})`** with the
   zero Filter, so tombstoned rows never reach it.
-- `AuthorStore`: UpsertAuthor, AuthorByHandle, **ListAuthors**, DeleteAuthor.
+- `AuthorStore`: UpsertAuthor, AuthorByHandle, **ListAuthors**, DeleteAuthor, SetAuthorSources,
+  AuthorSources. `ListAuthors`/`AuthorByHandle` hydrate each author's `Sources` from the
+  `author_sources` join; `UpsertAuthor` never writes the join (use `SetAuthorSources`).
 - `TopicStore`: UpsertTopic, TopicBySlug, **ListTopics**, DeleteTopic.
 - `PortadaStore`: UpsertPortada, PortadaByDate, **ListPortadas**, DeletePortada.
+- `SourceStore`: UpsertSource, SourceBySlug, **ListSources**, DeleteSource. `DeleteSource` soft-deletes
+  the source AND detaches it from every author (removes its `author_sources` rows) in one transaction.
 - `SubmissionLog`: FindSubmission, RecordSubmission, ListSubmissions (audit/idempotency, not read by
   the generator).
 
@@ -82,9 +86,17 @@ whole set is frozen so an adapter swap stays proven:
 keep their exact meaning. The plural `Sections`/`Authors`/`Topics` slices, `Query`, and `Facets` are
 an admin-only widening.
 
-Overlay types the generator reads: `store.Author` (Handle, Name, Bio, Avatar, Metadata, Deleted,
-CreatedAt, UpdatedAt), `store.Topic`, `store.PortadaDay` (Date, Entries, Recomendado, ...),
-`store.PortadaEntry` (Slug, Role).
+Overlay types the generator reads:
+- `store.Author` (ID, Handle, Name, Bio, Avatar, **Gender, About, Style, Topics, Sources**, Metadata,
+  Deleted, CreatedAt, UpdatedAt). `About` is the long public about-page text; `Style` is the private
+  voice/writing prompt (a plain field the public site never renders); `Topics` is the author's curated
+  profile beats; `Sources` is the attached-source slug set, hydrated from the join.
+- `store.Topic`, `store.PortadaDay` (Date, Entries, Recomendado, ...), `store.PortadaEntry` (Slug, Role).
+- `store.Source` (ID, Slug, Domain, Homepage, Description, FeedURLs, FeedType, Language,
+  OwnershipGroup, Lean, Enabled, Status, LastChecked, LastOK, Metadata, Deleted, CreatedAt, UpdatedAt).
+  `Slug` is the stable key (the domain slugified); `Domain` is unique; `Lean` is `right|neutral|left`;
+  `FeedType` is `auto|native_rss|atom|news_sitemap|site_search`. `Enabled` (discovery toggle) is
+  distinct from `Deleted` (tombstone).
 
 ### The `Metadata` key vocabulary (a hidden, shared contract)
 
@@ -100,10 +112,11 @@ keys (guarded in the generator by `contract_metadata_test.go`):
 retweets, likes, bookmarks, created_timestamp, created_at. `media_checks[id].available` gates the
 "video eliminado" placeholder.
 
-> Note (M3 target): `gender`, `beat`, `profile_topics`, and the author `style`/voice are today carried
-> as untyped keys (in article or author metadata). M3 promotes the author fields to first-class
-> backend columns and moves sources into the backend; when it lands, this vocabulary and the author
-> shape above are updated and re-frozen.
+> Note: `author_name`, `author_bio`, `author_avatar`, `gender`, `beat`, and `profile_topics` in the
+> ARTICLE metadata are render-time denormalization (copied onto the article at publish so the byline
+> and author card render without a join). They are distinct from the author REGISTRY, whose gender /
+> about / style / topics are now first-class `store.Author` columns (the source of truth, see the
+> overlay types above). Both exist on purpose; the article-metadata vocabulary is unchanged.
 
 ---
 
@@ -133,9 +146,11 @@ in `/articles:batch` is a literal path byte, no collision.
 
 | Method | Path | Out |
 |---|---|---|
-| GET | `/authors` | `{authors:[{handle,name,bio,avatar,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
+| GET | `/authors` | `{authors:[{handle,name,bio,avatar,gender,about,style,topics,sources,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. `style` is served (the panel edits it) but the public site never renders it; `sources` is the slug-sorted attached-source set. |
+| GET | `/authors/{handle}/sources` | `{handle, sources}` (slug-sorted). 404 on an absent author. |
 | GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
 | GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
+| GET | `/sources` | `{sources:[{slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
 | GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,deleted,content_hash}], total}` (body omitted from list items). Query -> Filter: section, author, topic, q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
 | GET | `/articles/{slug}` | Full article incl. `body`. A soft-deleted article is still returned with `deleted=true`. 404 not_found. |
 | GET | `/media/{name}` | Public, keyless, immutable-cached raw image. `name` must match `^[a-f0-9]{64}\.(jpg\|png\|gif\|webp)$`. 404 not_found. |
@@ -147,15 +162,19 @@ edit/delete.
 
 | Method | Path | In | Out |
 |---|---|---|---|
-| POST | `/authors` | `{handle*, name, bio, avatar, metadata}` (upsert) | 200 |
-| DELETE | `/authors/{handle}` | | 204 (404 on absent handle) |
+| POST | `/authors` | `{handle*, name, bio, avatar, gender, about, style, topics?, sources?, metadata}` (upsert). A present `sources` array replaces the attached-source set in the same call; an omitted `sources` leaves the join untouched. | 200 (400 on missing handle) |
+| DELETE | `/authors/{handle}` | (source links are kept, so a restore brings them back) | 204 (404 on absent handle) |
 | POST | `/authors/{handle}/restore` | | 200 (404 on absent) |
+| PUT | `/authors/{handle}/sources` | `{sources:[slug]}` (replaced wholesale; deduped, blanks dropped) | 200 `{handle, sources}` (404 on absent author) |
 | POST | `/topics` | `{slug*, label, description, metadata}` (upsert) | 200 |
 | DELETE | `/topics/{slug}` | | 204 |
 | POST | `/topics/{slug}/restore` | | 200 |
 | POST | `/portadas` | `{date*, entries:[{slug,role}], recomendado}` (replaced wholesale) | 200 (400 on missing date) |
 | DELETE | `/portadas/{date}` | | 204 |
 | POST | `/portadas/{date}/restore` | | 200 |
+| POST | `/sources` | `{domain*, slug?, homepage, description, feed_urls?, feed_type, language, ownership_group, lean, enabled?, status, last_checked, last_ok, metadata}` (upsert). `slug` defaults to the slugified domain; `lean`/`feed_type` are validated. | 200 (400 on missing domain or invalid lean/feed_type) |
+| DELETE | `/sources/{slug}` | (also detaches the source from every author) | 204 (404 on absent slug) |
+| POST | `/sources/{slug}/restore` | (author links are NOT re-attached) | 200 (404 on absent) |
 | PUT | `/articles/{slug}` | `{title,body,author,section,topics?,metadata?}`; `id/slug/created_at` preserved | 200 (404 not_found, 409 edit_conflict on content-hash collision) |
 | DELETE | `/articles/{slug}` | | 204 |
 | POST | `/articles/{slug}/restore` | | 204 |

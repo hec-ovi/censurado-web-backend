@@ -10,14 +10,15 @@ import (
 )
 
 // ReadStore is the read surface the JSON read API needs: the article Repository
-// plus the operator-owned author, topic, and portada registries. Both *sqlite.Store
-// and *postgres.Store satisfy it, so the same concrete store backs the write path
-// and these reads.
+// plus the operator-owned author, topic, portada, and source registries. Both
+// *sqlite.Store and *postgres.Store satisfy it, so the same concrete store backs the
+// write path and these reads.
 type ReadStore interface {
 	store.Repository
 	store.AuthorStore
 	store.TopicStore
 	store.PortadaStore
+	store.SourceStore
 }
 
 // ReadHandler serves the authenticated JSON read API: GET /authors, /topics,
@@ -52,11 +53,19 @@ func (rh *ReadHandler) authn(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// authorJSON is the wire shape of a managed author. Style is the private voice/writing
+// prompt: it is served here (the admin panel edits it) but the public site never
+// renders it. Sources is the author's attached-source slug set, hydrated from the join.
 type authorJSON struct {
 	Handle    string         `json:"handle"`
 	Name      string         `json:"name"`
 	Bio       string         `json:"bio"`
 	Avatar    string         `json:"avatar"`
+	Gender    string         `json:"gender"`
+	About     string         `json:"about"`
+	Style     string         `json:"style"`
+	Topics    []string       `json:"topics"`
+	Sources   []string       `json:"sources"`
 	Metadata  map[string]any `json:"metadata"`
 	Deleted   bool           `json:"deleted"`
 	CreatedAt string         `json:"created_at"`
@@ -80,11 +89,7 @@ func (rh *ReadHandler) ServeAuthors(w http.ResponseWriter, r *http.Request) {
 	}
 	out := authorsResponse{Authors: make([]authorJSON, 0, len(authors))}
 	for _, a := range authors {
-		out.Authors = append(out.Authors, authorJSON{
-			Handle: a.Handle, Name: a.Name, Bio: a.Bio, Avatar: a.Avatar,
-			Metadata: coalesceMeta(a.Metadata), Deleted: a.Deleted,
-			CreatedAt: rfc3339(a.CreatedAt), UpdatedAt: rfc3339(a.UpdatedAt),
-		})
+		out.Authors = append(out.Authors, toAuthorJSON(a))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -172,6 +177,90 @@ func (rh *ReadHandler) ServePortadas(w http.ResponseWriter, r *http.Request) {
 		out.Portadas = append(out.Portadas, toPortadaJSON(p))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+type sourceJSON struct {
+	Slug           string         `json:"slug"`
+	Domain         string         `json:"domain"`
+	Homepage       string         `json:"homepage"`
+	Description    string         `json:"description"`
+	FeedURLs       []string       `json:"feed_urls"`
+	FeedType       string         `json:"feed_type"`
+	Language       string         `json:"language"`
+	OwnershipGroup string         `json:"ownership_group"`
+	Lean           string         `json:"lean"`
+	Enabled        bool           `json:"enabled"`
+	Status         string         `json:"status"`
+	LastChecked    string         `json:"last_checked"`
+	LastOK         string         `json:"last_ok"`
+	Metadata       map[string]any `json:"metadata"`
+	Deleted        bool           `json:"deleted"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
+}
+
+type sourcesResponse struct {
+	Sources []sourceJSON `json:"sources"`
+}
+
+// toSourceJSON maps a stored source to its JSON shape, coalescing FeedURLs to [] and
+// Metadata to {} so the wire form never carries a null.
+func toSourceJSON(s store.Source) sourceJSON {
+	return sourceJSON{
+		Slug: s.Slug, Domain: s.Domain, Homepage: s.Homepage, Description: s.Description,
+		FeedURLs: coalesceTopics(s.FeedURLs), FeedType: s.FeedType, Language: s.Language,
+		OwnershipGroup: s.OwnershipGroup, Lean: s.Lean, Enabled: s.Enabled, Status: s.Status,
+		LastChecked: s.LastChecked, LastOK: s.LastOK, Metadata: coalesceMeta(s.Metadata),
+		Deleted: s.Deleted, CreatedAt: rfc3339(s.CreatedAt), UpdatedAt: rfc3339(s.UpdatedAt),
+	}
+}
+
+// ServeSources answers GET /sources with the managed source registry.
+// ?include_deleted=true includes tombstoned sources (default excludes them).
+func (rh *ReadHandler) ServeSources(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	sources, err := rh.store.ListSources(r.Context(), includeDeleted(r))
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	out := sourcesResponse{Sources: make([]sourceJSON, 0, len(sources))}
+	for _, s := range sources {
+		out.Sources = append(out.Sources, toSourceJSON(s))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type authorSourcesResponse struct {
+	Handle  string   `json:"handle"`
+	Sources []string `json:"sources"`
+}
+
+// ServeAuthorSources answers GET /authors/{handle}/sources with the author's attached
+// source slugs, slug-sorted. A missing author is a 404 (so a typo does not silently
+// read as "no sources").
+func (rh *ReadHandler) ServeAuthorSources(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	handle := r.PathValue("handle")
+	_, found, err := rh.store.AuthorByHandle(r.Context(), handle)
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	if !found {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	slugs, err := rh.store.AuthorSources(r.Context(), handle)
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, authorSourcesResponse{Handle: handle, Sources: coalesceTopics(slugs)})
 }
 
 // articleListItem is the light list shape: everything an index needs EXCEPT the

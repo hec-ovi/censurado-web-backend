@@ -99,6 +99,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{"/authors", []string{`"authors"`}},
 		{"/topics", []string{`"topics"`}},
 		{"/portadas", []string{`"portadas"`}},
+		{"/sources", []string{`"sources"`}},
 		{"/articles", []string{`"articles"`, `"total"`}},
 	}
 	for _, r := range reads {
@@ -140,6 +141,14 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{http.MethodPost, "/portadas", `{"date":"2026-06-22","entries":[{"slug":"lead","role":"important"}],"recomendado":["r1"]}`, http.StatusOK},
 		{http.MethodDelete, "/portadas/2026-06-22", "", http.StatusNoContent},
 		{http.MethodPost, "/portadas/2026-06-22/restore", "", http.StatusOK},
+
+		// sources + the author-source join (contract-a exists again after its restore
+		// above, so the PUT/GET below bind to a real author).
+		{http.MethodPost, "/sources", `{"domain":"contract.example"}`, http.StatusOK},
+		{http.MethodPut, "/authors/contract-a/sources", `{"sources":["contract-example"]}`, http.StatusOK},
+		{http.MethodGet, "/authors/contract-a/sources", "", http.StatusOK},
+		{http.MethodDelete, "/sources/contract-example", "", http.StatusNoContent},
+		{http.MethodPost, "/sources/contract-example/restore", "", http.StatusOK},
 
 		{http.MethodPut, "/articles/" + slug, `{"title":"Edited","body":"# H\n\nedited body here","author":"ada","section":"tech"}`, http.StatusOK},
 		{http.MethodDelete, "/articles/" + slug, "", http.StatusNoContent},

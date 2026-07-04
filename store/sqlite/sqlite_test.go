@@ -112,6 +112,28 @@ func TestSQLitePortadaStore(t *testing.T) {
 	storetest.RunPortadaStore(t, repo)
 }
 
+func TestSQLiteSourceStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "sources.db")
+	repo, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	storetest.RunSourceStore(t, repo)
+}
+
+func TestSQLiteBrainDataMigration(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration.db")
+	repo, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	storetest.RunBrainDataMigration(t, repo)
+}
+
 func TestSQLiteArticleMutations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "mutations.db")
 	repo, err := sqlite.Open(dbPath)

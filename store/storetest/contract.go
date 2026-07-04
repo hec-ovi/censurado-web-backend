@@ -1039,6 +1039,18 @@ func assertAuthorEqual(t *testing.T, got, want store.Author) {
 	if got.Avatar != want.Avatar {
 		t.Errorf("Avatar = %q, want %q", got.Avatar, want.Avatar)
 	}
+	if got.Gender != want.Gender {
+		t.Errorf("Gender = %q, want %q", got.Gender, want.Gender)
+	}
+	if got.About != want.About {
+		t.Errorf("About = %q, want %q", got.About, want.About)
+	}
+	if got.Style != want.Style {
+		t.Errorf("Style = %q, want %q", got.Style, want.Style)
+	}
+	if !equalOrdered(got.Topics, want.Topics) {
+		t.Errorf("Topics = %v, want %v (order preserved)", got.Topics, want.Topics)
+	}
 	if len(got.Metadata) != len(want.Metadata) {
 		t.Errorf("Metadata = %v, want %v", got.Metadata, want.Metadata)
 	}
@@ -1196,6 +1208,59 @@ func RunAuthorStore(t *testing.T, as store.AuthorStore) {
 		}
 		if !contains(handlesOf(def2), second.Handle) {
 			t.Errorf("re-activated author %q missing from default list", second.Handle)
+		}
+	})
+
+	t.Run("SetAuthorSources sets links, AuthorSources reads them slug-sorted, AuthorByHandle hydrates Sources", func(t *testing.T) {
+		// Insertion order is deliberately not sorted; the read must come back in slug
+		// byte order on both engines.
+		if err := as.SetAuthorSources(ctx, first.Handle, []string{"zeta-src", "alfa-src", "mid-src"}); err != nil {
+			t.Fatalf("SetAuthorSources: %v", err)
+		}
+		want := []string{"alfa-src", "mid-src", "zeta-src"}
+		got, err := as.AuthorSources(ctx, first.Handle)
+		if err != nil {
+			t.Fatalf("AuthorSources: %v", err)
+		}
+		if !equalOrdered(got, want) {
+			t.Errorf("AuthorSources = %v, want %v (slug byte order)", got, want)
+		}
+		hydrated, found, err := as.AuthorByHandle(ctx, first.Handle)
+		if err != nil || !found {
+			t.Fatalf("AuthorByHandle: found=%v err=%v", found, err)
+		}
+		if !equalOrdered(hydrated.Sources, want) {
+			t.Errorf("AuthorByHandle Sources = %v, want %v", hydrated.Sources, want)
+		}
+	})
+
+	t.Run("SetAuthorSources replaces wholesale and drops blanks and duplicates", func(t *testing.T) {
+		if err := as.SetAuthorSources(ctx, first.Handle, []string{"keep-src", "", "keep-src", "  ", "other-src"}); err != nil {
+			t.Fatalf("SetAuthorSources: %v", err)
+		}
+		got, err := as.AuthorSources(ctx, first.Handle)
+		if err != nil {
+			t.Fatalf("AuthorSources: %v", err)
+		}
+		// Prior links (alfa/mid/zeta) are gone; blanks and the duplicate collapse.
+		if !equalOrdered(got, []string{"keep-src", "other-src"}) {
+			t.Errorf("AuthorSources = %v, want [keep-src other-src] (replaced, deduped, blanks dropped)", got)
+		}
+		// Clearing to empty removes every link.
+		if err := as.SetAuthorSources(ctx, first.Handle, nil); err != nil {
+			t.Fatalf("SetAuthorSources(nil): %v", err)
+		}
+		if got, _ := as.AuthorSources(ctx, first.Handle); len(got) != 0 {
+			t.Errorf("AuthorSources after clear = %v, want empty", got)
+		}
+	})
+
+	t.Run("SetAuthorSources on a missing author returns ErrNotFound (no orphan links)", func(t *testing.T) {
+		if err := as.SetAuthorSources(ctx, "no-such-author", []string{"x-src"}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("SetAuthorSources(missing) = %v, want ErrNotFound", err)
+		}
+		if got, _ := as.AuthorSources(ctx, "no-such-author"); len(got) != 0 {
+			t.Errorf("AuthorSources(missing) = %v, want empty (nothing written)", got)
 		}
 	})
 
@@ -1786,4 +1851,358 @@ func RunArticleMutations(t *testing.T, repo store.Repository) {
 			t.Errorf("UpdateArticle(missing) = %v, want ErrNotFound", err)
 		}
 	})
+}
+
+func sourceSlugsOf(ss []store.Source) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = s.Slug
+	}
+	return out
+}
+
+// assertSourceEqual checks every observable field round-trips, including the
+// feed_urls order, the lean/feed_type/enabled operational fields, and the metadata.
+func assertSourceEqual(t *testing.T, got, want store.Source) {
+	t.Helper()
+	if got.Slug != want.Slug {
+		t.Errorf("Slug = %q, want %q", got.Slug, want.Slug)
+	}
+	if got.Domain != want.Domain {
+		t.Errorf("Domain = %q, want %q", got.Domain, want.Domain)
+	}
+	if got.Homepage != want.Homepage {
+		t.Errorf("Homepage = %q, want %q", got.Homepage, want.Homepage)
+	}
+	if got.Description != want.Description {
+		t.Errorf("Description = %q, want %q", got.Description, want.Description)
+	}
+	if !equalOrdered(got.FeedURLs, want.FeedURLs) {
+		t.Errorf("FeedURLs = %v, want %v (order preserved)", got.FeedURLs, want.FeedURLs)
+	}
+	if got.FeedType != want.FeedType {
+		t.Errorf("FeedType = %q, want %q", got.FeedType, want.FeedType)
+	}
+	if got.Language != want.Language {
+		t.Errorf("Language = %q, want %q", got.Language, want.Language)
+	}
+	if got.OwnershipGroup != want.OwnershipGroup {
+		t.Errorf("OwnershipGroup = %q, want %q", got.OwnershipGroup, want.OwnershipGroup)
+	}
+	if got.Lean != want.Lean {
+		t.Errorf("Lean = %q, want %q", got.Lean, want.Lean)
+	}
+	if got.Enabled != want.Enabled {
+		t.Errorf("Enabled = %v, want %v", got.Enabled, want.Enabled)
+	}
+	if got.Status != want.Status {
+		t.Errorf("Status = %q, want %q", got.Status, want.Status)
+	}
+	if got.LastChecked != want.LastChecked {
+		t.Errorf("LastChecked = %q, want %q", got.LastChecked, want.LastChecked)
+	}
+	if got.LastOK != want.LastOK {
+		t.Errorf("LastOK = %q, want %q", got.LastOK, want.LastOK)
+	}
+	if len(got.Metadata) != len(want.Metadata) {
+		t.Errorf("Metadata = %v, want %v", got.Metadata, want.Metadata)
+	}
+	for k, v := range want.Metadata {
+		if got.Metadata[k] != v {
+			t.Errorf("Metadata[%q] = %v, want %v", k, got.Metadata[k], v)
+		}
+	}
+	if !got.CreatedAt.UTC().Equal(want.CreatedAt.UTC().Truncate(time.Second)) {
+		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt.UTC(), want.CreatedAt.UTC().Truncate(time.Second))
+	}
+}
+
+// RunSourceStore executes the SourceStore conformance suite against ss, which must
+// back an empty sources table (and, for the detach case, an empty authors table:
+// ss must also implement store.AuthorStore, which both adapters do). Running the
+// identical suite against both SQLite and Postgres proves the registry round-trips
+// every field, orders by slug in byte order (SQLite BINARY default; Postgres COLLATE
+// "C" pin), tombstones and re-activates, and detaches from every author on delete,
+// identically on the two engines. Subtests run sequentially and share the seeded
+// state; it does not call t.Parallel. It mirrors RunTopicStore.
+func RunSourceStore(t *testing.T, ss store.SourceStore) {
+	ctx := context.Background()
+	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("SourceBySlug on a missing slug reports not found", func(t *testing.T) {
+		got, found, err := ss.SourceBySlug(ctx, "ghost")
+		if err != nil {
+			t.Fatalf("SourceBySlug: %v", err)
+		}
+		if found {
+			t.Errorf("found = true for missing slug, want false")
+		}
+		if got.Slug != "" || got.ID != "" {
+			t.Errorf("got = %+v for missing slug, want zero Source", got)
+		}
+	})
+
+	clarin := SampleSource("clarin-example")
+	clarin.CreatedAt = base
+	clarin.UpdatedAt = base
+
+	t.Run("UpsertSource creates then SourceBySlug round-trips every field", func(t *testing.T) {
+		stored, err := ss.UpsertSource(ctx, clarin)
+		if err != nil {
+			t.Fatalf("UpsertSource: %v", err)
+		}
+		if stored.ID == "" {
+			t.Errorf("empty ID, want store-assigned")
+		}
+		if stored.Deleted {
+			t.Errorf("Deleted = true on create, want false")
+		}
+		got, found, err := ss.SourceBySlug(ctx, clarin.Slug)
+		if err != nil {
+			t.Fatalf("SourceBySlug: %v", err)
+		}
+		if !found {
+			t.Fatalf("found = false after create, want true")
+		}
+		assertSourceEqual(t, got, clarin)
+	})
+
+	t.Run("UpsertSource on an existing slug updates in place (created_at preserved, updated_at advances)", func(t *testing.T) {
+		before, _, _ := ss.SourceBySlug(ctx, clarin.Slug)
+		edit := clarin
+		edit.Description = "Descripcion editada."
+		edit.Lean = "left"
+		edit.Enabled = false
+		edit.FeedURLs = []string{"https://clarin-example.example/nuevo-rss"}
+		edit.UpdatedAt = base.Add(48 * time.Hour)
+		stored, err := ss.UpsertSource(ctx, edit)
+		if err != nil {
+			t.Fatalf("UpsertSource update: %v", err)
+		}
+		if stored.ID != before.ID {
+			t.Errorf("ID changed on update: %s -> %s (want same row)", before.ID, stored.ID)
+		}
+		if stored.Description != "Descripcion editada." || stored.Lean != "left" || stored.Enabled {
+			t.Errorf("mutable fields not updated: %+v", stored)
+		}
+		if !equalOrdered(stored.FeedURLs, []string{"https://clarin-example.example/nuevo-rss"}) {
+			t.Errorf("feed_urls not replaced: %v", stored.FeedURLs)
+		}
+		if !stored.CreatedAt.UTC().Equal(base) {
+			t.Errorf("CreatedAt = %v, want preserved %v", stored.CreatedAt.UTC(), base)
+		}
+		if !stored.UpdatedAt.UTC().Equal(base.Add(48 * time.Hour)) {
+			t.Errorf("UpdatedAt = %v, want advanced to %v", stored.UpdatedAt.UTC(), base.Add(48*time.Hour))
+		}
+		all, err := ss.ListSources(ctx, true)
+		if err != nil {
+			t.Fatalf("ListSources: %v", err)
+		}
+		n := 0
+		for _, s := range all {
+			if s.Slug == clarin.Slug {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("rows for slug %q = %d, want 1 (update, not a second insert)", clarin.Slug, n)
+		}
+	})
+
+	ambito := SampleSource("ambito-example")
+	ambito.CreatedAt = base
+	ambito.UpdatedAt = base
+
+	t.Run("ListSources orders by slug ascending (byte order)", func(t *testing.T) {
+		if _, err := ss.UpsertSource(ctx, ambito); err != nil {
+			t.Fatalf("UpsertSource: %v", err)
+		}
+		got, err := ss.ListSources(ctx, false)
+		if err != nil {
+			t.Fatalf("ListSources: %v", err)
+		}
+		want := []string{"ambito-example", "clarin-example"}
+		if s := sourceSlugsOf(got); !equalOrdered(s, want) {
+			t.Errorf("order = %v, want %v", s, want)
+		}
+	})
+
+	t.Run("DeleteSource tombstones: excluded by default, included with includeDeleted, re-upsert re-activates", func(t *testing.T) {
+		if err := ss.DeleteSource(ctx, ambito.Slug); err != nil {
+			t.Fatalf("DeleteSource: %v", err)
+		}
+		def, err := ss.ListSources(ctx, false)
+		if err != nil {
+			t.Fatalf("ListSources(false): %v", err)
+		}
+		if contains(sourceSlugsOf(def), ambito.Slug) {
+			t.Errorf("deleted source %q still listed by default", ambito.Slug)
+		}
+		all, err := ss.ListSources(ctx, true)
+		if err != nil {
+			t.Fatalf("ListSources(true): %v", err)
+		}
+		if !contains(sourceSlugsOf(all), ambito.Slug) {
+			t.Errorf("deleted source %q missing from includeDeleted list", ambito.Slug)
+		}
+		got, found, err := ss.SourceBySlug(ctx, ambito.Slug)
+		if err != nil {
+			t.Fatalf("SourceBySlug(deleted): %v", err)
+		}
+		if !found || !got.Deleted {
+			t.Errorf("SourceBySlug(deleted) found=%v Deleted=%v, want true/true", found, got.Deleted)
+		}
+		reborn := ambito
+		reborn.UpdatedAt = base.Add(72 * time.Hour)
+		stored, err := ss.UpsertSource(ctx, reborn)
+		if err != nil {
+			t.Fatalf("re-upsert: %v", err)
+		}
+		if stored.Deleted {
+			t.Errorf("Deleted = true after re-upsert, want re-activated")
+		}
+		def2, err := ss.ListSources(ctx, false)
+		if err != nil {
+			t.Fatalf("ListSources(false) after re-upsert: %v", err)
+		}
+		if !contains(sourceSlugsOf(def2), ambito.Slug) {
+			t.Errorf("re-activated source %q missing from default list", ambito.Slug)
+		}
+	})
+
+	t.Run("DeleteSource on a missing slug returns ErrNotFound", func(t *testing.T) {
+		if err := ss.DeleteSource(ctx, "no-such-source"); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("DeleteSource(missing) = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("DeleteSource detaches the source from every author (cascade to the join)", func(t *testing.T) {
+		as, ok := ss.(store.AuthorStore)
+		if !ok {
+			t.Skipf("store %T does not implement store.AuthorStore; detach-on-delete is untested here", ss)
+		}
+		// Two authors both read clarin-example; one also reads a source that survives.
+		for _, h := range []string{"reader-one", "reader-two"} {
+			a := SampleAuthor(h)
+			a.CreatedAt, a.UpdatedAt = base, base
+			if _, err := as.UpsertAuthor(ctx, a); err != nil {
+				t.Fatalf("UpsertAuthor %q: %v", h, err)
+			}
+		}
+		if err := as.SetAuthorSources(ctx, "reader-one", []string{"clarin-example", "keeps-this"}); err != nil {
+			t.Fatalf("SetAuthorSources reader-one: %v", err)
+		}
+		if err := as.SetAuthorSources(ctx, "reader-two", []string{"clarin-example"}); err != nil {
+			t.Fatalf("SetAuthorSources reader-two: %v", err)
+		}
+		if err := ss.DeleteSource(ctx, "clarin-example"); err != nil {
+			t.Fatalf("DeleteSource: %v", err)
+		}
+		one, err := as.AuthorSources(ctx, "reader-one")
+		if err != nil {
+			t.Fatalf("AuthorSources reader-one: %v", err)
+		}
+		if !equalOrdered(one, []string{"keeps-this"}) {
+			t.Errorf("reader-one sources = %v, want [keeps-this] (clarin detached, other kept)", one)
+		}
+		two, err := as.AuthorSources(ctx, "reader-two")
+		if err != nil {
+			t.Fatalf("AuthorSources reader-two: %v", err)
+		}
+		if len(two) != 0 {
+			t.Errorf("reader-two sources = %v, want empty (its only source was detached)", two)
+		}
+	})
+}
+
+// brainMigrationStore is the surface the faithful-migration proof needs: the author
+// and source registries together, so it can rebuild a persona (author + profile
+// fields + the who_i_am/beat/language/few-shots tail in Metadata) and its portals
+// (sources) and the persona.sources links (the join) and assert nothing is lost.
+type brainMigrationStore interface {
+	store.AuthorStore
+	store.SourceStore
+}
+
+// RunBrainDataMigration proves the backend can hold the brain's persona + portal data
+// FAITHFULLY: every field the brain's personas.db and portals table carry survives a
+// round-trip through the backend registries. It is the concrete "brain data migrated
+// faithfully" checkpoint for the content-model migration. The promoted profile columns
+// (gender/about/style/topics) carry persona gender/about/style/profile_topics; the
+// generation-recipe fields the brain also holds (who_i_am, beat, language, the
+// few-shots) ride in Metadata (the open-ended tail); each portal becomes a source;
+// and persona.sources becomes author_sources links. Running it against both engines
+// proves the migration target is engine-independent.
+func RunBrainDataMigration(t *testing.T, repo brainMigrationStore) {
+	ctx := context.Background()
+	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	// Two portals with the full field set, mapping the brain's Portal 1:1.
+	portals := []store.Source{
+		{
+			Slug: "diario-uno", Domain: "diario-uno.example", Homepage: "https://diario-uno.example",
+			Description: "Diario local independiente.", FeedURLs: []string{"https://diario-uno.example/rss"},
+			FeedType: "native_rss", Language: "es", OwnershipGroup: "grupo-uno", Lean: "left",
+			Enabled: true, Status: "ok", LastChecked: "2026-05-30T00:00:00Z", LastOK: "2026-05-30T00:00:00Z",
+			CreatedAt: base, UpdatedAt: base,
+		},
+		{
+			Slug: "gaceta-dos", Domain: "gaceta-dos.example", Homepage: "https://gaceta-dos.example",
+			Description: "Gaceta de oposicion.", FeedURLs: []string{},
+			FeedType: "site_search", Language: "es", OwnershipGroup: "", Lean: "right",
+			Enabled: false, Status: "unreachable", LastChecked: "2026-05-31T00:00:00Z", LastOK: "",
+			CreatedAt: base, UpdatedAt: base,
+		},
+	}
+	for _, p := range portals {
+		stored, err := repo.UpsertSource(ctx, p)
+		if err != nil {
+			t.Fatalf("migrate portal %q: %v", p.Slug, err)
+		}
+		assertSourceEqual(t, stored, p)
+	}
+
+	// One persona with the full field set. id -> handle, display_name -> name,
+	// profile_topics -> Topics, and the generation-recipe fields ride in Metadata.
+	persona := store.Author{
+		Handle: "lara", Name: "Lara Ibanez", Bio: "Cronista politica.",
+		Avatar: "/media/lara.png", Gender: "femenino",
+		About:  "Lara cubre la politica nacional desde hace una decada.",
+		Style:  "Primera persona sobria; nunca adjetivos de relleno; cita siempre la fuente.",
+		Topics: []string{"politica", "elecciones", "congreso"},
+		Metadata: map[string]any{
+			"who_i_am":      "Soy Lara, periodista politica.",
+			"beat":          "politics",
+			"language":      "espanol neutro",
+			"few_shots_pos": "ejemplo bueno",
+			"few_shots_neg": "ejemplo malo",
+		},
+		CreatedAt: base, UpdatedAt: base,
+	}
+	stored, err := repo.UpsertAuthor(ctx, persona)
+	if err != nil {
+		t.Fatalf("migrate persona: %v", err)
+	}
+	assertAuthorEqual(t, stored, persona)
+
+	// persona.sources -> author_sources links.
+	if err := repo.SetAuthorSources(ctx, persona.Handle, []string{"diario-uno", "gaceta-dos"}); err != nil {
+		t.Fatalf("migrate persona.sources: %v", err)
+	}
+
+	// Read the persona back cold and assert nothing was lost: the profile columns, the
+	// metadata tail (every generation-recipe key), and the hydrated source links.
+	got, found, err := repo.AuthorByHandle(ctx, persona.Handle)
+	if err != nil || !found {
+		t.Fatalf("AuthorByHandle after migration: found=%v err=%v", found, err)
+	}
+	assertAuthorEqual(t, got, persona)
+	if !equalOrdered(got.Sources, []string{"diario-uno", "gaceta-dos"}) {
+		t.Errorf("hydrated Sources = %v, want [diario-uno gaceta-dos]", got.Sources)
+	}
+	for k, v := range persona.Metadata {
+		if got.Metadata[k] != v {
+			t.Errorf("generation-recipe Metadata[%q] = %v, want %v (tail must survive)", k, got.Metadata[k], v)
+		}
+	}
 }

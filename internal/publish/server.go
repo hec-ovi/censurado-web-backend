@@ -21,19 +21,22 @@ import "net/http"
 // leaves media off entirely.
 //
 // When readH is non-nil, the authenticated JSON read API is mounted: GET /authors,
-// GET /topics, GET /portadas, GET /articles, and GET /articles/{slug}. These are
-// method-specific patterns, so GET /articles takes precedence over the method-less
-// /articles write route for GET while POST still reaches the write handler; reads
-// are not rate limited (idempotent, cacheable). A nil readH leaves the read API off,
-// so the write handler keeps answering 405 for a GET /articles.
+// GET /authors/{handle}/sources, GET /topics, GET /portadas, GET /sources, GET
+// /articles, and GET /articles/{slug}. These are method-specific patterns, so GET
+// /articles takes precedence over the method-less /articles write route for GET while
+// POST still reaches the write handler; reads are not rate limited (idempotent,
+// cacheable). A nil readH leaves the read API off, so the write handler keeps
+// answering 405 for a GET /articles.
 //
 // When opH is non-nil, the operator mutation lane is mounted behind ScopeAdminWrite:
-// POST/DELETE/restore for /authors, /topics, and /portadas, and PUT /articles/{slug},
-// DELETE /articles/{slug}, POST /articles/{slug}/restore. These are method-specific
-// patterns that coexist with the method-less /articles write route (PUT/DELETE reach
-// the operator handler, POST still reaches the append-only write handler) and with
-// the read API's GET /articles/{slug}. The operator lane is not rate limited (it is
-// a trusted, low-frequency console). A nil opH leaves the mutation lane off.
+// POST/DELETE/restore for /authors, /topics, /portadas, and /sources, PUT
+// /authors/{handle}/sources (replace an author's attached-source set), and PUT
+// /articles/{slug}, DELETE /articles/{slug}, POST /articles/{slug}/restore. These are
+// method-specific patterns that coexist with the method-less /articles write route
+// (PUT/DELETE reach the operator handler, POST still reaches the append-only write
+// handler) and with the read API's GET /articles/{slug}. The operator lane is not
+// rate limited (it is a trusted, low-frequency console). A nil opH leaves the
+// mutation lane off.
 func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, readH *ReadHandler, opH *OperatorHandler) http.Handler {
 	mux := http.NewServeMux()
 
@@ -53,8 +56,10 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 
 	if readH != nil {
 		mux.HandleFunc("GET /authors", readH.ServeAuthors)
+		mux.HandleFunc("GET /authors/{handle}/sources", readH.ServeAuthorSources)
 		mux.HandleFunc("GET /topics", readH.ServeTopics)
 		mux.HandleFunc("GET /portadas", readH.ServePortadas)
+		mux.HandleFunc("GET /sources", readH.ServeSources)
 		mux.HandleFunc("GET /articles", readH.ServeArticles)
 		mux.HandleFunc("GET /articles/{slug}", readH.ServeArticle)
 	}
@@ -63,12 +68,16 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 		mux.HandleFunc("POST /authors", opH.ServeUpsertAuthor)
 		mux.HandleFunc("DELETE /authors/{handle}", opH.ServeDeleteAuthor)
 		mux.HandleFunc("POST /authors/{handle}/restore", opH.ServeRestoreAuthor)
+		mux.HandleFunc("PUT /authors/{handle}/sources", opH.ServeSetAuthorSources)
 		mux.HandleFunc("POST /topics", opH.ServeUpsertTopic)
 		mux.HandleFunc("DELETE /topics/{slug}", opH.ServeDeleteTopic)
 		mux.HandleFunc("POST /topics/{slug}/restore", opH.ServeRestoreTopic)
 		mux.HandleFunc("POST /portadas", opH.ServeUpsertPortada)
 		mux.HandleFunc("DELETE /portadas/{date}", opH.ServeDeletePortada)
 		mux.HandleFunc("POST /portadas/{date}/restore", opH.ServeRestorePortada)
+		mux.HandleFunc("POST /sources", opH.ServeUpsertSource)
+		mux.HandleFunc("DELETE /sources/{slug}", opH.ServeDeleteSource)
+		mux.HandleFunc("POST /sources/{slug}/restore", opH.ServeRestoreSource)
 		mux.HandleFunc("PUT /articles/{slug}", opH.ServeUpdateArticle)
 		mux.HandleFunc("DELETE /articles/{slug}", opH.ServeDeleteArticle)
 		mux.HandleFunc("POST /articles/{slug}/restore", opH.ServeRestoreArticle)

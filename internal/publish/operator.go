@@ -73,16 +73,26 @@ func decodeStrict(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // ----- authors -----
 
+// authorInput is the POST /authors body. Sources is a pointer so the caller can
+// distinguish "omitted" (leave the attached-source set untouched) from an explicit
+// empty array (detach everything): a nil Sources never touches the author_sources join.
 type authorInput struct {
 	Handle   string         `json:"handle"`
 	Name     string         `json:"name"`
 	Bio      string         `json:"bio"`
 	Avatar   string         `json:"avatar"`
+	Gender   string         `json:"gender"`
+	About    string         `json:"about"`
+	Style    string         `json:"style"`
+	Topics   []string       `json:"topics,omitempty"`
+	Sources  *[]string      `json:"sources,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // ServeUpsertAuthor answers POST /authors: create or update an author keyed on
-// handle. handle is required; a missing one is a 400.
+// handle. handle is required; a missing one is a 400. When sources is present it
+// replaces the author's attached-source set in the same request; when it is omitted
+// the join is left untouched.
 func (oh *OperatorHandler) ServeUpsertAuthor(w http.ResponseWriter, r *http.Request) {
 	if !oh.authz(w, r) {
 		return
@@ -91,17 +101,31 @@ func (oh *OperatorHandler) ServeUpsertAuthor(w http.ResponseWriter, r *http.Requ
 	if !decodeStrict(w, r, &in) {
 		return
 	}
-	if strings.TrimSpace(in.Handle) == "" {
+	handle := strings.TrimSpace(in.Handle)
+	if handle == "" {
 		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "handle is required"})
 		return
 	}
 	a, err := oh.store.UpsertAuthor(r.Context(), store.Author{
-		Handle: strings.TrimSpace(in.Handle), Name: in.Name, Bio: in.Bio,
-		Avatar: in.Avatar, Metadata: in.Metadata,
+		Handle: handle, Name: in.Name, Bio: in.Bio, Avatar: in.Avatar,
+		Gender: in.Gender, About: in.About, Style: in.Style, Topics: in.Topics,
+		Metadata: in.Metadata,
 	})
 	if err != nil {
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
+	}
+	if in.Sources != nil {
+		if err := oh.store.SetAuthorSources(r.Context(), a.Handle, *in.Sources); err != nil {
+			writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+			return
+		}
+		// Re-read so the response carries the freshly hydrated Sources.
+		a, _, err = oh.store.AuthorByHandle(r.Context(), a.Handle)
+		if err != nil {
+			writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, toAuthorJSON(a))
 }
@@ -140,12 +164,16 @@ func (oh *OperatorHandler) ServeRestoreAuthor(w http.ResponseWriter, r *http.Req
 		return
 	}
 	restored, err := oh.store.UpsertAuthor(r.Context(), store.Author{
-		Handle: a.Handle, Name: a.Name, Bio: a.Bio, Avatar: a.Avatar, Metadata: a.Metadata,
+		Handle: a.Handle, Name: a.Name, Bio: a.Bio, Avatar: a.Avatar,
+		Gender: a.Gender, About: a.About, Style: a.Style, Topics: a.Topics,
+		Metadata: a.Metadata,
 	})
 	if err != nil {
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
+	// The author's source links survive a delete/restore (DeleteAuthor never touches
+	// the join), so the re-upserted row hydrates them back into the response.
 	writeJSON(w, http.StatusOK, toAuthorJSON(restored))
 }
 
@@ -310,6 +338,199 @@ func (oh *OperatorHandler) ServeRestorePortada(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, toPortadaJSON(restored))
 }
 
+// ----- sources -----
+
+// validLeans and validFeedTypes are the closed vocabularies the source registry
+// enforces at the HTTP edge (the schema keeps them as plain TEXT for dialect and
+// ALTER neutrality, exactly like articles.section). They mirror the brain's portal
+// enums so a migrated source keeps the same lean and feed_type.
+var validLeans = map[string]bool{"right": true, "neutral": true, "left": true}
+var validFeedTypes = map[string]bool{"auto": true, "native_rss": true, "atom": true, "news_sitemap": true, "site_search": true}
+
+// sourceInput is the POST /sources body. slug is optional: when blank it is derived
+// from the (normalized) domain, so a panel or agent can add a source by URL alone.
+// enabled is a pointer so an omitted flag defaults to true (registered and active)
+// rather than false.
+type sourceInput struct {
+	Slug           string         `json:"slug"`
+	Domain         string         `json:"domain"`
+	Homepage       string         `json:"homepage"`
+	Description    string         `json:"description"`
+	FeedURLs       []string       `json:"feed_urls,omitempty"`
+	FeedType       string         `json:"feed_type"`
+	Language       string         `json:"language"`
+	OwnershipGroup string         `json:"ownership_group"`
+	Lean           string         `json:"lean"`
+	Enabled        *bool          `json:"enabled,omitempty"`
+	Status         string         `json:"status"`
+	LastChecked    string         `json:"last_checked"`
+	LastOK         string         `json:"last_ok"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+// normalizeDomain reduces a URL or host to a bare registrable host: lowercase, no
+// scheme, no leading "www.", no path or query. It mirrors the brain's portal
+// normalization so a source added here keys to the same slug the newsroom used.
+func normalizeDomain(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.TrimPrefix(s, "www.")
+	return strings.Trim(s, ".")
+}
+
+// ServeUpsertSource answers POST /sources: create or update a source keyed on slug.
+// domain is required; slug defaults to the slugified domain. lean and feed_type must
+// be in their closed vocabularies (a bad value is a 400), and the other operational
+// fields default sensibly when blank.
+func (oh *OperatorHandler) ServeUpsertSource(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	var in sourceInput
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	domainName := normalizeDomain(in.Domain)
+	if domainName == "" {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "domain is required"})
+		return
+	}
+	slug := strings.TrimSpace(in.Slug)
+	if slug == "" {
+		slug = domain.Slugify(domainName)
+	}
+	if slug == "" {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "could not derive a slug from the domain"})
+		return
+	}
+	feedType := in.FeedType
+	if feedType == "" {
+		feedType = "auto"
+	}
+	if !validFeedTypes[feedType] {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "feed_type must be one of auto, native_rss, atom, news_sitemap, site_search"})
+		return
+	}
+	lean := in.Lean
+	if lean == "" {
+		lean = "neutral"
+	}
+	if !validLeans[lean] {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "lean must be one of right, neutral, left"})
+		return
+	}
+	language := in.Language
+	if language == "" {
+		language = "es"
+	}
+	status := in.Status
+	if status == "" {
+		status = "unknown"
+	}
+	enabled := true
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
+	src, err := oh.store.UpsertSource(r.Context(), store.Source{
+		Slug: slug, Domain: domainName, Homepage: in.Homepage, Description: in.Description,
+		FeedURLs: in.FeedURLs, FeedType: feedType, Language: language,
+		OwnershipGroup: in.OwnershipGroup, Lean: lean, Enabled: enabled, Status: status,
+		LastChecked: in.LastChecked, LastOK: in.LastOK, Metadata: in.Metadata,
+	})
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceJSON(src))
+}
+
+// ServeDeleteSource answers DELETE /sources/{slug}: soft-delete the source AND detach
+// it from every author (see store.DeleteSource). 404 on a missing slug.
+func (oh *OperatorHandler) ServeDeleteSource(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	err := oh.store.DeleteSource(r.Context(), r.PathValue("slug"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ServeRestoreSource answers POST /sources/{slug}/restore: clear the tombstone by
+// re-upserting the stored row. Its author links were severed at delete time and are
+// NOT restored (re-attach is an explicit act). 404 on a missing slug.
+func (oh *OperatorHandler) ServeRestoreSource(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	src, found, err := oh.store.SourceBySlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	if !found {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	restored, err := oh.store.UpsertSource(r.Context(), store.Source{
+		Slug: src.Slug, Domain: src.Domain, Homepage: src.Homepage, Description: src.Description,
+		FeedURLs: src.FeedURLs, FeedType: src.FeedType, Language: src.Language,
+		OwnershipGroup: src.OwnershipGroup, Lean: src.Lean, Enabled: src.Enabled, Status: src.Status,
+		LastChecked: src.LastChecked, LastOK: src.LastOK, Metadata: src.Metadata,
+	})
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceJSON(restored))
+}
+
+// authorSourcesInput is the PUT /authors/{handle}/sources body: the full attached-
+// source set, replaced wholesale.
+type authorSourcesInput struct {
+	Sources []string `json:"sources"`
+}
+
+// ServeSetAuthorSources answers PUT /authors/{handle}/sources: replace the author's
+// attached-source set. A missing author is a 404. The response echoes the slug-sorted
+// set the store now holds.
+func (oh *OperatorHandler) ServeSetAuthorSources(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	var in authorSourcesInput
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	handle := r.PathValue("handle")
+	err := oh.store.SetAuthorSources(r.Context(), handle, in.Sources)
+	if errors.Is(err, store.ErrNotFound) {
+		writeProblem(w, problem{Status: http.StatusNotFound, Code: "not_found"})
+		return
+	}
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	slugs, err := oh.store.AuthorSources(r.Context(), handle)
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, authorSourcesResponse{Handle: handle, Sources: coalesceTopics(slugs)})
+}
+
 // ----- articles -----
 
 // ServeUpdateArticle answers PUT /articles/{slug}: edit an article in place. The
@@ -400,6 +621,8 @@ func (oh *OperatorHandler) ServeRestoreArticle(w http.ResponseWriter, r *http.Re
 func toAuthorJSON(a store.Author) authorJSON {
 	return authorJSON{
 		Handle: a.Handle, Name: a.Name, Bio: a.Bio, Avatar: a.Avatar,
+		Gender: a.Gender, About: a.About, Style: a.Style,
+		Topics: coalesceTopics(a.Topics), Sources: coalesceTopics(a.Sources),
 		Metadata: coalesceMeta(a.Metadata), Deleted: a.Deleted,
 		CreatedAt: rfc3339(a.CreatedAt), UpdatedAt: rfc3339(a.UpdatedAt),
 	}

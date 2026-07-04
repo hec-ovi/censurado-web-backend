@@ -24,11 +24,13 @@ func TestContract_StoreInterfaces(t *testing.T) {
 		{"SubmissionLog", reflect.TypeOf((*store.SubmissionLog)(nil)).Elem(),
 			[]string{"FindSubmission", "ListSubmissions", "RecordSubmission"}},
 		{"AuthorStore", reflect.TypeOf((*store.AuthorStore)(nil)).Elem(),
-			[]string{"AuthorByHandle", "DeleteAuthor", "ListAuthors", "UpsertAuthor"}},
+			[]string{"AuthorByHandle", "AuthorSources", "DeleteAuthor", "ListAuthors", "SetAuthorSources", "UpsertAuthor"}},
 		{"TopicStore", reflect.TypeOf((*store.TopicStore)(nil)).Elem(),
 			[]string{"DeleteTopic", "ListTopics", "TopicBySlug", "UpsertTopic"}},
 		{"PortadaStore", reflect.TypeOf((*store.PortadaStore)(nil)).Elem(),
 			[]string{"DeletePortada", "ListPortadas", "PortadaByDate", "UpsertPortada"}},
+		{"SourceStore", reflect.TypeOf((*store.SourceStore)(nil)).Elem(),
+			[]string{"DeleteSource", "ListSources", "SourceBySlug", "UpsertSource"}},
 	}
 	for _, c := range cases {
 		got := methodSet(c.typ)
@@ -49,13 +51,15 @@ func TestContract_FilterPublicAxes(t *testing.T) {
 
 func TestContract_OverlayShapes(t *testing.T) {
 	assertFields(t, "store.Author", reflect.TypeOf(store.Author{}),
-		[]string{"ID", "Handle", "Name", "Bio", "Avatar", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
+		[]string{"ID", "Handle", "Name", "Bio", "Avatar", "Gender", "About", "Style", "Topics", "Sources", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
 	assertFields(t, "store.Topic", reflect.TypeOf(store.Topic{}),
 		[]string{"ID", "Slug", "Label", "Description", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
 	assertFields(t, "store.PortadaDay", reflect.TypeOf(store.PortadaDay{}),
 		[]string{"Date", "Entries", "Recomendado", "Deleted", "CreatedAt", "UpdatedAt"})
 	assertFields(t, "store.PortadaEntry", reflect.TypeOf(store.PortadaEntry{}),
 		[]string{"Slug", "Role"})
+	assertFields(t, "store.Source", reflect.TypeOf(store.Source{}),
+		[]string{"ID", "Slug", "Domain", "Homepage", "Description", "FeedURLs", "FeedType", "Language", "OwnershipGroup", "Lean", "Enabled", "Status", "LastChecked", "LastOK", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
 }
 
 func methodSet(t reflect.Type) []string {

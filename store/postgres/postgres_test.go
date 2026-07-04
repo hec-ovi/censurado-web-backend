@@ -22,7 +22,7 @@ func resetPostgres(t *testing.T, dsn string) {
 		t.Fatalf("reset open: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`TRUNCATE articles, article_topics, submissions, authors, topics, portadas RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := db.Exec(`TRUNCATE articles, article_topics, submissions, authors, topics, portadas, sources, author_sources RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("reset truncate: %v", err)
 	}
 }
@@ -199,6 +199,45 @@ func TestPostgresPortadaStore(t *testing.T) {
 	resetPostgres(t, dsn)
 
 	storetest.RunPortadaStore(t, repo)
+}
+
+// TestPostgresSourceStore runs the shared SourceStore conformance suite against a
+// real Postgres when CENSURADO_TEST_POSTGRES_DSN is set, proving the managed-source
+// registry round-trips every field, orders (slug COLLATE "C"), tombstones/re-activates,
+// and detaches from every author on delete byte-identically to SQLite.
+func TestPostgresSourceStore(t *testing.T) {
+	dsn := os.Getenv("CENSURADO_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set CENSURADO_TEST_POSTGRES_DSN to run the Postgres conformance suite")
+	}
+	repo, err := postgres.Open(dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+	resetPostgres(t, dsn)
+
+	storetest.RunSourceStore(t, repo)
+}
+
+// TestPostgresBrainDataMigration runs the faithful brain-data migration proof against
+// a real Postgres when CENSURADO_TEST_POSTGRES_DSN is set, proving a persona (author +
+// profile columns + the generation-recipe metadata tail) and its portals (sources) and
+// source links round-trip through the Postgres registries with no field loss, exactly
+// as they do on SQLite.
+func TestPostgresBrainDataMigration(t *testing.T) {
+	dsn := os.Getenv("CENSURADO_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set CENSURADO_TEST_POSTGRES_DSN to run the Postgres conformance suite")
+	}
+	repo, err := postgres.Open(dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+	resetPostgres(t, dsn)
+
+	storetest.RunBrainDataMigration(t, repo)
 }
 
 // TestPostgresArticleMutations runs the shared article soft-delete + edit

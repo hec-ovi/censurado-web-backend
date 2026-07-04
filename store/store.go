@@ -223,17 +223,28 @@ type SubmissionLog interface {
 }
 
 // Author is a managed author profile: the canonical, operator-owned identity the
-// public site renders and the brain mirrors. Handle is the stable key and matches
-// the articles.author column as a soft string reference (not a foreign key), so
-// existing articles whose author predates this registry are unaffected. Deleted
-// reports whether the author is soft-deleted (tombstoned); a tombstoned author is
-// hidden from the default listing but kept for audit and re-activation.
+// public site renders. Handle is the stable key and matches the articles.author
+// column as a soft string reference (not a foreign key), so existing articles whose
+// author predates this registry are unaffected. Gender, About, Style, and Topics are
+// first-class profile columns an operator (or a self-serve human author) edits over
+// the admin panel: About is the long public about-page text, Style is the author's
+// private voice/writing prompt (a plain field the public site never renders), and
+// Topics is the author's curated profile beats. Sources is the set of source slugs
+// this author reads, held in the author_sources join and hydrated on read (it is not
+// written by UpsertAuthor; use SetAuthorSources). Deleted reports whether the author
+// is soft-deleted (tombstoned); a tombstoned author is hidden from the default listing
+// but kept for audit and re-activation.
 type Author struct {
 	ID        string
 	Handle    string
 	Name      string
 	Bio       string
 	Avatar    string
+	Gender    string
+	About     string
+	Style     string
+	Topics    []string
+	Sources   []string // attached source slugs; read-hydrated from the join, not written by UpsertAuthor
 	Metadata  map[string]any
 	Deleted   bool
 	CreatedAt time.Time
@@ -256,10 +267,21 @@ type AuthorStore interface {
 	AuthorByHandle(ctx context.Context, handle string) (Author, bool, error)
 	// ListAuthors returns authors ordered by handle ascending in byte order, so
 	// the two adapters agree. Tombstoned authors are excluded unless includeDeleted.
+	// Each returned Author has its Sources hydrated from the author_sources join.
 	ListAuthors(ctx context.Context, includeDeleted bool) ([]Author, error)
 	// DeleteAuthor soft-deletes the author by setting a tombstone. Deleting an
 	// absent handle returns ErrNotFound.
 	DeleteAuthor(ctx context.Context, handle string) error
+	// SetAuthorSources replaces the author's attached-source set with sourceSlugs
+	// (deduplicated, blanks dropped) in one transaction. Returns ErrNotFound when no
+	// author has the handle, so a set never leaves orphan links. The slugs are soft
+	// references to sources.slug (not a foreign key), so a source may be attached
+	// before it is registered.
+	SetAuthorSources(ctx context.Context, handle string, sourceSlugs []string) error
+	// AuthorSources returns the author's attached-source slugs, ordered by slug in
+	// byte order. An author with no links returns an empty slice; a missing handle
+	// also returns an empty slice (the join carries no rows for it).
+	AuthorSources(ctx context.Context, handle string) ([]string, error)
 }
 
 // Topic is a managed topic: the canonical, operator-owned topic the public site
@@ -346,4 +368,58 @@ type PortadaStore interface {
 	// DeletePortada soft-deletes the day plan by setting a tombstone. Deleting an
 	// absent date returns ErrNotFound.
 	DeletePortada(ctx context.Context, date string) error
+}
+
+// Source is a managed news source: an outlet the newsroom reads for grounding and
+// cross-checking, and the political-lean axis the sourcing floor balances across.
+// Slug is the stable key (the domain slugified, e.g. "example-com"), like
+// Author.Handle and Topic.Slug; Domain is the bare registrable host and is unique.
+// Lean is the cross-spectrum label ("right"|"neutral"|"left") and FeedType the
+// discovery hint ("auto"|"native_rss"|"atom"|"news_sitemap"|"site_search"); the HTTP
+// layer validates both. Enabled is the operator's discovery toggle (a disabled source
+// stays registered but is skipped by discovery), distinct from Deleted, the tombstone
+// that hides a removed source from the default listing while keeping it for audit and
+// re-activation. Status/LastChecked/LastOK carry the health-checker's last result.
+type Source struct {
+	ID             string
+	Slug           string
+	Domain         string
+	Homepage       string
+	Description    string
+	FeedURLs       []string
+	FeedType       string
+	Language       string
+	OwnershipGroup string
+	Lean           string
+	Enabled        bool
+	Status         string
+	LastChecked    string
+	LastOK         string
+	Metadata       map[string]any
+	Deleted        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// SourceStore is the managed-source registry. It is a separate concern from the
+// article Repository (like the author, topic, and portada registries) so the article
+// contract stays focused even when one adapter implements them all. Writes go through
+// the same single writer as the publish path.
+type SourceStore interface {
+	// UpsertSource creates or updates a source keyed on Slug. On create it sets
+	// CreatedAt and UpdatedAt from the supplied values (defaulting to now when zero);
+	// on an existing slug it updates the mutable fields, advances UpdatedAt, preserves
+	// the stored CreatedAt, and clears any tombstone (re-activating a previously
+	// deleted slug). It returns the stored row.
+	UpsertSource(ctx context.Context, s Source) (Source, error)
+	// SourceBySlug returns the source for the slug, or found=false. A soft-deleted
+	// source is still returned (found=true, Deleted=true).
+	SourceBySlug(ctx context.Context, slug string) (Source, bool, error)
+	// ListSources returns sources ordered by slug ascending in byte order, so the two
+	// adapters agree. Tombstoned sources are excluded unless includeDeleted.
+	ListSources(ctx context.Context, includeDeleted bool) ([]Source, error)
+	// DeleteSource soft-deletes the source by setting a tombstone AND detaches it from
+	// every author (removing its author_sources rows) in one transaction, so no author
+	// keeps reading a removed source. Deleting an absent slug returns ErrNotFound.
+	DeleteSource(ctx context.Context, slug string) error
 }

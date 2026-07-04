@@ -745,26 +745,32 @@ func unmarshalMeta(b []byte) (map[string]any, error) {
 	return m, nil
 }
 
-const authorCols = "id,handle,name,bio,avatar,metadata,deleted_at,created_at,updated_at"
+const authorCols = "id,handle,name,bio,avatar,gender,about,style,topics,metadata,deleted_at,created_at,updated_at"
 
-// scanAuthor decodes one authors row. metadata is JSONB (scanned as bytes) and
-// round-trips through the shared marshal/unmarshal helpers; created_at/updated_at/
-// deleted_at are whole-second RFC3339 TEXT (deleted_at "" means active), so Deleted
-// is derived from the tombstone being non-empty. Identical observable result to the
-// SQLite adapter.
+// scanAuthor decodes one authors row. metadata and topics are JSONB (scanned as
+// bytes) and round-trip through the shared marshal/unmarshal helpers; created_at/
+// updated_at/deleted_at are whole-second RFC3339 TEXT (deleted_at "" means active), so
+// Deleted is derived from the tombstone being non-empty. Sources is NOT scanned here
+// (it lives in the author_sources join); AuthorByHandle and ListAuthors hydrate it
+// after the row scan. Identical observable result to the SQLite adapter.
 func scanAuthor(sc scanner) (store.Author, error) {
 	var (
-		id                        int64
-		handle, name, bio, avatar string
-		deleted, created, updated string
-		meta                      []byte
+		id                                       int64
+		handle, name, bio, avatar, gender, about string
+		style                                    string
+		deleted, created, updated                string
+		topics, meta                             []byte
 	)
-	if err := sc.Scan(&id, &handle, &name, &bio, &avatar, &meta, &deleted, &created, &updated); err != nil {
+	if err := sc.Scan(&id, &handle, &name, &bio, &avatar, &gender, &about, &style, &topics, &meta, &deleted, &created, &updated); err != nil {
 		return store.Author{}, err
 	}
 	m, err := unmarshalMeta(meta)
 	if err != nil {
 		return store.Author{}, err
+	}
+	tp, err := unmarshalStrings(topics)
+	if err != nil {
+		return store.Author{}, fmt.Errorf("unmarshal author topics: %w", err)
 	}
 	createdT, err := time.Parse(time.RFC3339, created)
 	if err != nil {
@@ -780,6 +786,10 @@ func scanAuthor(sc scanner) (store.Author, error) {
 		Name:      name,
 		Bio:       bio,
 		Avatar:    avatar,
+		Gender:    gender,
+		About:     about,
+		Style:     style,
+		Topics:    tp,
 		Metadata:  m,
 		Deleted:   deleted != "",
 		CreatedAt: createdT,
@@ -789,13 +799,19 @@ func scanAuthor(sc scanner) (store.Author, error) {
 
 // UpsertAuthor creates or updates an author keyed on handle. On create it writes
 // the supplied CreatedAt/UpdatedAt (defaulting to now when zero); on an existing
-// handle it updates the mutable fields, advances updated_at, preserves created_at,
-// and clears the tombstone so a previously deleted handle is re-activated. Behavior
-// is identical to the SQLite adapter (proven by the shared conformance suite).
+// handle it updates the mutable fields (including the gender/about/style/topics
+// profile columns), advances updated_at, preserves created_at, and clears the
+// tombstone so a previously deleted handle is re-activated. It does NOT touch the
+// author_sources join; use SetAuthorSources. Behavior is identical to the SQLite
+// adapter (proven by the shared conformance suite).
 func (s *Store) UpsertAuthor(ctx context.Context, a store.Author) (store.Author, error) {
 	meta, err := marshalMeta(a.Metadata)
 	if err != nil {
 		return store.Author{}, err
+	}
+	topics, err := marshalStrings(a.Topics)
+	if err != nil {
+		return store.Author{}, fmt.Errorf("marshal author topics: %w", err)
 	}
 	created := a.CreatedAt
 	if created.IsZero() {
@@ -806,12 +822,13 @@ func (s *Store) UpsertAuthor(ctx context.Context, a store.Author) (store.Author,
 		updated = created
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO authors (handle,name,bio,avatar,metadata,deleted_at,created_at,updated_at)
-		 VALUES ($1,$2,$3,$4,$5::jsonb,'',$6,$7)
+		`INSERT INTO authors (handle,name,bio,avatar,gender,about,style,topics,metadata,deleted_at,created_at,updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,'',$10,$11)
 		 ON CONFLICT (handle) DO UPDATE SET
 		   name=excluded.name, bio=excluded.bio, avatar=excluded.avatar,
+		   gender=excluded.gender, about=excluded.about, style=excluded.style, topics=excluded.topics,
 		   metadata=excluded.metadata, deleted_at='', updated_at=excluded.updated_at`,
-		a.Handle, a.Name, a.Bio, a.Avatar, meta,
+		a.Handle, a.Name, a.Bio, a.Avatar, a.Gender, a.About, a.Style, topics, meta,
 		created.UTC().Truncate(time.Second).Format(time.RFC3339),
 		updated.UTC().Truncate(time.Second).Format(time.RFC3339),
 	); err != nil {
@@ -826,6 +843,7 @@ func (s *Store) UpsertAuthor(ctx context.Context, a store.Author) (store.Author,
 
 // AuthorByHandle returns the author for the handle, or found=false. A soft-deleted
 // author is still returned (found=true, Deleted=true) so callers can re-activate it.
+// The returned author has its Sources hydrated from the author_sources join.
 func (s *Store) AuthorByHandle(ctx context.Context, handle string) (store.Author, bool, error) {
 	a, err := scanAuthor(s.db.QueryRowContext(ctx,
 		`SELECT `+authorCols+` FROM authors WHERE handle = $1`, handle))
@@ -835,12 +853,18 @@ func (s *Store) AuthorByHandle(ctx context.Context, handle string) (store.Author
 	if err != nil {
 		return store.Author{}, false, err
 	}
+	srcs, err := loadAuthorSources(ctx, s.db, []string{a.Handle})
+	if err != nil {
+		return store.Author{}, false, err
+	}
+	a.Sources = srcs[a.Handle]
 	return a, true, nil
 }
 
 // ListAuthors returns authors ordered by handle ascending. The tie-break is pinned
 // to COLLATE "C" (raw byte order) so it matches SQLite's default BINARY collation
-// for any handle set. Tombstoned authors are excluded unless includeDeleted.
+// for any handle set. Tombstoned authors are excluded unless includeDeleted. Each
+// returned author has its Sources hydrated from the author_sources join.
 func (s *Store) ListAuthors(ctx context.Context, includeDeleted bool) ([]store.Author, error) {
 	q := `SELECT ` + authorCols + ` FROM authors`
 	if !includeDeleted {
@@ -853,18 +877,32 @@ func (s *Store) ListAuthors(ctx context.Context, includeDeleted bool) ([]store.A
 	}
 	defer rows.Close()
 	var out []store.Author
+	var handles []string
 	for rows.Next() {
 		a, err := scanAuthor(rows)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, a)
+		handles = append(handles, a.Handle)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	srcs, err := loadAuthorSources(ctx, s.db, handles)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Sources = srcs[out[i].Handle]
+	}
+	return out, nil
 }
 
 // DeleteAuthor soft-deletes the author by setting a whole-second RFC3339 tombstone.
-// Deleting an absent handle returns store.ErrNotFound.
+// The author's source links are left intact so a restore (re-upsert) brings them
+// back; DeleteSource is the path that severs a link. Deleting an absent handle
+// returns store.ErrNotFound.
 func (s *Store) DeleteAuthor(ctx context.Context, handle string) error {
 	now := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
 	res, err := s.db.ExecContext(ctx,
@@ -876,6 +914,100 @@ func (s *Store) DeleteAuthor(ctx context.Context, handle string) error {
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+// loadAuthorSources returns, per author handle, the attached source slugs ordered by
+// slug (COLLATE "C" to match SQLite's BINARY default). One IN-query hydrates many
+// authors, mirroring loadTopics, so ListAuthors does not fan out a query per row. An
+// empty handle set returns an empty map.
+func loadAuthorSources(ctx context.Context, q querier, handles []string) (map[string][]string, error) {
+	out := make(map[string][]string, len(handles))
+	if len(handles) == 0 {
+		return out, nil
+	}
+	ab := &argBuilder{}
+	ph := make([]string, len(handles))
+	for i, h := range handles {
+		ph[i] = ab.next(h)
+	}
+	rows, err := q.QueryContext(ctx,
+		`SELECT author_handle, source_slug FROM author_sources WHERE author_handle IN (`+strings.Join(ph, ",")+`) ORDER BY author_handle COLLATE "C", source_slug COLLATE "C"`,
+		ab.args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var handle, slug string
+		if err := rows.Scan(&handle, &slug); err != nil {
+			return nil, err
+		}
+		out[handle] = append(out[handle], slug)
+	}
+	return out, rows.Err()
+}
+
+// dedupeNonBlank returns the entries of in that are not blank, deduplicated with
+// first-seen order preserved, so a repeated or blank source slug is dropped before it
+// reaches the author_sources primary key. Identical to the SQLite adapter's helper.
+func dedupeNonBlank(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// SetAuthorSources replaces the author's attached-source set in one transaction. It
+// verifies the author exists (ErrNotFound otherwise), then clears and re-inserts the
+// deduplicated, non-blank slugs. Behavior is identical to the SQLite adapter.
+func (s *Store) SetAuthorSources(ctx context.Context, handle string, sourceSlugs []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var one int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM authors WHERE handle = $1`, handle).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM author_sources WHERE author_handle = $1`, handle); err != nil {
+		return fmt.Errorf("clear author sources: %w", err)
+	}
+	for _, slug := range dedupeNonBlank(sourceSlugs) {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO author_sources (author_handle,source_slug) VALUES ($1,$2)`, handle, slug); err != nil {
+			return fmt.Errorf("insert author source: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// AuthorSources returns the author's attached-source slugs ordered by slug. A missing
+// handle or an author with no links returns an empty slice.
+func (s *Store) AuthorSources(ctx context.Context, handle string) ([]string, error) {
+	srcs, err := loadAuthorSources(ctx, s.db, []string{handle})
+	if err != nil {
+		return nil, err
+	}
+	if got := srcs[handle]; got != nil {
+		return got, nil
+	}
+	return []string{}, nil
 }
 
 const topicCols = "id,slug,label,description,metadata,deleted_at,created_at,updated_at"
@@ -1205,4 +1337,168 @@ func (s *Store) DeletePortada(ctx context.Context, date string) error {
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+const sourceCols = "id,slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted_at,created_at,updated_at"
+
+// scanSource decodes one sources row. feed_urls and metadata are JSONB (scanned as
+// bytes) and round-trip through the shared JSON helpers; enabled is a BOOLEAN; the
+// timestamps are whole-second RFC3339 TEXT (deleted_at "" means active). Identical
+// observable result to the SQLite adapter. Shared by SourceBySlug and ListSources.
+func scanSource(sc scanner) (store.Source, error) {
+	var (
+		id                                                           int64
+		slug, domain, homepage, desc, feedType, language, ownership  string
+		lean, status, lastChecked, lastOK, deleted, created, updated string
+		enabled                                                      bool
+		feedURLs, meta                                               []byte
+	)
+	if err := sc.Scan(&id, &slug, &domain, &homepage, &desc, &feedURLs, &feedType, &language, &ownership, &lean, &enabled, &status, &lastChecked, &lastOK, &meta, &deleted, &created, &updated); err != nil {
+		return store.Source{}, err
+	}
+	urls, err := unmarshalStrings(feedURLs)
+	if err != nil {
+		return store.Source{}, fmt.Errorf("unmarshal source feed_urls: %w", err)
+	}
+	m, err := unmarshalMeta(meta)
+	if err != nil {
+		return store.Source{}, err
+	}
+	createdT, err := time.Parse(time.RFC3339, created)
+	if err != nil {
+		return store.Source{}, fmt.Errorf("parse source created_at: %w", err)
+	}
+	updatedT, err := time.Parse(time.RFC3339, updated)
+	if err != nil {
+		return store.Source{}, fmt.Errorf("parse source updated_at: %w", err)
+	}
+	return store.Source{
+		ID:             strconv.FormatInt(id, 10),
+		Slug:           slug,
+		Domain:         domain,
+		Homepage:       homepage,
+		Description:    desc,
+		FeedURLs:       urls,
+		FeedType:       feedType,
+		Language:       language,
+		OwnershipGroup: ownership,
+		Lean:           lean,
+		Enabled:        enabled,
+		Status:         status,
+		LastChecked:    lastChecked,
+		LastOK:         lastOK,
+		Metadata:       m,
+		Deleted:        deleted != "",
+		CreatedAt:      createdT,
+		UpdatedAt:      updatedT,
+	}, nil
+}
+
+// UpsertSource creates or updates a source keyed on slug. Behavior is identical to
+// the SQLite adapter (proven by the shared conformance suite): an existing slug is
+// updated in place, updated_at advances, created_at is preserved, and the tombstone
+// is cleared so a previously deleted slug is re-activated.
+func (s *Store) UpsertSource(ctx context.Context, src store.Source) (store.Source, error) {
+	urls, err := marshalStrings(src.FeedURLs)
+	if err != nil {
+		return store.Source{}, fmt.Errorf("marshal source feed_urls: %w", err)
+	}
+	meta, err := marshalMeta(src.Metadata)
+	if err != nil {
+		return store.Source{}, err
+	}
+	created := src.CreatedAt
+	if created.IsZero() {
+		created = time.Now()
+	}
+	updated := src.UpdatedAt
+	if updated.IsZero() {
+		updated = created
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO sources (slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted_at,created_at,updated_at)
+		 VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'',$15,$16)
+		 ON CONFLICT (slug) DO UPDATE SET
+		   domain=excluded.domain, homepage=excluded.homepage, description=excluded.description,
+		   feed_urls=excluded.feed_urls, feed_type=excluded.feed_type, language=excluded.language,
+		   ownership_group=excluded.ownership_group, lean=excluded.lean, enabled=excluded.enabled,
+		   status=excluded.status, last_checked=excluded.last_checked, last_ok=excluded.last_ok,
+		   metadata=excluded.metadata, deleted_at='', updated_at=excluded.updated_at`,
+		src.Slug, src.Domain, src.Homepage, src.Description, urls, src.FeedType, src.Language,
+		src.OwnershipGroup, src.Lean, src.Enabled, src.Status, src.LastChecked, src.LastOK, meta,
+		created.UTC().Truncate(time.Second).Format(time.RFC3339),
+		updated.UTC().Truncate(time.Second).Format(time.RFC3339),
+	); err != nil {
+		return store.Source{}, fmt.Errorf("upsert source: %w", err)
+	}
+	got, _, err := s.SourceBySlug(ctx, src.Slug)
+	if err != nil {
+		return store.Source{}, err
+	}
+	return got, nil
+}
+
+// SourceBySlug returns the source for the slug, or found=false. A soft-deleted source
+// is still returned (found=true, Deleted=true) so callers can re-activate it.
+func (s *Store) SourceBySlug(ctx context.Context, slug string) (store.Source, bool, error) {
+	src, err := scanSource(s.db.QueryRowContext(ctx,
+		`SELECT `+sourceCols+` FROM sources WHERE slug = $1`, slug))
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.Source{}, false, nil
+	}
+	if err != nil {
+		return store.Source{}, false, err
+	}
+	return src, true, nil
+}
+
+// ListSources returns sources ordered by slug ascending. The order is pinned to
+// COLLATE "C" (raw byte order) so it matches SQLite's default BINARY collation for
+// any slug set. Tombstoned sources are excluded unless includeDeleted.
+func (s *Store) ListSources(ctx context.Context, includeDeleted bool) ([]store.Source, error) {
+	q := `SELECT ` + sourceCols + ` FROM sources`
+	if !includeDeleted {
+		q += ` WHERE deleted_at = ''`
+	}
+	q += ` ORDER BY slug COLLATE "C" ASC`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.Source
+	for rows.Next() {
+		src, err := scanSource(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, src)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSource soft-deletes the source by setting a whole-second RFC3339 tombstone
+// AND detaches it from every author (removing its author_sources rows), in one
+// transaction. Behavior is identical to the SQLite adapter. Deleting an absent slug
+// returns store.ErrNotFound.
+func (s *Store) DeleteSource(ctx context.Context, slug string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
+	res, err := tx.ExecContext(ctx,
+		`UPDATE sources SET deleted_at = $1, updated_at = $2 WHERE slug = $3`, now, now, slug)
+	if err != nil {
+		return fmt.Errorf("delete source: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM author_sources WHERE source_slug = $1`, slug); err != nil {
+		return fmt.Errorf("detach source from authors: %w", err)
+	}
+	return tx.Commit()
 }
