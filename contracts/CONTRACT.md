@@ -1,0 +1,161 @@
+# The frozen backend contract (Layer 2)
+
+The backend (`censurado-web-backend`) is the source of truth for all content. It exposes **two**
+contract surfaces, and both are frozen: a consumer that changes on either side must change this file
+and the conformance tests in the same commit.
+
+- **Seam A (Go data shape).** The static-site generator (`censurado-web`, Layer 1) depends on this
+  repo at compile time (a Go `replace` in its `go.mod`) and reads content by calling the `store`
+  interfaces over `domain.Article`. Seam A is the exported `domain` + `store` types the generator
+  touches, plus the `Metadata` key vocabulary.
+- **Seam B (HTTP API).** The brain / CLI (Layer 3) and the admin panel consume the backend only over
+  HTTP, bearer-authenticated, `application/problem+json` on error. Seam B is the route table below.
+
+The rule: Layer 1 and Layer 3 can be edited in isolation as long as their seam holds. The
+conformance tests fail the moment a seam drifts, so the freeze is enforced, not documented on trust.
+
+Guardrails:
+- Seam A shapes: `domain/contract_shape_test.go`, `store/contract_interface_test.go`.
+- Seam A `Metadata` vocabulary: `censurado-web/internal/generate/contract_metadata_test.go` (lives
+  with its consumer).
+- Seam B route table + read shapes: `internal/publish/contract_conformance_test.go`.
+- Publish input shape: `contracts/article.schema.json` (+ batch request/response schemas).
+
+## How to change the contract (deliberately)
+
+1. Edit this file and the relevant conformance test in the same change.
+2. Update every consumer that the change touches (generator for Seam A, panel + CLI for Seam B).
+3. Re-run all suites. A green run with an updated CONTRACT.md is a conscious re-freeze; a red run
+   without one is drift.
+
+---
+
+## Seam A: the Go data shape (Layer 1 consumes)
+
+Layer 1 imports this module and reads content through the `store` interfaces. It never fetches over
+HTTP at build time.
+
+### `domain.Article` (the record the generator renders)
+
+Exact exported field set and JSON tags (frozen by `domain/contract_shape_test.go`):
+
+| Field | Type | JSON tag |
+|---|---|---|
+| ID | string | `id` |
+| Slug | string | `slug` |
+| Title | string | `title` |
+| Body | string (markdown) | `body` |
+| Author | string | `author` |
+| Section | string | `section` |
+| Topics | []string | `topics` |
+| PublishedAt | time.Time | `published_at` |
+| ContentHash | string | `content_hash` |
+| Metadata | map[string]any | `metadata,omitempty` |
+| Deleted | bool | `deleted,omitempty` (server-derived, never hashed) |
+| CreatedAt | time.Time | `created_at` |
+
+`ContentHash` is SHA-256 over length-prefixed `title|body|author|section` (dedup/idempotency
+identity). `HasMedia()` is a pure server-derived function of body + metadata, never stored.
+
+### `domain.PublishInput` (what an author agent submits)
+
+Fields: `title`, `body`, `author`, `section`, `topics?`, `slug?`, `published_at?`, `metadata?`.
+Server-owned `id`/`content_hash`/`created_at` are never accepted. Mirrors
+`contracts/article.schema.json`.
+
+### The `store` interfaces the generator depends on
+
+Frozen method sets (see `store/contract_interface_test.go`). The generator reads via a subset; the
+whole set is frozen so an adapter swap stays proven:
+
+- `Repository`: Upsert, UpsertMany, BySlug, **Find**, Count, Facets, UpdateArticle, DeleteArticle,
+  RestoreArticle, Close. The generator uses **`Find(ctx, store.Filter{Order: OldestFirst})`** with the
+  zero Filter, so tombstoned rows never reach it.
+- `AuthorStore`: UpsertAuthor, AuthorByHandle, **ListAuthors**, DeleteAuthor.
+- `TopicStore`: UpsertTopic, TopicBySlug, **ListTopics**, DeleteTopic.
+- `PortadaStore`: UpsertPortada, PortadaByDate, **ListPortadas**, DeletePortada.
+- `SubmissionLog`: FindSubmission, RecordSubmission, ListSubmissions (audit/idempotency, not read by
+  the generator).
+
+`store.Filter` public axes (frozen): the scalar hot axes `Section`, `Author`, `Topic` plus
+`From`, `To`, `Order`, `Limit`, `Offset`, `IncludeDeleted` are the **public generator surface** and
+keep their exact meaning. The plural `Sections`/`Authors`/`Topics` slices, `Query`, and `Facets` are
+an admin-only widening.
+
+Overlay types the generator reads: `store.Author` (Handle, Name, Bio, Avatar, Metadata, Deleted,
+CreatedAt, UpdatedAt), `store.Topic`, `store.PortadaDay` (Date, Entries, Recomendado, ...),
+`store.PortadaEntry` (Slug, Role).
+
+### The `Metadata` key vocabulary (a hidden, shared contract)
+
+`Article.Metadata` is untyped JSON at the DB, but Layer 3 writes specific keys at publish and Layer 1
+reads them at render. The key set IS a contract even though nothing enforces it at the column. Frozen
+keys (guarded in the generator by `contract_metadata_test.go`):
+
+`subtitle`, `description`, `image`, `image_alt`, `alt`, `author_name`, `author_bio`,
+`author_avatar`, `avatar`, `youtube`, `youtube_id`, `video`, `keywords`, `tweets`, `media_checks`,
+`gender`, `beat`, `profile_topics`.
+
+`tweets` entries carry: id, text, url, name, handle, avatar, verified, erased, views, replies,
+retweets, likes, bookmarks, created_timestamp, created_at. `media_checks[id].available` gates the
+"video eliminado" placeholder.
+
+> Note (M3 target): `gender`, `beat`, `profile_topics`, and the author `style`/voice are today carried
+> as untyped keys (in article or author metadata). M3 promotes the author fields to first-class
+> backend columns and moves sources into the backend; when it lands, this vocabulary and the author
+> shape above are updated and re-frozen.
+
+---
+
+## Seam B: the HTTP API (Layer 3 + panel consume)
+
+One Go 1.22 `net/http` ServeMux (`internal/publish/server.go`). Auth: `Authorization: Bearer
+<prefix>.<secret>` (SHA-256 hashed key table), each key bound to one author with a scope set. Errors:
+`application/problem+json {status, code, detail, fields}`. The `/articles` pattern is registered
+method-less so it dispatches by method: POST -> publish, GET -> read, PUT/DELETE -> operator; the `:`
+in `/articles:batch` is a literal path byte, no collision.
+
+### Lane 1: liveness (no auth)
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/healthz` | 200 `text/plain` `ok`. Matched before auth/limiter. |
+
+### Lane 2: publish / write (scope `articles:write`, rate-limited)
+
+| Method | Path | In | Out |
+|---|---|---|---|
+| POST | `/articles` | `Idempotency-Key` header (required) + PublishInput JSON (strict, max 8 MiB). `author` must equal the key's author unless it holds `articles:publish-any`. | 201 created / 200 idempotent replay `{id, slug}`. Errors: 401, 403 insufficient_scope/author_mismatch, 400 missing_idempotency_key/invalid_json, 422 validation_failed{fields}/unrenderable_body/idempotency_key_reused, 405. |
+| POST | `/articles:batch` | `{articles:[PublishInput + idempotency_key]}`, max 500 items, atomic. | 201/200 `{results:[{index,id,slug,status}]}`. Errors add 413, 422 too_many_items, per-item duplicate_idempotency_key/duplicate_slug. Charged one rate token. |
+| POST | `/media` | Raw image bytes (jpg/png/gif/webp), 16 MiB cap. Only mounted when a media dir is configured. | 201 `{name, url:"/media/<sha256>.<ext>", content_type, size, sha256}`. Errors: 401/403, 415, 413, 400 empty_image, 405. |
+
+### Lane 3: read (any valid token, no scope, not rate-limited)
+
+| Method | Path | Out |
+|---|---|---|
+| GET | `/authors` | `{authors:[{handle,name,bio,avatar,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
+| GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
+| GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
+| GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,deleted,content_hash}], total}` (body omitted from list items). Query -> Filter: section, author, topic, q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
+| GET | `/articles/{slug}` | Full article incl. `body`. A soft-deleted article is still returned with `deleted=true`. 404 not_found. |
+| GET | `/media/{name}` | Public, keyless, immutable-cached raw image. `name` must match `^[a-f0-9]{64}\.(jpg\|png\|gif\|webp)$`. 404 not_found. |
+
+### Lane 4: operator / admin write (scope `admin:write`, not rate-limited)
+
+`admin:write` is deliberately distinct from `articles:write`, so an agent publish key can never reach
+edit/delete.
+
+| Method | Path | In | Out |
+|---|---|---|---|
+| POST | `/authors` | `{handle*, name, bio, avatar, metadata}` (upsert) | 200 |
+| DELETE | `/authors/{handle}` | | 204 (404 on absent handle) |
+| POST | `/authors/{handle}/restore` | | 200 (404 on absent) |
+| POST | `/topics` | `{slug*, label, description, metadata}` (upsert) | 200 |
+| DELETE | `/topics/{slug}` | | 204 |
+| POST | `/topics/{slug}/restore` | | 200 |
+| POST | `/portadas` | `{date*, entries:[{slug,role}], recomendado}` (replaced wholesale) | 200 (400 on missing date) |
+| DELETE | `/portadas/{date}` | | 204 |
+| POST | `/portadas/{date}/restore` | | 200 |
+| PUT | `/articles/{slug}` | `{title,body,author,section,topics?,metadata?}`; `id/slug/created_at` preserved | 200 (404 not_found, 409 edit_conflict on content-hash collision) |
+| DELETE | `/articles/{slug}` | | 204 |
+| POST | `/articles/{slug}/restore` | | 204 |
