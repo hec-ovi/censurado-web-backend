@@ -2740,6 +2740,87 @@ button.secondary.danger:hover {
   background: var(--surface-2);
 }
 
+/* Drag-and-drop reorder. A grip sits with the up/down buttons; the buttons and
+   the size select stay the keyboard/touch fallback (a pointer-only grip cannot
+   be the sole path). */
+.portada-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+}
+.portada-drag-handle:active {
+  cursor: grabbing;
+}
+.portada-card-row.dragging {
+  opacity: 0.5;
+}
+
+/* Snap zones: hidden until a drag is in flight, then they overlay each card so a
+   dropped card can land on another card's left/right half (reorder, half width)
+   or on the full-row band (mark important, span the row). */
+.portada-dropzones {
+  display: none;
+}
+.portada-list.dragging .portada-dropzones {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  padding: 6px;
+}
+.portada-drop {
+  border: 2px dashed transparent;
+  border-radius: 4px;
+}
+.portada-drop-before {
+  grid-column: 1;
+  grid-row: 1;
+}
+.portada-drop-after {
+  grid-column: 2;
+  grid-row: 1;
+}
+.portada-drop-full {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+}
+.portada-drop-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  pointer-events: none;
+}
+.portada-drop.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.portada-drop.over .portada-drop-label {
+  color: var(--text-strong);
+}
+@media (hover: none) {
+  .portada-drag-handle {
+    display: none;
+  }
+}
+
 .portada-recomendado {
   align-content: start;
   gap: 8px;
