@@ -46,6 +46,33 @@ function mount() {
   return panel;
 }
 
+// jsdom implements no native HTML5 drag-and-drop pipeline and user-event has no
+// drag helper, so we hand-build a minimal DataTransfer and fire the real drag
+// events the component listens for.
+function makeDataTransfer() {
+  const store = new Map();
+  return {
+    effectAllowed: "",
+    dropEffect: "",
+    setData: (k, v) => store.set(k, String(v)),
+    getData: (k) => store.get(k) ?? "",
+    setDragImage: () => {},
+  };
+}
+
+function fireDrag(type, target, dataTransfer) {
+  // Build the event from the target's own jsdom window: Node's built-in global
+  // Event shadows jsdom's, and jsdom's dispatchEvent rejects a foreign Event.
+  const view = target.ownerDocument.defaultView;
+  const ev = new view.Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, "dataTransfer", { value: dataTransfer, configurable: true });
+  target.dispatchEvent(ev);
+  return ev;
+}
+
+const rows = () => [...document.querySelectorAll(".portada-row")];
+const rowFor = (slug) => rows().find((r) => r.dataset.slug === slug);
+
 test("groups articles by published day and marks the first row as the lead", async () => {
   stub({
     articles: [
@@ -153,4 +180,74 @@ test("prefills the selected day's order and roles from an existing plan", async 
   await user.click(screen.getByRole("tab", { name: /recomendado/i }));
   assert.equal(screen.getByRole("checkbox", { name: "Bravo" }).checked, true);
   assert.equal(screen.getByRole("checkbox", { name: "Alpha" }).checked, false);
+});
+
+test("dragging a card onto another card's full-row zone reorders it and marks it full width", async () => {
+  let posted = null;
+  stub({
+    articles: [
+      article({ slug: "a", title: "Alpha", published_at: "2026-06-30T09:00:00Z" }),
+      article({ slug: "b", title: "Bravo", published_at: "2026-06-30T08:00:00Z" }),
+      article({ slug: "c", title: "Charlie", published_at: "2026-06-30T07:00:00Z" }),
+    ],
+    onPost: (body) => (posted = body),
+  });
+  const user = userEvent.setup();
+  const panel = mount();
+  await panel.reload();
+
+  // Order starts a, b, c. Grab Charlie's handle and drop it on Alpha's full-row
+  // band: Charlie lands before Alpha and becomes a full-width (important) card.
+  const dt = makeDataTransfer();
+  fireDrag("dragstart", rowFor("c").querySelector(".portada-drag-handle"), dt);
+  const fullZone = rowFor("a").querySelector(".portada-drop-full");
+  fireDrag("dragover", fullZone, dt);
+  fireDrag("drop", fullZone, dt);
+
+  // The in-memory order and the widened role are reflected immediately.
+  assert.deepEqual(rows().map((r) => r.dataset.slug), ["c", "a", "b"]);
+  assert.equal(rowFor("c").dataset.role, "important");
+
+  await user.click(screen.getByRole("button", { name: "Guardar portada" }));
+  await waitFor(() => assert.ok(posted, "the save issued a POST"));
+  assert.deepEqual(posted.entries, [
+    { slug: "c", role: "important" },
+    { slug: "a", role: "" },
+    { slug: "b", role: "" },
+  ]);
+  await screen.findByText("Portada guardada.");
+});
+
+test("dropping a card on another card's right zone reorders it as a half-width card", async () => {
+  let posted = null;
+  stub({
+    articles: [
+      article({ slug: "a", title: "Alpha", published_at: "2026-06-30T09:00:00Z" }),
+      article({ slug: "b", title: "Bravo", published_at: "2026-06-30T08:00:00Z" }),
+      article({ slug: "c", title: "Charlie", published_at: "2026-06-30T07:00:00Z" }),
+    ],
+    onPost: (body) => (posted = body),
+  });
+  const user = userEvent.setup();
+  const panel = mount();
+  await panel.reload();
+
+  // Order starts a, b, c. Drop Alpha on Charlie's right (after) zone: Alpha lands
+  // after Charlie and stays a normal half-width card (role "").
+  const dt = makeDataTransfer();
+  fireDrag("dragstart", rowFor("a").querySelector(".portada-drag-handle"), dt);
+  const afterZone = rowFor("c").querySelector(".portada-drop-after");
+  fireDrag("dragover", afterZone, dt);
+  fireDrag("drop", afterZone, dt);
+
+  assert.deepEqual(rows().map((r) => r.dataset.slug), ["b", "c", "a"]);
+  assert.equal(rowFor("a").dataset.role, "");
+
+  await user.click(screen.getByRole("button", { name: "Guardar portada" }));
+  await waitFor(() => assert.ok(posted, "the save issued a POST"));
+  assert.deepEqual(posted.entries, [
+    { slug: "b", role: "" },
+    { slug: "c", role: "" },
+    { slug: "a", role: "" },
+  ]);
 });

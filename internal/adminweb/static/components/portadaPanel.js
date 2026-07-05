@@ -16,6 +16,7 @@ export function PortadaPanel({ api } = {}) {
   let order = [];
   const roles = new Map();
   const recomendado = new Set();
+  let dragSlug = null;
 
   const daySelect = el("select", { id: "portada-day", onChange: (e) => selectDay(e.target.value) });
   const listEl = el("div", { class: "portada-list scroll-pane" });
@@ -112,6 +113,7 @@ export function PortadaPanel({ api } = {}) {
 
   function renderList() {
     clear(listEl);
+    listEl.classList.remove("dragging");
     if (!order.length) {
       listEl.append(el("p", { class: "muted empty-state" }, t("No articles yet.")));
       return;
@@ -134,6 +136,23 @@ export function PortadaPanel({ api } = {}) {
       role.value = roles.get(article.slug) || "";
       role.addEventListener("change", () => roles.set(article.slug, role.value));
 
+      // Native drag-and-drop: a dedicated grip starts the drag; the up/down
+      // buttons and the size select stay as the keyboard/touch/accessible path.
+      // Dropping a card on another card's left or right zone reorders it (half
+      // width); dropping on the full-row band marks it important so it spans the
+      // row. Reorder happens only on drop, so renderList never fights the drag.
+      const handle = el(
+        "div",
+        { class: "portada-drag-handle", draggable: "true", "aria-hidden": "true", title: t("Drag to reorder") },
+        "⠿",
+      );
+
+      const dropzones = el("div", { class: "portada-dropzones", "aria-hidden": "true" }, [
+        dropZone("before", article.slug, "before", "", t("Place before {title}", { title: article.title })),
+        dropZone("after", article.slug, "after", "", t("Place after {title}", { title: article.title })),
+        dropZone("full", article.slug, "before", "important", t("Make {title} a full row", { title: article.title })),
+      ]);
+
       const row = el(
         "div",
         {
@@ -148,19 +167,86 @@ export function PortadaPanel({ api } = {}) {
           miniPreview(article, isLead),
           el("div", { class: "portada-order-overlay" }, [
             el("span", { class: "portada-index" }, isLead ? t("Portada") : String(i + 1)),
-            el("div", { class: "portada-move" }, [up, down]),
+            el("div", { class: "portada-move" }, [handle, up, down]),
           ]),
           el("div", { class: "portada-role-wrap" }, [el("span", { class: "field-label" }, t("Card size")), role]),
+          dropzones,
         ],
       );
+
+      handle.addEventListener("dragstart", (e) => {
+        dragSlug = article.slug;
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", article.slug);
+          try {
+            e.dataTransfer.setDragImage(row, 0, 0);
+          } catch {
+            /* jsdom and a few browsers reject setDragImage; the drag still works. */
+          }
+        }
+        row.classList.add("dragging");
+        listEl.classList.add("dragging");
+      });
+      handle.addEventListener("dragend", finishDrag);
+
       listEl.append(row);
     });
+  }
+
+  // One drop target inside a card. kind drives the visual zone; position/role
+  // say where the dragged card lands and whether it becomes a full-row card.
+  function dropZone(kind, targetSlug, position, role, label) {
+    const children = kind === "full" ? [el("span", { class: "portada-drop-label" }, t("Full row"))] : [];
+    const zone = el("div", { class: `portada-drop portada-drop-${kind}`, "aria-hidden": "true", title: label }, children);
+    zone.addEventListener("dragover", (e) => {
+      if (dragSlug == null) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      zone.classList.add("over");
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("over");
+      dropReorder(targetSlug, position, role);
+    });
+    return zone;
+  }
+
+  function finishDrag() {
+    dragSlug = null;
+    listEl.classList.remove("dragging");
   }
 
   function move(from, to) {
     if (to < 0 || to >= order.length) return;
     const [item] = order.splice(from, 1);
     order.splice(to, 0, item);
+    renderList();
+  }
+
+  // Drop the dragged card next to (or in place of) the target and set its role.
+  // Works on slugs so the array splice never depends on stale indices.
+  function dropReorder(targetSlug, position, role) {
+    if (dragSlug == null) return;
+    const fromSlug = dragSlug;
+    finishDrag();
+    if (fromSlug === targetSlug) {
+      if ((roles.get(fromSlug) || "") !== role) {
+        roles.set(fromSlug, role);
+        renderList();
+      }
+      return;
+    }
+    const from = order.findIndex((a) => a.slug === fromSlug);
+    if (from < 0) return;
+    const [item] = order.splice(from, 1);
+    let to = order.findIndex((a) => a.slug === targetSlug);
+    if (to < 0) to = order.length;
+    if (position === "after") to += 1;
+    order.splice(to, 0, item);
+    roles.set(fromSlug, role);
     renderList();
   }
 
