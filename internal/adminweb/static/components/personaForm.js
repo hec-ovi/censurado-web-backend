@@ -2,10 +2,11 @@ import { el, clear, field, help, isSafeImageSrc } from "./el.js";
 import { t } from "./i18n.js";
 import { slugify } from "../slugify.js";
 
-// The harness's closed section vocabulary, mirrored from the backend's sections so
-// the beat picker can only offer valid beats. Beat is carried in the author's
-// metadata (the backend author row has no beat column of its own).
-export const SECTIONS = ["tech", "world", "politics", "economics"];
+// The site's canonical section vocabulary: the sections the public nav presents, so the
+// beat picker only offers real beats. It mirrors the generator's section nav. The legacy
+// `economics` value folds into `misterio-y-conspiracion` at render, so it is not offered
+// here. Beat is carried in the author's metadata (the author row has no beat column).
+export const SECTIONS = ["politics", "world", "misterio-y-conspiracion", "tech", "literatura"];
 
 // Gender options for the byline voice. Blank is allowed (unset).
 export const GENDERS = ["female", "male", "nonbinary"];

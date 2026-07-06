@@ -127,6 +127,28 @@ test("a blank beat keeps the form in its invalid state with no POST", async () =
   assert.equal(screen.getByLabelText(/^beat$/i).getAttribute("aria-invalid"), "true");
 });
 
+test("editing an author with a legacy off-list beat preserves that beat", async () => {
+  server.use(
+    http.get(`${ORIGIN}/authors`, () =>
+      HttpResponse.json({
+        authors: [{ handle: "leg", name: "Legacy Writer", avatar: "", style: "", about: "", gender: "", topics: [], sources: [], metadata: { beat: "removed-section", who_i_am: "old hand" }, deleted: false }],
+      })),
+    http.get(`${ORIGIN}/sources`, () => HttpResponse.json({ sources: [] })),
+    http.get(`${ORIGIN}/authors/leg/sources`, () => HttpResponse.json({ handle: "leg", sources: [] })),
+  );
+  const user = userEvent.setup();
+  const { list } = mount();
+  await list.reload();
+
+  const card = (await screen.findByText("Legacy Writer")).closest(".persona-card");
+  await user.click(within(card).getByRole("button", { name: /^edit$/i }));
+  const dialog = await screen.findByRole("dialog", { name: /legacy writer/i });
+  // The beat picker only offers canonical sections, but an author sitting on a removed or
+  // renamed section keeps their value: the select shows it, so saving another field cannot
+  // silently rewrite the beat to the first canonical option.
+  assert.equal(within(dialog).getByLabelText(/^beat$/i).value, "removed-section");
+});
+
 test("source-link saves the checked source slugs via PUT /authors/{handle}/sources", async () => {
   let putBody = null;
   server.use(

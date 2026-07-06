@@ -127,7 +127,11 @@ export function PersonaList({ api, onChanged } = {}) {
     const handle = author.handle;
     const meta = author.metadata || {};
     const displayName = el("input", { type: "text", id: `pe-${handle}-name`, value: author.name || "" });
-    const beat = el("select", { id: `pe-${handle}-beat` }, SECTIONS.map((s) => el("option", { value: s }, s)));
+    // Offer the canonical sections, but keep the author's current beat selectable even if
+    // it is a legacy/off-list value (a removed or renamed section), so editing another
+    // field never silently rewrites the beat to the first option.
+    const beatOptions = meta.beat && !SECTIONS.includes(meta.beat) ? [meta.beat, ...SECTIONS] : SECTIONS;
+    const beat = el("select", { id: `pe-${handle}-beat` }, beatOptions.map((s) => el("option", { value: s }, s)));
     beat.value = meta.beat || SECTIONS[0];
     const gender = el("select", { id: `pe-${handle}-gender` }, [
       el("option", { value: "" }, t("Unspecified")),
