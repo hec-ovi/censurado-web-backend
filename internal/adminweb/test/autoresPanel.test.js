@@ -24,8 +24,13 @@ function mount() {
   return { list, form };
 }
 
+function sourcesHandler(sources = []) {
+  return http.get(`${ORIGIN}/sources`, () => HttpResponse.json({ sources }));
+}
+
 test("lists authors from the backend /authors (beat lives in metadata)", async () => {
   server.use(
+    sourcesHandler(),
     http.get(`${ORIGIN}/authors`, () =>
       HttpResponse.json({
         authors: [
@@ -37,14 +42,15 @@ test("lists authors from the backend /authors (beat lives in metadata)", async (
   await list.reload();
 
   const heading = await screen.findByText("Ada Lovelace");
-  const card = heading.closest(".persona-card");
-  assert.ok(card);
-  assert.ok(within(card).getByText("tech"));
-  assert.ok(within(card).getByText("Computing pioneer"));
+  const row = heading.closest(".persona-row");
+  assert.ok(row);
+  assert.ok(within(row).getByText("tech"));
+  assert.ok(within(row).getByText("Computing pioneer"));
+  assert.equal(within(row).queryByRole("button", { name: /^edit$/i }), null);
 });
 
 test("renders a clean zero-state for an empty author registry", async () => {
-  server.use(http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })));
+  server.use(sourcesHandler(), http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })));
   const { list } = mount();
   await list.reload();
 
@@ -55,10 +61,11 @@ test("create upserts a backend author: derived handle + metadata beat/who-i-am/l
   let posted = null;
   let created = false;
   server.use(
+    sourcesHandler([{ slug: "example-com", domain: "example.com", description: "Example", lean: "neutral", enabled: true, feed_urls: [], metadata: {} }]),
     http.get(`${ORIGIN}/authors`, () =>
       HttpResponse.json({
         authors: created
-          ? [{ handle: "ada-reporter", name: "Ada Reporter", avatar: "", style: "", about: "", gender: "female", topics: ["politics"], sources: [], metadata: { beat: "world", who_i_am: "world desk" }, deleted: false }]
+          ? [{ handle: "ada-reporter", name: "Ada Reporter", avatar: "/media/ada.png", style: "", about: "", gender: "female", topics: [], sources: ["example-com"], metadata: { beat: "world", who_i_am: "world desk" }, deleted: false }]
           : [],
       })),
     http.post(`${ORIGIN}/authors`, async ({ request }) => {
@@ -81,6 +88,7 @@ test("create upserts a backend author: derived handle + metadata beat/who-i-am/l
   await user.type(screen.getByLabelText(/who i am/i), "covers the world desk");
   await user.type(screen.getByLabelText(/^style$/i), "plain and direct");
   await user.type(screen.getByLabelText(/^about$/i), "World desk reporter");
+  await user.click(await screen.findByLabelText("example.com"));
   await user.click(screen.getByRole("button", { name: /create author/i }));
 
   await waitFor(() => assert.ok(posted, "a POST should have been sent"));
@@ -96,6 +104,7 @@ test("create upserts a backend author: derived handle + metadata beat/who-i-am/l
   assert.equal(posted.metadata.who_i_am, "covers the world desk");
   assert.equal(posted.metadata.language, "es");
   assert.equal(posted.topics, undefined);
+  assert.deepEqual(posted.sources, ["example-com"]);
   // The roster reloads and shows the new author.
   await screen.findByText("Ada Reporter");
   assert.equal(screen.queryByText(/no authors yet/i), null);
@@ -104,6 +113,7 @@ test("create upserts a backend author: derived handle + metadata beat/who-i-am/l
 test("a blank beat keeps the form in its invalid state with no POST", async () => {
   let posted = false;
   server.use(
+    sourcesHandler(),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
     http.post(`${ORIGIN}/authors`, () => {
       posted = true;
@@ -128,37 +138,118 @@ test("a blank beat keeps the form in its invalid state with no POST", async () =
 });
 
 test("editing an author with a legacy off-list beat preserves that beat", async () => {
+  let posted = null;
   server.use(
+    sourcesHandler(),
     http.get(`${ORIGIN}/authors`, () =>
       HttpResponse.json({
-        authors: [{ handle: "leg", name: "Legacy Writer", avatar: "", style: "", about: "", gender: "", topics: [], sources: [], metadata: { beat: "removed-section", who_i_am: "old hand" }, deleted: false }],
+        authors: [{ handle: "leg", name: "Legacy Writer", avatar: "/media/legacy.png", style: "old style", about: "old about", gender: "female", topics: [], sources: [], metadata: { beat: "removed-section", who_i_am: "old hand", language: "es" }, deleted: false }],
       })),
     http.get(`${ORIGIN}/sources`, () => HttpResponse.json({ sources: [] })),
     http.get(`${ORIGIN}/authors/leg/sources`, () => HttpResponse.json({ handle: "leg", sources: [] })),
+    http.post(`${ORIGIN}/authors`, async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json(posted);
+    }),
   );
   const user = userEvent.setup();
   const { list } = mount();
   await list.reload();
 
-  const card = (await screen.findByText("Legacy Writer")).closest(".persona-card");
-  await user.click(within(card).getByRole("button", { name: /^edit$/i }));
-  const dialog = await screen.findByRole("dialog", { name: /legacy writer/i });
+  const row = (await screen.findByText("Legacy Writer")).closest(".persona-row");
+  await user.click(row);
+  const dialog = await screen.findByRole("dialog", { name: "Author editor" });
+  assert.equal(within(dialog).queryByRole("tablist"), null);
+  assert.equal(within(dialog).queryByRole("heading", { name: /legacy writer/i }), null);
+  assert.ok(within(dialog).getByRole("heading", { name: /prompt instructions/i }));
+  const layout = dialog.querySelector(".persona-edit-layout");
+  const identity = layout.querySelector(".persona-identity-column");
+  assert.ok(identity, "identity column is present");
+  assert.ok(layout.querySelector(".persona-writing-column"), "writing column is present");
+  assert.ok(layout.querySelector(".persona-sources--side"), "sources column is present");
+  // About moved into the identity column, positioned AFTER Language.
+  assert.ok(identity.querySelector("#pe-leg-about"), "About is in the identity column");
+  const identityFieldIds = [...identity.querySelectorAll("input, select, textarea")].map((n) => n.id);
+  assert.ok(
+    identityFieldIds.indexOf("pe-leg-language") < identityFieldIds.indexOf("pe-leg-about"),
+    "About comes after Language",
+  );
   // The beat picker only offers canonical sections, but an author sitting on a removed or
   // renamed section keeps their value: the select shows it, so saving another field cannot
   // silently rewrite the beat to the first canonical option.
   assert.equal(within(dialog).getByLabelText(/^beat$/i).value, "removed-section");
+  const save = within(dialog).getByRole("button", { name: "Save" });
+  assert.equal(save.disabled, true, "clean edit form cannot save");
+  await user.type(within(dialog).getByLabelText(/^about$/i), " updated");
+  assert.equal(save.disabled, false);
+  await user.click(save);
+  assert.equal(posted, null, "first save click only arms confirmation");
+  await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+  await waitFor(() => assert.ok(posted, "author update was posted"));
+  assert.equal(posted.metadata.beat, "removed-section");
 });
 
-test("source-link saves the checked source slugs via PUT /authors/{handle}/sources", async () => {
-  let putBody = null;
+test("the linked-sources filter narrows by active-on-author and orientation", async () => {
   server.use(
     http.get(`${ORIGIN}/authors`, () =>
       HttpResponse.json({
-        authors: [{ handle: "ada", name: "Ada Lovelace", avatar: "", style: "", about: "", gender: "", topics: [], sources: [], metadata: { beat: "tech", who_i_am: "pioneer" }, deleted: false }],
+        authors: [{ handle: "ada", name: "Ada", avatar: "", style: "s", about: "a", gender: "female", topics: [], sources: [], metadata: { beat: "tech", who_i_am: "w", language: "es" }, deleted: false }],
       })),
     http.get(`${ORIGIN}/sources`, () =>
-      HttpResponse.json({ sources: [{ slug: "example-com", domain: "example.com", description: "Example", lean: "neutral", enabled: true, feed_urls: [], metadata: {} }] })),
+      HttpResponse.json({
+        sources: [
+          { slug: "left-co", domain: "left.co", description: "", lean: "left", enabled: true, feed_urls: [], metadata: {} },
+          { slug: "right-co", domain: "right.co", description: "", lean: "right", enabled: true, feed_urls: [], metadata: {} },
+          { slug: "neutral-co", domain: "neutral.co", description: "", lean: "neutral", enabled: true, feed_urls: [], metadata: {} },
+        ],
+      })),
+    // Only left-co is linked (active) on this author.
+    http.get(`${ORIGIN}/authors/ada/sources`, () => HttpResponse.json({ handle: "ada", sources: ["left-co"] })),
+  );
+  const user = userEvent.setup();
+  const { list } = mount();
+  await list.reload();
+  await user.click((await screen.findByText("Ada")).closest(".persona-row"));
+  const dialog = await screen.findByRole("dialog", { name: "Author editor" });
+
+  const leftRow = (await within(dialog).findByLabelText("left.co")).closest(".link-source-item");
+  const rightRow = within(dialog).getByLabelText("right.co").closest(".link-source-item");
+  const neutralRow = within(dialog).getByLabelText("neutral.co").closest(".link-source-item");
+
+  // "Active on this author" = only the linked source.
+  await user.selectOptions(within(dialog).getByLabelText(/active on this author/i), "active");
+  assert.equal(leftRow.hidden, false);
+  assert.equal(rightRow.hidden, true);
+  assert.equal(neutralRow.hidden, true);
+
+  // Orientation = right (after clearing the active filter).
+  await user.selectOptions(within(dialog).getByLabelText(/active on this author/i), "");
+  await user.selectOptions(within(dialog).getByLabelText(/orientation/i), "right");
+  assert.equal(rightRow.hidden, false);
+  assert.equal(leftRow.hidden, true);
+  assert.equal(neutralRow.hidden, true);
+
+  // Clear filters restores every row.
+  await user.click(within(dialog).getByRole("button", { name: /clear filters/i }));
+  assert.equal(leftRow.hidden, false);
+  assert.equal(rightRow.hidden, false);
+  assert.equal(neutralRow.hidden, false);
+});
+
+test("single author edit saves checked source slugs via the fullscreen editor", async () => {
+  let putBody = null;
+  let posted = null;
+  server.use(
+    http.get(`${ORIGIN}/authors`, () =>
+      HttpResponse.json({
+        authors: [{ handle: "ada", name: "Ada Lovelace", avatar: "/media/ada.png", style: "precise", about: "analyst", gender: "female", topics: [], sources: [], metadata: { beat: "tech", who_i_am: "pioneer", language: "en" }, deleted: false }],
+      })),
+    sourcesHandler([{ slug: "example-com", domain: "example.com", description: "Example", lean: "neutral", enabled: true, feed_urls: [], metadata: {} }]),
     http.get(`${ORIGIN}/authors/ada/sources`, () => HttpResponse.json({ handle: "ada", sources: [] })),
+    http.post(`${ORIGIN}/authors`, async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json(posted);
+    }),
     http.put(`${ORIGIN}/authors/ada/sources`, async ({ request }) => {
       putBody = await request.json();
       return HttpResponse.json({ handle: "ada", sources: putBody.sources });
@@ -168,16 +259,17 @@ test("source-link saves the checked source slugs via PUT /authors/{handle}/sourc
   const { list } = mount();
   await list.reload();
 
-  const card = (await screen.findByText("Ada Lovelace")).closest(".persona-card");
-  await user.click(within(card).getByRole("button", { name: /^edit$/i }));
-  const dialog = await screen.findByRole("dialog", { name: /ada lovelace/i });
-  await user.click(within(dialog).getByRole("tab", { name: /^sources$/i }));
+  const row = (await screen.findByText("Ada Lovelace")).closest(".persona-row");
+  await user.click(row);
+  const dialog = await screen.findByRole("dialog", { name: "Author editor" });
 
   const box = await within(dialog).findByLabelText("example.com");
   await user.click(box);
-  await user.click(within(dialog).getByRole("button", { name: /save sources/i }));
+  await user.click(within(dialog).getByRole("button", { name: "Save" }));
+  await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
 
+  await waitFor(() => assert.ok(posted, "profile is upserted before source links"));
   await waitFor(() => assert.ok(putBody, "a PUT should have been sent"));
   assert.deepEqual(putBody.sources, ["example-com"]);
-  await within(dialog).findByText(/sources updated/i);
+  await within(dialog).findByText(/saved/i);
 });

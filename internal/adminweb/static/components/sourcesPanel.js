@@ -1,29 +1,25 @@
-import { el, clear, field, help, subTabs } from "./el.js";
+import { el, clear, field, help } from "./el.js";
+import { TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
 
 // The Sources tab: a source-registry manager. A source is a news outlet (by its
 // domain/homepage/feeds) the newsroom is allowed to draw from, keyed by a slug the
-// backend derives from the domain. The panel is a create form on top and a TABLE of
-// sources below: one row per source with its domain, the actions (edit /
-// enable-disable / delete), the authors that read it, and the description. Edit
-// expands an inline form as a full-width row beneath.
+// backend derives from the domain. The panel is a list-first TABLE of sources with
+// author/orientation filters. Each row shows the domain, assigned authors,
+// orientation, description, and a two-click delete icon. Clicking a row opens the
+// fullscreen editor.
 //
 // The author-per-source column is resolved client-side: it reads every author's
 // `sources` pool (attached source slugs) and inverts it to slug -> authors, so no
-// extra endpoint is needed. If the authors fetch fails the sources still render,
-// without chips.
+// extra endpoint is needed.
 //
-// The backend has no partial PATCH and no enable/disable verb: an edit and a toggle
-// are both FULL upserts of the whole row (with an explicit slug + domain so the row
-// updates in place and never forks a new one) via api.upsertSource.
+// The backend has no partial PATCH and no enable/disable verb: edits are FULL
+// upserts of the whole row (with an explicit slug + domain so the row updates in
+// place and never forks a new one) via api.upsertSource.
 //
 // `onChanged` (optional) fires after any successful mutation so a parent can refresh
 // anything that depends on the source set. `reload()` re-fetches and re-renders the
 // table, and is exposed so the app can prime it on mount.
-
-const SOURCE_HELP =
-  "A source is a news outlet the newsroom may draw from: its domain, homepage, and feeds. " +
-  "Add the outlets you trust here; disabled sources stay on file but are skipped.";
 
 const OWNERSHIP_HELP =
   "Co-owned mastheads collapse to one independent source for the corroboration gate. Give shared owners the " +
@@ -32,159 +28,175 @@ const OWNERSHIP_HELP =
 const LEANS = ["right", "neutral", "left"];
 
 export function SourcesPanel({ api, onChanged } = {}) {
-  // --- Create form -------------------------------------------------------
-  const domainInput = el("input", { type: "text", id: "sp-domain", autocomplete: "off" });
-  const descInput = el("input", { type: "text", id: "sp-desc", autocomplete: "off" });
-  const ownershipInput = el("input", { type: "text", id: "sp-ownership", autocomplete: "off" });
-  const homepageInput = el("input", { type: "url", id: "sp-homepage", placeholder: "https://example.com" });
-  const feedsInput = el("input", { type: "text", id: "sp-feeds", placeholder: "https://example.com/feed.xml, ..." });
-  const feedTypeInput = el("input", { type: "text", id: "sp-feed-type", value: "auto" });
-  const languageInput = el("input", { type: "text", id: "sp-language", value: "es" });
-  const leanInput = leanSelect("sp-lean", "neutral");
-  const enabledCheck = el("input", { type: "checkbox", id: "sp-enabled", checked: true });
-  const submit = el("button", { type: "submit" }, t("Add source"));
-  const createStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
+  const filters = { author: "", lean: "", sortKey: "source", sortDir: "asc" };
+  let sources = [];
+  let authors = [];
+  let authorsBySource = new Map();
 
-  const createRefs = {
-    homepage: homepageInput,
-    description: descInput,
-    ownership: ownershipInput,
-    feeds: feedsInput,
-    feedType: feedTypeInput,
-    language: languageInput,
-    lean: leanInput,
-    enabled: enabledCheck,
-  };
+  const authorFilter = el("select", { id: "source-author-filter", "aria-label": t("Filter by author") });
+  const leanFilter = el("select", { id: "source-lean-filter", "aria-label": t("Filter by orientation") });
+  const listEl = el("div", { class: "source-list article-table-host scroll-pane" });
+  const listStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
+  const clearFilters = el("button", { type: "button", class: "secondary article-clear-filters" }, t("Clear filters"));
+  clearFilters.addEventListener("click", () => {
+    filters.author = "";
+    filters.lean = "";
+    renderFilters();
+    renderTable();
+  });
+  authorFilter.addEventListener("change", () => {
+    filters.author = authorFilter.value;
+    renderTable();
+  });
+  leanFilter.addEventListener("change", () => {
+    filters.lean = leanFilter.value;
+    renderTable();
+  });
 
-  const form = el("form", { class: "source-form" }, [
-    field(t("Domain"), domainInput, "sp-domain"),
-    field(t("Description"), descInput, "sp-desc"),
-    helpField(t("Ownership group"), ownershipInput, "sp-ownership", t(OWNERSHIP_HELP)),
-    field(t("Homepage"), homepageInput, "sp-homepage"),
-    field(t("Feed URLs (comma separated)"), feedsInput, "sp-feeds"),
-    field(t("Feed type"), feedTypeInput, "sp-feed-type"),
-    field(t("Language"), languageInput, "sp-language"),
-    field(t("Orientation"), leanInput, "sp-lean"),
-    checkField(t("Enabled"), enabledCheck, "sp-enabled"),
-    submit,
-    createStatus,
-  ]);
-  form.addEventListener("submit", onCreate);
-
-  const createPanel = el("section", { class: "panel panel-fill" }, [
-    el("div", { class: "panel-head" }, [el("h2", {}, t("Add source")), help(t(SOURCE_HELP))]),
-    form,
-  ]);
-
-  // --- List (table) ------------------------------------------------------
-  const listEl = el("div", { class: "source-list scroll-pane" });
-  const listPanel = el("section", { class: "panel panel-fill" }, [
-    el("div", { class: "panel-head" }, [el("h2", {}, t("Sources"))]),
+  const element = el("div", { class: "sources workspace-section" }, el("section", { class: "panel panel-fill sources-panel" }, [
+    el("div", { class: "article-filter-bar source-filter-bar" }, [
+      el("fieldset", { class: "article-filter-group source-filter-group" }, [
+        el("legend", {}, t("Author")),
+        authorFilter,
+      ]),
+      el("fieldset", { class: "article-filter-group source-filter-group" }, [
+        el("legend", {}, t("Orientation")),
+        leanFilter,
+      ]),
+      el("div", { class: "article-filter-actions" }, [clearFilters]),
+    ]),
     listEl,
-  ]);
-
-  const tabs = subTabs(
-    [
-      { id: "add-source", label: t("Add source"), content: createPanel },
-      { id: "sources-list", label: t("Sources"), content: listPanel },
-    ],
-    { className: "content-tabs", label: t("Source sections") },
-  );
-  const element = el("div", { class: "sources workspace-section" }, tabs.element);
-
-  async function onCreate(event) {
-    event.preventDefault();
-    domainInput.setAttribute("aria-invalid", "false");
-    const domain = domainInput.value.trim();
-    if (!domain) {
-      domainInput.setAttribute("aria-invalid", "true");
-      domainInput.focus();
-      setStatus(createStatus, "error", t("Domain is required."));
-      return;
-    }
-    // No slug: the backend derives it from the domain on create.
-    const body = collectEditable(createRefs);
-    body.domain = domain;
-
-    setBusy(submit, form, true);
-    setStatus(createStatus, "pending", t("Adding source..."));
-    try {
-      await api.upsertSource(body);
-      form.reset();
-      domainInput.setAttribute("aria-invalid", "false");
-      setStatus(createStatus, "done", t("Added {domain}.", { domain }));
-      await reload();
-      tabs.select(1);
-      if (onChanged) onChanged();
-    } catch (err) {
-      setStatus(createStatus, "error", t("Could not add source ({code}): {msg}", { code: err.code, msg: err.message }));
-    } finally {
-      setBusy(submit, form, false);
-    }
-  }
+    listStatus,
+  ]));
 
   async function reload() {
     clear(listEl);
     listEl.append(el("p", { class: "muted" }, t("Loading sources...")));
+    clearStatus(listStatus);
     try {
-      const [data, authorsBySource] = await Promise.all([api.listSources(), loadAuthorsBySource()]);
-      const sources = (data && data.sources) || [];
-      clear(listEl);
-      if (!sources.length) {
-        listEl.append(el("p", { class: "muted" }, t("No sources yet.")));
-        return;
-      }
-      const tbody = el("tbody", {});
-      for (const source of sources) {
-        const { dataRow, editRow } = rows(source, authorsBySource.get(source.slug) || []);
-        tbody.append(dataRow, editRow);
-      }
-      listEl.append(
-        el("table", { class: "source-table" }, [
-          el("thead", {}, el("tr", {}, [
-            el("th", {}, t("Title")),
-            el("th", {}, t("Assigned to")),
-            el("th", {}, t("Orientation")),
-            el("th", {}, t("Description")),
-            el("th", {}, t("Actions")),
-          ])),
-          tbody,
-        ]),
-      );
+      const [sourceData, authorData] = await Promise.all([api.listSources(), api.listAuthors()]);
+      sources = (sourceData && sourceData.sources) || [];
+      authors = (authorData && authorData.authors) || [];
+      authorsBySource = invertAuthorsBySource(authors);
+      if (filters.author && !authors.some((author) => author.handle === filters.author)) filters.author = "";
+      renderFilters();
+      renderTable();
     } catch (err) {
       clear(listEl);
       listEl.append(el("p", { class: "error", role: "alert" }, t("Could not load sources: {msg}", { msg: err.message })));
     }
   }
 
+  function renderFilters() {
+    clear(authorFilter);
+    authorFilter.append(el("option", { value: "" }, t("All authors")));
+    for (const author of authorOptions(authors)) {
+      authorFilter.append(el("option", { value: author.handle }, author.name || author.handle));
+    }
+    authorFilter.value = filters.author;
+
+    clear(leanFilter);
+    for (const option of [{ value: "", label: t("All") }, ...LEANS.map((lean) => ({ value: lean, label: leanLabel(lean) }))]) {
+      leanFilter.append(el("option", { value: option.value }, option.label));
+    }
+    leanFilter.value = filters.lean;
+  }
+
+  function renderTable() {
+    clear(listEl);
+    const visible = sources.filter(sourceMatches).sort(compareSources);
+    if (!sources.length) {
+      listEl.append(el("p", { class: "muted" }, t("No sources yet.")));
+      return;
+    }
+    if (!visible.length) {
+      listEl.append(el("p", { class: "muted" }, t("No sources match.")));
+      return;
+    }
+    const tbody = el("tbody", {});
+    visible.forEach((source, index) => {
+      tbody.append(row(source, authorsBySource.get(source.slug) || [], index));
+    });
+    listEl.append(
+      el("table", { class: "source-table article-table" }, [
+        el("thead", {}, el("tr", {}, [
+          sortTh("source", t("Source")),
+          sortTh("assigned", t("Assigned to")),
+          sortTh("orientation", t("Orientation")),
+          el("th", {}, t("Description")),
+          el("th", { class: "source-delete-head" }, t("Delete")),
+        ])),
+        tbody,
+      ]),
+    );
+  }
+
   // Invert the per-author source pools into slug -> [{handle, name, beat}], so a row
-  // can show which authors read it. Read from the authors list (author.sources holds
-  // attached source SLUGS); if that fetch fails the map is empty and sources render
-  // without chips (not an error).
-  async function loadAuthorsBySource() {
+  // can show and filter by which authors read it.
+  function invertAuthorsBySource(items) {
     const map = new Map();
-    try {
-      const data = await api.listAuthors();
-      for (const a of (data && data.authors) || []) {
-        for (const slug of a.sources || []) {
-          if (!map.has(slug)) map.set(slug, []);
-          map.get(slug).push({ handle: a.handle, name: a.name || a.handle, beat: a.beat || "" });
-        }
+    for (const a of items || []) {
+      const meta = a.metadata || {};
+      for (const slug of a.sources || []) {
+        if (!map.has(slug)) map.set(slug, []);
+        map.get(slug).push({ handle: a.handle, name: a.name || a.handle, beat: meta.beat || a.beat || "" });
       }
-    } catch {
-      /* authors unavailable: render sources without author chips */
     }
     return map;
   }
 
-  // A source's two rows: the data row (.source-row) and a hidden full-width edit
-  // row (.source-edit-row) the Edit button expands. The cardStatus line is shared
-  // so a failed toggle/delete/edit surfaces under the row's actions.
-  function rows(source, authors) {
+  function authorOptions(items) {
+    return [...(items || [])].sort((a, b) => (a.name || a.handle || "").localeCompare(b.name || b.handle || ""));
+  }
+
+  function sourceMatches(source) {
+    if (filters.lean && (source.lean || "neutral") !== filters.lean) return false;
+    if (!filters.author) return true;
+    return (authorsBySource.get(source.slug) || []).some((author) => author.handle === filters.author);
+  }
+
+  function sortTh(key, label) {
+    const active = filters.sortKey === key;
+    const direction = active ? (filters.sortDir === "asc" ? "ascending" : "descending") : "none";
+    const button = el("button", { type: "button", class: "source-sort-button" }, [
+      el("span", {}, label),
+      el("span", { class: "source-sort-mark", "aria-hidden": "true" }, active ? (filters.sortDir === "asc" ? "^" : "v") : ""),
+    ]);
+    button.addEventListener("click", () => {
+      if (filters.sortKey === key) {
+        filters.sortDir = filters.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        filters.sortKey = key;
+        filters.sortDir = "asc";
+      }
+      renderTable();
+    });
+    return el("th", { "aria-sort": direction }, button);
+  }
+
+  function compareSources(a, b) {
+    const av = sourceSortValue(a, filters.sortKey);
+    const bv = sourceSortValue(b, filters.sortKey);
+    const result = av.localeCompare(bv, undefined, { sensitivity: "base", numeric: true });
+    if (result !== 0) return filters.sortDir === "asc" ? result : -result;
+    return (a.domain || "").localeCompare(b.domain || "", undefined, { sensitivity: "base", numeric: true });
+  }
+
+  function sourceSortValue(source, key) {
+    if (key === "assigned") return assignedLabel(source);
+    if (key === "orientation") return leanLabel(source.lean);
+    return source.domain || source.slug || "";
+  }
+
+  function assignedLabel(source) {
+    const assigned = authorsBySource.get(source.slug) || [];
+    if (!assigned.length) return "zzzzzzzzzz";
+    return assigned.map((author) => author.name || author.handle || "").sort((a, b) => a.localeCompare(b)).join(", ");
+  }
+
+  function row(source, sourceAuthors, index) {
     const enabled = !!source.enabled;
     const pill = el("span", { class: "status", dataset: { state: enabled ? "online" : "offline" } }, enabled ? t("online") : t("offline"));
-    // The flex layouts live on inner divs, never on the <td> itself: a flex <td>
-    // drops out of the table's column grid and the cells stop aligning.
     const portalCell = el("td", {}, el("div", { class: "source-portal" }, [
       el("span", { class: "source-domain" }, source.domain),
       pill,
@@ -193,29 +205,25 @@ export function SourcesPanel({ api, onChanged } = {}) {
 
     const cardStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
 
-    // No enable/disable verb on the backend: the toggle is a full upsert of the whole
-    // row (explicit slug + domain + every field) with `enabled` flipped.
-    const toggleBtn = el("button", { type: "button" }, enabled ? t("Disable") : t("Enable"));
-    toggleBtn.addEventListener("click", () =>
-      act(toggleBtn, () => api.upsertSource(fullSourceBody(source, { enabled: !enabled })), cardStatus));
-
     // Two-click delete instead of window.confirm (a no-op under jsdom): the first
     // click arms the button, the second performs the delete.
     let armed = false;
-    const deleteBtn = el("button", { type: "button", class: "secondary" }, t("Delete"));
-    deleteBtn.addEventListener("click", () => {
+    const deleteBtn = el("button", { type: "button", class: "source-trash", "aria-label": t("Delete") }, TrashIcon("article-trash-icon"));
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
       if (!armed) {
         armed = true;
-        deleteBtn.textContent = t("Confirm");
+        clear(deleteBtn);
+        deleteBtn.append(t("Confirm"));
+        deleteBtn.setAttribute("aria-label", t("Confirm"));
         deleteBtn.dataset.confirm = "true";
         return;
       }
       act(deleteBtn, () => api.deleteSource(source.slug), cardStatus);
     });
 
-    const editBtn = el("button", { type: "button", class: "secondary" }, t("Edit"));
     const actionsCell = el("td", {}, [
-      el("div", { class: "source-actions source-actions--stack" }, [toggleBtn, editBtn, deleteBtn]),
+      el("div", { class: "source-actions source-actions--stack" }, [deleteBtn]),
       cardStatus,
     ]);
 
@@ -226,8 +234,8 @@ export function SourcesPanel({ api, onChanged } = {}) {
       el(
         "div",
         { class: "source-authors" },
-        authors.length
-          ? authors.map((a) => el("span", { class: "author-chip", dataset: { section: a.beat } }, a.name))
+        sourceAuthors.length
+          ? sourceAuthors.map((a) => el("span", { class: "author-chip", dataset: { section: a.beat } }, a.name))
           : [el("span", { class: "source-authors-none" }, t("No authors assigned"))],
       ),
     );
@@ -235,35 +243,42 @@ export function SourcesPanel({ api, onChanged } = {}) {
     const leanCell = el("td", {}, el("span", { class: "source-lean", dataset: { lean: source.lean || "neutral" } }, leanLabel(source.lean)));
     const descCell = el("td", { class: "source-desc" }, source.description || "");
 
-    const dataRow = el("tr", { class: "source-row", dataset: { id: source.slug } }, [
+    const tableRow = el("tr", { class: "source-row article-row", tabindex: "0", dataset: { id: source.slug, parity: index % 2 === 0 ? "even" : "odd" } }, [
       portalCell,
       authorsCell,
       leanCell,
       descCell,
       actionsCell,
     ]);
-
-    const editForm = buildEditForm(source, cardStatus, () => setEditOpen(false));
-    const editRow = el("tr", { class: "source-edit-row", dataset: { id: source.slug }, hidden: true }, [
-      el("td", { colspan: "5" }, editForm),
-    ]);
-    function setEditOpen(open) {
-      editRow.hidden = !open;
-      editBtn.setAttribute("aria-expanded", open ? "true" : "false");
-    }
-    setEditOpen(false);
-    editBtn.addEventListener("click", () => setEditOpen(editRow.hidden));
-
-    return { dataRow, editRow };
+    tableRow.addEventListener("click", () => openEditor(source));
+    tableRow.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openEditor(source);
+    });
+    return tableRow;
   }
 
-  // The inline edit form: every editable field, prefilled from the source. Domain is
-  // carried from the existing row (not editable here) but sent explicitly along with
-  // the slug, so the full upsert updates the row in place instead of forking a new one.
-  // `onClose` collapses the edit row (Cancel); a successful save reloads the whole
-  // table so it never has to close by hand.
-  function buildEditForm(source, cardStatus, onClose) {
+  function openEditor(source) {
+    let dialog = null;
+    const closeEditor = () => {
+      if (dialog) closeDialog(dialog);
+    };
+    const form = buildEditForm(source, closeEditor);
+    const close = el("button", { type: "button", class: "secondary source-dialog-close", "aria-label": t("Close") }, "×");
+    dialog = el("dialog", { class: "source-dialog", "aria-label": t("Source editor") });
+    close.addEventListener("click", closeEditor);
+    dialog.addEventListener("cancel", closeEditor);
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    dialog.append(el("div", { class: "source-dialog-shell" }, [close, form]));
+    document.body.append(dialog);
+    showDialog(dialog);
+  }
+
+  function buildEditForm(initialSource, onClose) {
+    let source = initialSource;
     const id = source.slug;
+    const domain = el("input", { type: "text", id: `se-${id}-domain`, value: source.domain || "", readonly: true });
     const homepage = el("input", { type: "url", id: `se-${id}-homepage`, value: source.homepage || "" });
     const description = el("input", { type: "text", id: `se-${id}-desc`, value: source.description || "" });
     const ownership = el("input", { type: "text", id: `se-${id}-ownership`, value: source.ownership_group || "" });
@@ -275,20 +290,25 @@ export function SourcesPanel({ api, onChanged } = {}) {
     const enabled = el("input", { type: "checkbox", id: `se-${id}-enabled` });
     enabled.checked = !!source.enabled;
     const refs = { homepage, description, ownership, feeds, feedType, language, lean, enabled };
+    const editStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
 
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
 
-    const editForm = el("form", { class: "source-edit" }, [
-      field(t("Description"), description, `se-${id}-desc`),
-      helpField(t("Ownership group"), ownership, `se-${id}-ownership`, t(OWNERSHIP_HELP)),
-      field(t("Homepage"), homepage, `se-${id}-homepage`),
-      field(t("Feed URLs (comma separated)"), feeds, `se-${id}-feeds`),
-      field(t("Feed type"), feedType, `se-${id}-feed-type`),
-      field(t("Language"), language, `se-${id}-language`),
-      field(t("Orientation"), lean, `se-${id}-lean`),
-      checkField(t("Enabled"), enabled, `se-${id}-enabled`),
-      el("div", { class: "source-actions" }, [save, cancel]),
+    const editForm = el("form", { class: "source-edit source-edit-full" }, [
+      el("div", { class: "source-edit-grid" }, [
+        field(t("Domain"), domain, `se-${id}-domain`),
+        field(t("Description"), description, `se-${id}-desc`),
+        helpField(t("Ownership group"), ownership, `se-${id}-ownership`, t(OWNERSHIP_HELP)),
+        field(t("Homepage"), homepage, `se-${id}-homepage`),
+        field(t("Feed URLs (comma separated)"), feeds, `se-${id}-feeds`),
+        field(t("Feed type"), feedType, `se-${id}-feed-type`),
+        field(t("Language"), language, `se-${id}-language`),
+        field(t("Orientation"), lean, `se-${id}-lean`),
+        checkField(t("Enabled"), enabled, `se-${id}-enabled`),
+      ]),
+      el("div", { class: "source-actions source-actions--editor" }, [cancel, save]),
+      editStatus,
     ]);
     cancel.addEventListener("click", () => onClose());
     editForm.addEventListener("submit", async (event) => {
@@ -297,14 +317,17 @@ export function SourcesPanel({ api, onChanged } = {}) {
       // domain + preserved status columns), so the row is updated in place.
       const body = fullSourceBody(source, collectEditable(refs, { allowClear: true }));
       save.disabled = true;
-      setStatus(cardStatus, "pending", t("Saving..."));
+      setStatus(editStatus, "pending", t("Saving..."));
       try {
         await api.upsertSource(body);
+        source = body;
         await reload();
+        setStatus(editStatus, "done", t("Saved."));
+        save.disabled = false;
         if (onChanged) onChanged();
       } catch (err) {
         save.disabled = false;
-        setStatus(cardStatus, "error", t("Could not save ({code}): {msg}", { code: err.code, msg: err.message }));
+        setStatus(editStatus, "error", t("Could not save ({code}): {msg}", { code: err.code, msg: err.message }));
       }
     });
     return editForm;
@@ -383,7 +406,7 @@ function fullSourceBody(source, overrides = {}) {
 }
 
 function leanSelect(id, value = "") {
-  const select = el("select", { id }, LEANS.map((lean) => el("option", { value: lean }, leanLabel(lean))));
+  const select = el("select", { id }, LEANS.map((lean) => el("option", { value: lean, selected: value === lean }, leanLabel(lean))));
   if (value) select.value = value;
   return select;
 }
@@ -416,15 +439,34 @@ function checkField(labelText, control, id) {
   return el("div", { class: "field field-check" }, [control, el("label", { for: id }, labelText)]);
 }
 
-function setBusy(button, formEl, busy) {
-  button.disabled = busy;
-  formEl.setAttribute("aria-busy", busy ? "true" : "false");
-}
-
 function setStatus(node, state, text) {
   node.dataset.state = state;
   node.textContent = text;
   const assertive = state === "error";
   node.setAttribute("role", assertive ? "alert" : "status");
   node.setAttribute("aria-live", assertive ? "assertive" : "polite");
+}
+
+function clearStatus(node) {
+  delete node.dataset.state;
+  node.textContent = "";
+  node.setAttribute("role", "status");
+  node.setAttribute("aria-live", "polite");
+}
+
+function showDialog(dialog) {
+  if (typeof dialog.showModal === "function") {
+    dialog.showModal();
+    return;
+  }
+  dialog.setAttribute("open", "");
+}
+
+function closeDialog(dialog) {
+  if (typeof dialog.close === "function") {
+    dialog.close();
+    return;
+  }
+  dialog.removeAttribute("open");
+  dialog.dispatchEvent(new Event("close"));
 }

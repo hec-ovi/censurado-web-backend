@@ -28,6 +28,7 @@ function baseHandlers(extra = []) {
     http.get(`${ORIGIN}/articles:facets`, () => HttpResponse.json({ sections: [], authors: [], topics: [] })),
     http.get(`${ORIGIN}/articles`, () => HttpResponse.json({ articles: [], total: 0 })),
     http.get(`${ORIGIN}/portadas`, () => HttpResponse.json({ portadas: [] })),
+    http.get(`${ORIGIN}/recomendado`, () => HttpResponse.json({ slugs: [] })),
   ];
 }
 
@@ -37,16 +38,16 @@ function mount() {
   return mountApp(root);
 }
 
-test("mounts exactly five tabs in order, with no Editorial, Agentic, or Status tab", async () => {
+test("mounts exactly six tabs in order, with no Editorial, Agentic, or Status tab", async () => {
   server.use(...baseHandlers());
   mount();
 
   const consoleTablist = screen.getByRole("tablist", { name: "Console sections" });
   const tabs = within(consoleTablist).getAllByRole("tab");
-  assert.equal(tabs.length, 5, "five operator tabs");
+  assert.equal(tabs.length, 6, "six operator tabs");
   assert.deepEqual(
     tabs.map((tab) => tab.textContent),
-    ["Portada", "Articles", "Authors", "Sources", "Topics"],
+    ["Articles", "Authors", "Sources", "Portada", "Recomendado", "Topics"],
   );
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /editorial/i }), null, "no Editorial tab");
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /agentic/i }), null, "no Agentic workflow tab");
@@ -88,13 +89,13 @@ test("the Temas tab renders derived topic rows with stable slugs", async () => {
   assert.equal(within(row).queryByRole("link"), null);
 });
 
-test("the Autores tab shows the byline-freeze note", async () => {
+test("the Authors tab is list-only with no New author subtab", async () => {
   server.use(...baseHandlers());
   const user = userEvent.setup();
   mount();
 
   await user.click(screen.getByRole("tab", { name: /authors/i }));
-  // The Autores surface nests its own Authors/New-author tablist, so two tabpanels
-  // carry the accessible name "Authors"; assert the freeze note by its unique text.
-  assert.ok(await screen.findByText(/does not rewrite already-published bylines/i));
+  const panel = screen.getByRole("tabpanel", { name: /authors/i });
+  assert.equal(within(panel).queryByRole("tablist", { name: /author sections/i }), null);
+  assert.equal(within(panel).queryByRole("tab", { name: /new author/i }), null);
 });

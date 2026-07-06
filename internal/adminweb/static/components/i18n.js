@@ -70,6 +70,7 @@ export const ES = {
   Latest: "Último",
   Sections: "Secciones",
   Orientation: "Orientación",
+  "Filter by orientation": "Filtrar por orientación",
   Right: "Derecha",
   Neutral: "Neutral",
   Left: "Izquierda",
@@ -88,18 +89,24 @@ export const ES = {
 
   // --- Persona create form ---------------------------------------------
   "New persona": "Nueva persona",
+  "New author": "Nuevo autor",
   "Create an author persona from explicit fields. The new author joins the roster below.":
     "Cree una persona de autor con campos explícitos. El nuevo autor se suma a la lista de abajo.",
   "Create persona": "Crear persona",
+  "Create author": "Crear autor",
   "Author sections": "Secciones de autores",
   "Author editor": "Editor de autor",
+  "Prompt instructions": "Instrucciones de prompt",
   "Display name": "Nombre visible",
   Beat: "Sección",
   "Select a beat": "Elija una sección",
+  "Avatar preview": "Vista previa del avatar",
+  "Complete all author fields before saving.": "Complete todos los campos del autor antes de guardar.",
   "Display name, beat, who I am, and style are required.":
     "El nombre visible, la sección, el quién soy y el estilo son obligatorios.",
   "Creating...": "Creando...",
   "Created {id}.": "Se creó {id}.",
+  "Could not create author: {msg}": "No se pudo crear el autor: {msg}",
   "Could not create persona: {msg}": "No se pudo crear la persona: {msg}",
 
   // --- Persona list ----------------------------------------------------
@@ -167,6 +174,8 @@ export const ES = {
   "Added {domain}.": "Se agregó {domain}.",
   "Could not add source ({code}): {msg}": "No se pudo agregar la fuente ({code}): {msg}",
   "No sources yet.": "Todavía no hay fuentes.",
+  "No sources match.": "Ninguna fuente coincide.",
+  "Source editor": "Editor de fuente",
   Portal: "Portal",
   Actions: "Acciones",
   "Assigned to": "Asignado a",
@@ -440,8 +449,21 @@ export const ES = {
     "Una portada es el plan de tapa de un día. Elija un día, luego ordene sus artículos (la primera fila es la nota " +
     "de tapa del día), marque los que sean importantes y tilde los que van en la lista de recomendados. Guardar " +
     "escribe solo ese día; los artículos en sí no se tocan.",
+  ["A portada is one day's front-page plan. Pick a day, then order its articles (the first row is the day's lead), " +
+    "and mark any as important. Saving writes just that day; the articles themselves are untouched."]:
+    "Una portada es el plan de tapa de un día. Elija un día, luego ordene sus artículos (la primera fila es la nota " +
+    "de tapa del día) y marque los que sean importantes. Guardar escribe solo ese día; los artículos en sí no se tocan.",
   Day: "Día",
   Recomendado: "Recomendado",
+  "Loading recomendado...": "Cargando recomendado...",
+  "No recommended articles selected.": "No hay artículos recomendados seleccionados.",
+  "Removed / unresolved": "Eliminado / sin resolver",
+  "Search title and description": "Buscar título y descripción",
+  "No articles match.": "Ningún artículo coincide.",
+  Add: "Agregar",
+  "Recomendado saved.": "Recomendado guardado.",
+  "Could not load recomendado: {msg}": "No se pudo cargar recomendado: {msg}",
+  "Could not save recomendado ({code}): {msg}": "No se pudo guardar recomendado ({code}): {msg}",
   "Portada sections": "Secciones de portada",
   "Up to {n} articles.": "Hasta {n} artículos.",
   "{count}/{limit} recommended selected.": "{count}/{limit} recomendados seleccionados.",

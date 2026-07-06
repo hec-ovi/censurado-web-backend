@@ -11,12 +11,13 @@
 }
 
 .article-filter-bar {
+  --article-filter-pad-bottom: 10px;
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(6.8rem, 0.5fr) minmax(8rem, 0.58fr) minmax(13rem, 1fr) minmax(15rem, 1.08fr) minmax(18rem, 1.3fr) auto;
+  grid-template-columns: minmax(6.8rem, 0.5fr) minmax(8rem, 0.58fr) minmax(13rem, 1fr) minmax(18rem, 1.3fr) minmax(15rem, 1.08fr) auto;
   gap: 0;
   align-items: stretch;
-  padding: 2px 0 10px;
+  padding: 2px 0 var(--article-filter-pad-bottom);
   box-shadow: none;
 }
 
@@ -36,8 +37,8 @@
 .article-filter-actions::before {
   content: "";
   position: absolute;
-  top: 4px;
-  bottom: 2px;
+  top: 0;
+  bottom: 0;
   left: 0;
   width: 1px;
   background: color-mix(in srgb, var(--admin-line) 48%, transparent);
@@ -220,10 +221,13 @@ img.article-author-avatar {
 
 .article-filter-actions {
   position: relative;
-  align-self: center;
+  align-self: stretch;
   display: flex;
+  align-items: end;
   justify-content: flex-end;
+  padding-bottom: var(--article-filter-pad-bottom);
   padding-left: 14px;
+  margin-bottom: calc(-1 * var(--article-filter-pad-bottom));
 }
 
 button.article-clear-filters {
@@ -809,5 +813,895 @@ video.article-media-thumb {
   .article-table td {
     padding: 6px;
     font-size: 0.76rem;
+  }
+}
+
+/* Shared registry views: Authors and Sources reuse the Articles table/filter system. */
+.content-tabs-list,
+.editor-tabs-list {
+  padding-top: 8px;
+}
+
+.content-tabs-tab,
+.editor-tabs-tab {
+  border: 0;
+}
+
+.content-tabs-tab[aria-selected="true"],
+.editor-tabs-tab[aria-selected="true"] {
+  border-color: transparent;
+}
+
+.authors-panel,
+.sources-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.persona-list.article-table-host,
+.source-list.article-table-host {
+  display: block;
+  border: 0;
+  background: var(--surface);
+}
+
+.persona-table,
+.source-table {
+  min-width: 980px;
+}
+
+.persona-table .persona-avatar-head,
+.persona-table .persona-avatar-cell {
+  width: 7%;
+}
+
+.persona-table .persona-name-cell {
+  width: 22%;
+  color: var(--text-strong);
+  font-weight: 780;
+  text-align: left;
+}
+
+.persona-table .persona-beat-cell {
+  width: 18%;
+}
+
+.persona-table .persona-who-cell {
+  width: 53%;
+  color: var(--text);
+  text-align: left;
+}
+
+.persona-row {
+  cursor: pointer;
+}
+
+.persona-row {
+  --author-accent: var(--text-strong);
+}
+
+.persona-row > td:first-child {
+  border-left: 4px solid var(--author-accent);
+}
+
+.persona-row[data-section="politics"],
+.author-chip[data-section="politics"] { --author-accent: var(--site-red); }
+.persona-row[data-section="economics"],
+.persona-row[data-section="misterio-y-conspiracion"],
+.author-chip[data-section="economics"],
+.author-chip[data-section="misterio-y-conspiracion"] { --author-accent: var(--site-green); }
+.persona-row[data-section="tech"],
+.author-chip[data-section="tech"] { --author-accent: var(--site-blue); }
+.persona-row[data-section="world"],
+.author-chip[data-section="world"] { --author-accent: var(--site-plum); }
+.persona-row[data-section="literatura"],
+.author-chip[data-section="literatura"] { --author-accent: var(--site-gold); }
+
+.persona-row .badge {
+  background: color-mix(in srgb, var(--author-accent) 16%, transparent);
+  color: var(--author-accent);
+}
+
+.persona-avatar-cell .avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.source-table .form-status {
+  margin: 6px 0 0;
+  text-align: center;
+}
+
+.source-filter-bar {
+  grid-template-columns: minmax(16rem, 1.05fr) minmax(18rem, 1.2fr) auto;
+}
+
+.source-filter-group {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+#source-author-filter,
+#source-lean-filter {
+  align-self: center;
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--surface-2);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
+.source-sort-button {
+  width: 100%;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  padding: 0;
+  font: inherit;
+  text-transform: inherit;
+}
+
+.source-sort-button:hover,
+.source-sort-button:focus-visible {
+  background: transparent;
+  color: var(--admin-red);
+}
+
+.source-sort-mark {
+  min-width: 10px;
+  color: var(--admin-red);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+
+.source-table th:first-child,
+.source-table td:first-child {
+  width: 24%;
+  text-align: left;
+}
+
+.source-table th:nth-child(2),
+.source-table td:nth-child(2) {
+  width: 22%;
+}
+
+.source-table th:nth-child(3),
+.source-table td:nth-child(3) {
+  width: 12%;
+}
+
+.source-table th:nth-child(4),
+.source-table td:nth-child(4) {
+  width: 28%;
+  text-align: left;
+}
+
+.source-table th:last-child,
+.source-table td:last-child {
+  width: 8%;
+}
+
+.source-table .source-actions--stack {
+  display: flex;
+  justify-content: center;
+}
+
+.source-trash,
+.persona-actions button {
+  border: 0;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.source-trash {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--admin-red);
+  padding: 0;
+}
+
+.source-trash[data-confirm="true"] {
+  width: auto;
+  padding: 0 10px;
+  color: var(--err);
+  font-size: 0.78rem;
+  font-weight: 840;
+}
+
+.source-trash:hover,
+.persona-actions button:hover {
+  background: var(--surface-3);
+}
+
+.persona-dialog .persona-edit {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 28px clamp(24px, 5vw, 72px) 18px;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+
+.persona-dialog .persona-edit-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.8fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.persona-dialog .persona-profile-main {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(140px, 0.72fr) auto minmax(220px, 1fr);
+  gap: 14px;
+}
+
+.persona-dialog .persona-avatar-row {
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+}
+
+.persona-dialog .persona-avatar-preview {
+  width: 76px;
+  height: 76px;
+}
+
+.persona-form-section-title {
+  margin: 2px 0 -4px;
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.persona-dialog .persona-prompt-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.persona-dialog .persona-prompt-grid .field,
+.persona-dialog .persona-profile-main > .field {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.persona-dialog .persona-prompt-grid textarea,
+.persona-dialog .persona-profile-main > .field textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
+}
+
+.persona-dialog .persona-sources--side {
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 14px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.persona-dialog .persona-source-checks {
+  max-height: none;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.link-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.link-source-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.link-source-item input {
+  margin: 0;
+  accent-color: var(--admin-red);
+}
+
+.link-source-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.link-source-copy strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-source-desc {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-dialog {
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.source-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.source-dialog-shell {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.source-dialog-close {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: none;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.source-edit-full {
+  width: min(1180px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 28px clamp(18px, 4vw, 48px) 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  border: 0;
+}
+
+.source-edit-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 14px;
+}
+
+.source-edit-grid .field:has([id$="-feeds"]) {
+  grid-column: 1 / -1;
+}
+
+.source-actions--editor {
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.source-actions--editor button {
+  border: 0;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.portada-panel,
+.recomendado-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.portada-panel .panel-head {
+  margin-bottom: 0;
+}
+
+.portada-filter-bar {
+  grid-template-columns: minmax(15rem, 1fr) auto;
+}
+
+.portada-filter-group {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.portada-filter-actions {
+  align-items: end;
+}
+
+.portada-day-pager {
+  grid-template-columns: 34px minmax(10rem, 1fr) 34px;
+}
+
+.portada-panel #portada-day,
+.portada-panel #portada-day-search {
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.portada-panel #portada-day {
+  padding: 7px 12px;
+}
+
+.portada-panel .article-filter-group::before,
+.portada-panel .article-filter-actions::before {
+  background: transparent;
+}
+
+.portada-filter-actions button,
+.recomendado-save-actions button,
+.recomendado-add {
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--admin-red) 18%, var(--sidebar-strong));
+  color: var(--text-strong);
+  box-shadow: none;
+  font-size: 0.82rem;
+  font-weight: 820;
+}
+
+.portada-filter-actions button:hover,
+.recomendado-save-actions button:hover,
+.recomendado-add:hover {
+  background: var(--admin-red);
+  color: #fff;
+}
+
+.recomendado-panel {
+  min-height: 0;
+}
+
+.recomendado-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+  gap: 18px;
+}
+
+.recomendado-list-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.recomendado-list-pane-selected {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.recomendado-pane-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recomendado-pane-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 840;
+}
+
+.recomendado-filter-bar {
+  grid-template-columns: minmax(10rem, 0.75fr) minmax(10rem, 0.72fr) minmax(16rem, 1fr) auto;
+}
+
+.recomendado-filter-group {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+#recomendado-author,
+#recomendado-date {
+  align-self: center;
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--surface-2);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
+#recomendado-query {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 7px 12px 7px 38px;
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
+.recomendado-selected-list,
+.recomendado-inactive-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.recomendado-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 68px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.recomendado-row[data-active="false"] {
+  background: var(--surface-2);
+}
+
+.recomendado-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.recomendado-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.recomendado-copy strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recomendado-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recomendado-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.recomendado-save-actions {
+  align-items: end;
+}
+
+.portada-card-row {
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.portada-preview-media,
+.portada-order,
+.portada-role-wrap {
+  border: 0;
+}
+
+.portada-preview-media {
+  border-radius: 0;
+}
+
+.portada-role-wrap {
+  background: color-mix(in srgb, var(--surface-3) 72%, transparent);
+}
+
+@media (max-width: 980px) {
+  .source-filter-bar,
+  .portada-filter-bar,
+  .recomendado-filter-bar,
+  .recomendado-shell,
+  .persona-edit-layout,
+  .source-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .persona-sources--side {
+    padding: 12px;
+  }
+}
+
+/* Hard layout for the fullscreen author editor. Keep this late in the cascade. */
+.persona-dialog .persona-dialog-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.persona-dialog .persona-editor {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.persona-dialog .persona-edit {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 28px clamp(20px, 4vw, 56px) 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.persona-dialog .persona-edit-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(360px, 1.15fr) minmax(360px, 1fr);
+  gap: 20px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.persona-dialog .persona-edit-column,
+.persona-dialog .persona-sources--side {
+  min-width: 0;
+  min-height: 0;
+}
+
+.persona-dialog .persona-edit-column {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.persona-dialog .persona-identity-column {
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+}
+
+/* About is the last identity field and fills the remaining column height. */
+.persona-dialog .persona-identity-column > .field:has(textarea) {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.persona-dialog .persona-identity-column > .field:has(textarea) textarea {
+  min-height: 0;
+  height: 100%;
+  resize: none;
+}
+
+.persona-dialog .persona-avatar-row {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  gap: 14px;
+  align-items: end;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.persona-dialog .persona-avatar-preview {
+  width: 96px;
+  height: 96px;
+}
+
+/* The middle column now holds only the prompt-instructions section, which fills it. */
+.persona-dialog .persona-writing-column {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.persona-dialog .persona-writing-column > .field,
+.persona-dialog .persona-prompt-grid .field {
+  grid-column: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.persona-dialog .persona-writing-column > .field textarea,
+.persona-dialog .persona-prompt-grid textarea {
+  min-height: 0;
+  height: 100%;
+  resize: none;
+}
+
+.persona-dialog .persona-prompt-section {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.persona-dialog .persona-prompt-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(2, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.persona-dialog .persona-sources--side {
+  grid-column: auto;
+  width: auto;
+  height: 100%;
+  align-self: stretch;
+  display: grid;
+  /* head (auto), the filter bar (auto), then the scrolling check list (fills). */
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.persona-dialog .persona-sources--side .panel-head {
+  margin-bottom: 0;
+}
+
+.persona-dialog .persona-source-checks {
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  border: 0;
+  background: transparent;
+}
+
+/* The linked-sources filter reuses the Sources-view bar inside the narrow dialog
+   column: two selects side by side, Clear on its own row, dropping the wide-panel
+   6-column template and the group dividers so nothing overflows or overlaps. */
+.persona-source-filter-bar {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 12px;
+  padding: 0;
+}
+.persona-source-filter-bar .article-filter-group {
+  padding: 0;
+}
+.persona-source-filter-bar .article-filter-group + .article-filter-group::before,
+.persona-source-filter-bar .article-filter-actions::before {
+  display: none;
+}
+.persona-source-filter-bar .article-filter-group select {
+  width: 100%;
+}
+.persona-source-filter-bar .article-filter-actions {
+  grid-column: 1 / -1;
+  padding: 0;
+  margin: 0;
+  justify-content: flex-start;
+}
+
+/* Identity inputs are borderless pills; every edit-view textarea is square. */
+.persona-dialog .persona-identity-column input,
+.persona-dialog .persona-identity-column select {
+  border: none;
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding-inline: 16px;
+}
+.persona-dialog .persona-edit-column textarea {
+  border-radius: 0;
+}
+
+.persona-dialog .persona-actions--profile {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.persona-dialog .persona-actions--profile .danger {
+  margin-left: 0;
+}
+
+.persona-dialog .persona-edit > .form-status {
+  margin: 0;
+  min-height: 1.2em;
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .persona-dialog .persona-edit {
+    overflow: auto;
+  }
+
+  .persona-dialog .persona-edit-layout {
+    overflow: hidden;
+    grid-template-columns: minmax(210px, 0.7fr) minmax(300px, 1fr) minmax(300px, 0.95fr);
+  }
+
+  .persona-dialog .persona-edit-column,
+  .persona-dialog .persona-sources--side {
+    overflow: auto;
+  }
+
+  .persona-dialog .persona-sources--side {
+    min-height: 0;
   }
 }

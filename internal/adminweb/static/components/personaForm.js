@@ -53,17 +53,15 @@ export function PersonaForm({ api, onCreated } = {}) {
       field(t("Language"), languageInput, "pf-language"),
     ]),
     el("div", { class: "persona-avatar-row" }, [
+      avatarPreview,
       field(t("Avatar path"), avatarInput, "pf-avatar"),
-      el("div", { class: "persona-avatar-preview-wrap" }, [
-        el("span", { class: "field-label" }, t("Avatar preview")),
-        avatarPreview,
-      ]),
     ]),
+    field(t("About"), aboutInput, "pf-about"),
+    el("h3", { class: "persona-form-section-title" }, t("Prompt instructions")),
     el("div", { class: "persona-prompt-grid" }, [
       field(t("Who I am"), whoInput, "pf-who"),
       field(t("Style"), styleInput, "pf-style"),
     ]),
-    field(t("About"), aboutInput, "pf-about"),
     el("div", { class: "persona-sources persona-sources--create" }, [
       el("div", { class: "panel-head" }, [el("h4", {}, t("Linked sources")), help(t(LINK_HELP))]),
       sourceChecks,
@@ -194,31 +192,28 @@ export function PersonaForm({ api, onCreated } = {}) {
 }
 
 export function sourceCheckboxList(sources, selected, boxes, prefix) {
-  const tbody = el("tbody");
+  const list = el("div", { class: "link-source-list" });
   for (const source of sources) {
     const boxId = `${prefix}-${source.slug}`;
-    const box = el("input", { type: "checkbox", id: boxId });
+    const box = el("input", { type: "checkbox", id: boxId, "aria-label": source.domain });
     box.checked = selected.has(source.slug);
-    boxes.push({ slug: source.slug, box });
     const desc = (source.description || "").trim();
-    tbody.append(
-      el("tr", { class: "link-row" }, [
-        el("td", { class: "link-check" }, box),
-        el("td", { class: "link-portal" }, el("label", { for: boxId }, source.domain)),
-        el("td", { class: "link-lean" }, el("span", { class: "source-lean", dataset: { lean: source.lean || "neutral" } }, sourceLeanLabel(source.lean))),
-        el("td", { class: "link-desc", title: desc }, desc || "-"),
+    const lean = source.lean || "neutral";
+    // `item` (the row element) and `lean` ride on the pushed entry so a caller can
+    // filter the list in place (show/hide) without re-rendering and losing the
+    // in-progress checkbox selection. The create form ignores these extra fields.
+    const item = el("label", { class: "link-source-item", for: boxId }, [
+      box,
+      el("span", { class: "link-source-copy" }, [
+        el("strong", {}, source.domain),
+        desc ? el("span", { class: "link-source-desc" }, desc) : null,
       ]),
-    );
+      el("span", { class: "source-lean", dataset: { lean } }, sourceLeanLabel(source.lean)),
+    ]);
+    boxes.push({ slug: source.slug, box, item, lean });
+    list.append(item);
   }
-  return el("div", { class: "link-table-wrap" }, el("table", { class: "link-table" }, [
-    el("thead", {}, el("tr", {}, [
-      el("th", { class: "link-check" }, ""),
-      el("th", {}, t("Source")),
-      el("th", {}, t("Orientation")),
-      el("th", {}, t("Description")),
-    ])),
-    tbody,
-  ]));
+  return list;
 }
 
 export function sourceLeanLabel(lean) {

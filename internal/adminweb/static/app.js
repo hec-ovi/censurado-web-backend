@@ -1,18 +1,12 @@
 import { api as defaultApi } from "./api.js";
-import { el, help, subTabs } from "./components/el.js";
+import { el } from "./components/el.js";
 import { t, currentLocale, setLocale, LANGS, LANG_LABEL } from "./components/i18n.js";
 import { ArticlesPanel } from "./components/articlesPanel.js";
 import { PortadaPanel } from "./components/portadaPanel.js";
 import { PersonaList } from "./components/personaList.js";
-import { PersonaForm } from "./components/personaForm.js";
 import { TemasPanel } from "./components/temasPanel.js";
 import { SourcesPanel } from "./components/sourcesPanel.js";
-
-// The byline-freeze note for the Autores tab (section 1.6): editing a persona does
-// not rewrite the author name/bio/avatar already stamped on published articles.
-const BYLINE_FREEZE_NOTE =
-  "Editing a persona does not rewrite already-published bylines: a published article's author name, bio, and " +
-  "avatar are frozen from the earliest article that carried them.";
+import { RecomendadoPanel } from "./components/recomendadoPanel.js";
 
 const THEME_KEY = "panel-theme";
 
@@ -99,31 +93,16 @@ export function mountApp(root, deps = {}) {
   const articles = ArticlesPanel({ api });
   const portada = PortadaPanel({ api });
   const list = PersonaList({ api });
-  const form = PersonaForm({ api, onCreated: () => list.reload() });
   const temas = TemasPanel({ api });
   const sources = SourcesPanel({ api });
-
-  const newPersonaPanel = el("section", { class: "panel" }, [
-    el("div", { class: "panel-head" }, [
-      el("h2", {}, t("New author")),
-      help(t("Create an author persona from explicit fields. The new author joins the roster below.")),
-    ]),
-    el("p", { class: "muted" }, t(BYLINE_FREEZE_NOTE)),
-    form.element,
-  ]);
-  const authorsSurface = subTabs(
-    [
-      { id: "authors-list", label: t("Authors"), content: list.element },
-      { id: "new-author", label: t("New author"), content: newPersonaPanel },
-    ],
-    { className: "content-tabs", label: t("Author sections") },
-  );
+  const recomendado = RecomendadoPanel({ api });
 
   const tabs = [
-    { id: "portada", label: t("Portada"), content: [portada.element] },
     { id: "articles", label: t("Articles"), content: [articles.element] },
-    { id: "authors", label: t("Authors"), content: [authorsSurface.element] },
+    { id: "authors", label: t("Authors"), content: [list.element] },
     { id: "sources", label: t("Sources"), content: [sources.element] },
+    { id: "portada", label: t("Portada"), content: [portada.element] },
+    { id: "recomendado", label: t("Recomendado"), content: [recomendado.element] },
     { id: "temas", label: t("Topics"), content: [temas.element] },
   ];
 
@@ -239,8 +218,9 @@ export function mountApp(root, deps = {}) {
   list.reload();
   temas.reload();
   sources.reload();
+  recomendado.reload();
 
-  return { articles, portada, list, form, temas, sources, tabs: tabButtons, panels, select };
+  return { articles, portada, list, temas, sources, recomendado, tabs: tabButtons, panels, select };
 }
 
 // Browser entry point. index.html loads this module under a strict CSP (no inline

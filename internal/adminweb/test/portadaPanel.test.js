@@ -100,13 +100,21 @@ test("groups articles by published day and marks the first row as the lead", asy
   assert.equal(rows[0].querySelector(".portada-index")?.textContent, "Portada");
   assert.equal(rows[1].dataset.lead, "false");
 
-  // Picking the older day re-lists that day's articles.
+  // The arrow controls step through days in the same newest-to-oldest order.
+  await user.click(screen.getByRole("button", { name: "Next day" }));
+  rows = document.querySelectorAll(".portada-row");
+  assert.deepEqual([...rows].map((r) => r.dataset.slug), ["c"]);
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  rows = document.querySelectorAll(".portada-row");
+  assert.deepEqual([...rows].map((r) => r.dataset.slug), ["a", "b"]);
+
+  // Picking the older day directly still works.
   await user.selectOptions(daySelect, "2026-06-29");
   rows = document.querySelectorAll(".portada-row");
   assert.deepEqual([...rows].map((r) => r.dataset.slug), ["c"]);
 });
 
-test("reordering, a role change, and a recomendado tick post the new plan", async () => {
+test("reordering and a role change post the new plan without per-day recomendado", async () => {
   let posted = null;
   stub({
     articles: [
@@ -122,12 +130,9 @@ test("reordering, a role change, and a recomendado tick post the new plan", asyn
 
   // Move Alpha (row 0) down: the in-memory order becomes Bravo, Alpha, Charlie.
   await user.click(screen.getAllByRole("button", { name: "Move down" })[0]);
-  // Mark Charlie important and recommend Bravo.
+  // Mark Charlie important. Global recomendado is managed in its own panel now.
   await user.selectOptions(screen.getByLabelText("Role for Charlie"), "important");
-  await user.click(screen.getByRole("tab", { name: /recomendado/i }));
-  await user.click(screen.getByRole("checkbox", { name: "Bravo" }));
 
-  await user.click(screen.getByRole("tab", { name: /^portada$/i }));
   await user.click(screen.getByRole("button", { name: "Guardar portada" }));
 
   await waitFor(() => assert.ok(posted, "the save issued a POST"));
@@ -137,7 +142,7 @@ test("reordering, a role change, and a recomendado tick post the new plan", asyn
     { slug: "a", role: "" },
     { slug: "c", role: "important" },
   ]);
-  assert.deepEqual(posted.recomendado, ["b"]);
+  assert.equal(Object.hasOwn(posted, "recomendado"), false);
   await screen.findByText("Portada guardada.");
 });
 
@@ -162,7 +167,6 @@ test("prefills the selected day's order and roles from an existing plan", async 
       },
     ],
   });
-  const user = userEvent.setup();
   const panel = mount();
   await panel.reload();
 
@@ -176,10 +180,7 @@ test("prefills the selected day's order and roles from an existing plan", async 
   assert.equal(screen.getByLabelText("Role for Alpha").value, "");
   assert.equal(screen.getByLabelText("Role for Bravo").value, "");
 
-  // Recomendado prefilled: Bravo checked, the rest clear.
-  await user.click(screen.getByRole("tab", { name: /recomendado/i }));
-  assert.equal(screen.getByRole("checkbox", { name: "Bravo" }).checked, true);
-  assert.equal(screen.getByRole("checkbox", { name: "Alpha" }).checked, false);
+  assert.equal(screen.queryByRole("tab", { name: /recomendado/i }), null);
 });
 
 test("dragging a card onto another card's full-row zone reorders it and marks it full width", async () => {

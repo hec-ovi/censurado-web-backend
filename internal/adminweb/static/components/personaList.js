@@ -1,12 +1,11 @@
-import { el, clear, field, help, isSafeImageSrc, subTabs } from "./el.js";
+import { el, clear, field, help, isSafeImageSrc } from "./el.js";
 import { t } from "./i18n.js";
-import { SECTIONS, GENDERS } from "./personaForm.js";
+import { SECTIONS, GENDERS, sourceCheckboxList, sourceLeanLabel } from "./personaForm.js";
 
-// The author roster: a beat filter over GET /authors, rendering one card per
-// author with an avatar (or initial fallback), beat badge, and who-i-am line.
-// Each card carries an Edit action that opens a modal editor. The editor has a
-// profile form (a full upsert of the author), a two-click Delete, and a Sources
-// panel that links the author's source pool.
+// The author roster: a GET /authors table with an avatar (or initial fallback),
+// beat badge, and who-i-am line. Clicking a row opens the fullscreen modal editor.
+// The editor has a profile form (a full upsert of the author), a two-click Delete,
+// and a side panel that links the author's source pool.
 //
 // `reload()` is exposed so the create form can refresh it after a synthesis.
 // `onChanged` (optional) fires after any successful per-card mutation so a parent
@@ -18,8 +17,8 @@ const LINK_HELP =
   "Link a few trusted, independent outlets per author.";
 
 export function PersonaList({ api, onChanged } = {}) {
-  const listEl = el("div", { class: "persona-list" });
-  const element = el("section", { class: "panel persona-list-panel" }, [listEl]);
+  const listEl = el("div", { class: "persona-list article-table-host scroll-pane" });
+  const element = el("section", { class: "panel panel-fill persona-list-panel authors-panel" }, [listEl]);
 
   async function load() {
     clear(listEl);
@@ -32,98 +31,91 @@ export function PersonaList({ api, onChanged } = {}) {
         listEl.append(el("p", { class: "muted" }, t("No authors yet. Create one to get started.")));
         return;
       }
-      for (const author of authors) listEl.append(card(author));
+      const tbody = el("tbody");
+      authors.forEach((author, index) => tbody.append(row(author, index)));
+      listEl.append(
+        el("table", { class: "persona-table article-table" }, [
+          el("thead", {}, el("tr", {}, [
+            el("th", { class: "persona-avatar-head" }, ""),
+            el("th", {}, t("Author")),
+            el("th", {}, t("Beat")),
+            el("th", {}, t("Who I am")),
+          ])),
+          tbody,
+        ]),
+      );
     } catch (err) {
       clear(listEl);
       listEl.append(el("p", { class: "error", role: "alert" }, t("Could not load authors: {msg}", { msg: err.message })));
     }
   }
 
-  // A single author card: avatar/initial, name + beat badge, who-i-am preview,
-  // the per-card actions, and the inline panels (built lazily on first open so
+  // A single author row. The fullscreen editor is built lazily on first open so
   // the roster stays light and a hidden beat <select> doesn't shadow the visible
-  // beat badge in queries).
-  function card(author) {
-    const cardStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
+  // beat badge in queries.
+  function row(author, index) {
     const meta = author.metadata || {};
 
     let editor = null;
     let dialog = null;
-
-    const editBtn = el("button", { type: "button", class: "secondary" }, t("Edit"));
-    editBtn.setAttribute("aria-expanded", "false");
-
-    const actions = el("div", { class: "persona-actions" }, [editBtn]);
-
-    const article = el("article", { class: "persona-card", dataset: { id: author.handle, section: meta.beat || "" } }, [
-      avatar(author),
-      el("div", { class: "persona-body" }, [
-        el("div", { class: "persona-head" }, [
-          el("h3", {}, author.name),
-          el("span", { class: "badge" }, meta.beat),
-        ]),
-        el("p", { class: "persona-who" }, meta.who_i_am || ""),
-      ]),
-      actions,
-      cardStatus,
+    const tableRow = el("tr", { class: "persona-row article-row", tabindex: "0", dataset: { id: author.handle, section: meta.beat || "", parity: index % 2 === 0 ? "even" : "odd" } }, [
+      el("td", { class: "persona-avatar-cell" }, avatar(author)),
+      el("td", { class: "persona-name-cell" }, el("strong", {}, author.name)),
+      el("td", { class: "persona-beat-cell" }, el("span", { class: "badge" }, meta.beat || t("(unset)"))),
+      el("td", { class: "persona-who-cell" }, el("span", {}, meta.who_i_am || "")),
     ]);
+    tableRow.setAttribute("aria-expanded", "false");
 
-    editBtn.addEventListener("click", () => {
+    function openAuthorEditor() {
       if (!editor) {
         const closeEditor = () => {
           if (dialog && dialog.open) closeDialog(dialog);
         };
-        editor = buildEditShell(author, cardStatus, closeEditor);
+        editor = buildEditShell(author, closeEditor);
         dialog = buildEditDialog(author, editor.element);
-        dialog.addEventListener("close", () => editBtn.setAttribute("aria-expanded", "false"));
+        dialog.addEventListener("close", () => {
+          tableRow.setAttribute("aria-expanded", "false");
+        });
         document.body.append(dialog);
         editor.loadSources();
       }
-      editBtn.setAttribute("aria-expanded", "true");
+      tableRow.setAttribute("aria-expanded", "true");
       showDialog(dialog);
+    }
+
+    tableRow.addEventListener("click", openAuthorEditor);
+    tableRow.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openAuthorEditor();
     });
 
-    return article;
+    return tableRow;
   }
 
   function buildEditDialog(author, content) {
-    const meta = author.metadata || {};
-    const titleId = `persona-dialog-${author.handle}-title`;
     const close = el("button", { type: "button", class: "secondary persona-dialog-close", "aria-label": t("Close") }, "×");
-    const dialog = el("dialog", { class: "persona-dialog", "aria-labelledby": titleId });
+    const dialog = el("dialog", { class: "persona-dialog", "aria-label": t("Author editor") });
     close.addEventListener("click", () => closeDialog(dialog));
     dialog.addEventListener("cancel", () => closeDialog(dialog));
     dialog.append(
       el("div", { class: "persona-dialog-shell" }, [
-        el("div", { class: "persona-dialog-head" }, [
-          el("div", {}, [
-            el("span", { class: "section-link" }, meta.beat || ""),
-            el("h2", { id: titleId }, author.name || t("Author editor")),
-          ]),
-          close,
-        ]),
+        close,
         content,
       ]),
     );
     return dialog;
   }
 
-  function buildEditShell(author, cardStatus, closeEditor) {
-    const sources = buildSourcesPanel(author);
-    const tabs = subTabs(
-      [
-        { id: "profile", label: t("Profile"), content: buildEditForm(author, cardStatus, closeEditor) },
-        { id: "sources", label: t("Sources"), content: sources.panel },
-      ],
-      { className: "editor-tabs", label: t("Author editor") },
-    );
-    return { element: el("div", { class: "persona-editor" }, tabs.element), loadSources: sources.load };
+  function buildEditShell(author, closeEditor) {
+    const editor = buildEditForm(author, closeEditor);
+    return { element: el("div", { class: "persona-editor" }, editor.element), loadSources: editor.loadSources };
   }
 
   // The inline edit form: one compact identity row, the prompt-shaping fields, then
   // about. Sources stay in their own tab. The handle is immutable, so it is never an
   // input; hidden legacy fields (avatar/topics/few-shot metadata) are preserved.
-  function buildEditForm(author, cardStatus, closeEditor) {
+  function buildEditForm(author, closeEditor) {
     const handle = author.handle;
     const meta = author.metadata || {};
     const displayName = el("input", { type: "text", id: `pe-${handle}-name`, value: author.name || "" });
@@ -139,200 +131,309 @@ export function PersonaList({ api, onChanged } = {}) {
     ]);
     gender.value = author.gender || "";
     const language = el("input", { type: "text", id: `pe-${handle}-language`, value: meta.language || "" });
+    const avatarPath = el("input", { type: "text", id: `pe-${handle}-avatar`, value: author.avatar || "" });
+    const avatarPreview = el("div", { class: "persona-avatar-preview", "aria-label": t("Avatar preview") });
     const whoIAm = el("textarea", { id: `pe-${handle}-who`, rows: "3" }, meta.who_i_am || "");
     const about = el("textarea", { id: `pe-${handle}-about`, rows: "3" }, author.about || "");
     const style = el("textarea", { id: `pe-${handle}-style`, rows: "3" }, author.style || "");
+    const sourceChecks = el("div", { class: "persona-source-checks" });
+    const editStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
 
-    const save = el("button", { type: "submit" }, t("Save"));
-    const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
+    const restore = el("button", { type: "button", class: "secondary", disabled: true }, t("Restore"));
+    const save = el("button", { type: "submit", disabled: true }, t("Save"));
     const deleteBtn = el("button", { type: "button", class: "secondary danger" }, t("Delete"));
-    let armed = false;
+    let deleteArmed = false;
+    let saveArmed = false;
+    let sourceBoxes = [];
+    let sourcesLoaded = false;
+    let initialProfile;
+    let initialSources = null;
     function disarmDelete() {
-      armed = false;
+      deleteArmed = false;
       deleteBtn.textContent = t("Delete");
       delete deleteBtn.dataset.confirm;
     }
     deleteBtn.addEventListener("click", () => {
-      if (!armed) {
-        armed = true;
+      if (!deleteArmed) {
+        deleteArmed = true;
         deleteBtn.textContent = t("Confirm");
         deleteBtn.dataset.confirm = "true";
         return;
       }
-      act(deleteBtn, () => api.deleteAuthor(handle), cardStatus, disarmDelete).then((ok) => {
+      act(deleteBtn, () => api.deleteAuthor(handle), editStatus, disarmDelete).then((ok) => {
         if (ok) closeEditor();
       });
     });
 
-    const form = el("form", { class: "persona-edit" }, [
-      el("div", { class: "persona-field-strip" }, [
-        field(t("Display name"), displayName, `pe-${handle}-name`),
-        field(t("Gender"), gender, `pe-${handle}-gender`),
-        field(t("Beat"), beat, `pe-${handle}-beat`),
-        field(t("Language"), language, `pe-${handle}-language`),
+    const identityColumn = el("div", { class: "persona-edit-column persona-identity-column" }, [
+      el("div", { class: "persona-avatar-row" }, [
+        avatarPreview,
+        field(t("Avatar path"), avatarPath, `pe-${handle}-avatar`),
       ]),
-      el("div", { class: "persona-prompt-grid" }, [
-        field(t("Who I am"), whoIAm, `pe-${handle}-who`),
-        field(t("Style"), style, `pe-${handle}-style`),
-      ]),
+      field(t("Display name"), displayName, `pe-${handle}-name`),
+      field(t("Gender"), gender, `pe-${handle}-gender`),
+      field(t("Beat"), beat, `pe-${handle}-beat`),
+      field(t("Language"), language, `pe-${handle}-language`),
       field(t("About"), about, `pe-${handle}-about`),
-      el("div", { class: "persona-actions persona-actions--profile" }, [save, cancel, deleteBtn]),
     ]);
-    const required = [displayName, gender, beat, language, whoIAm, style, about];
-    required.forEach((control) => {
-      control.addEventListener("input", updateSaveState);
-      control.addEventListener("change", updateSaveState);
-    });
-    updateSaveState();
 
-    cancel.addEventListener("click", () => {
-      closeEditor();
+    // The middle column is the prompt instructions: Who I am and Style split the column
+    // height 50/50 (persona-prompt-grid--stacked), so each textarea fills half.
+    const writingColumn = el("div", { class: "persona-edit-column persona-writing-column" }, [
+      el("section", { class: "persona-prompt-section" }, [
+        el("h3", { class: "persona-form-section-title" }, t("Prompt instructions")),
+        el("div", { class: "persona-prompt-grid persona-prompt-grid--stacked" }, [
+          field(t("Who I am"), whoIAm, `pe-${handle}-who`),
+          field(t("Style"), style, `pe-${handle}-style`),
+        ]),
+      ]),
+    ]);
+
+    // Linked-sources filter: mirror the Sources view (orientation), but replace its
+    // "author" facet with an "active on this author" toggle over the linked set.
+    const activeFilter = el("select", { id: `pe-src-active-${handle}`, "aria-label": t("Filter by active on this author") },
+      [["", t("All")], ["active", t("Active")], ["inactive", t("Inactive")]].map(([v, label]) => el("option", { value: v }, label)));
+    const leanFilter = el("select", { id: `pe-src-lean-${handle}`, "aria-label": t("Filter by orientation") },
+      [["", t("All")], ["right", sourceLeanLabel("right")], ["neutral", sourceLeanLabel("neutral")], ["left", sourceLeanLabel("left")]]
+        .map(([v, label]) => el("option", { value: v }, label)));
+    const clearSourceFilters = el("button", { type: "button", class: "secondary article-clear-filters" }, t("Clear filters"));
+    const sourceFilterBar = el("div", { class: "article-filter-bar source-filter-bar persona-source-filter-bar" }, [
+      el("fieldset", { class: "article-filter-group source-filter-group" }, [
+        el("legend", {}, t("Active on this author")),
+        activeFilter,
+      ]),
+      el("fieldset", { class: "article-filter-group source-filter-group" }, [
+        el("legend", {}, t("Orientation")),
+        leanFilter,
+      ]),
+      el("div", { class: "article-filter-actions" }, [clearSourceFilters]),
+    ]);
+    activeFilter.addEventListener("change", applySourceFilter);
+    leanFilter.addEventListener("change", applySourceFilter);
+    clearSourceFilters.addEventListener("click", () => {
+      activeFilter.value = "";
+      leanFilter.value = "";
+      applySourceFilter();
     });
+
+    const form = el("form", { class: "persona-edit" }, [
+      el("div", { class: "persona-edit-layout" }, [
+        identityColumn,
+        writingColumn,
+        el("aside", { class: "persona-sources persona-sources--side" }, [
+          el("div", { class: "panel-head" }, [el("h4", {}, t("Linked sources")), help(t(LINK_HELP))]),
+          sourceFilterBar,
+          sourceChecks,
+        ]),
+      ]),
+      el("div", { class: "persona-actions persona-actions--profile" }, [restore, save, deleteBtn]),
+      editStatus,
+    ]);
+    const required = [displayName, gender, beat, language, avatarPath, whoIAm, style, about];
+    required.forEach((control) => {
+      control.addEventListener("input", markEdited);
+      control.addEventListener("change", markEdited);
+    });
+    avatarPath.addEventListener("input", updateAvatarPreview);
+    displayName.addEventListener("input", updateAvatarPreview);
+    restore.addEventListener("click", restoreInitial);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const missing = required.filter((control) => !control.value.trim());
-      if (missing.length) {
-        missing.forEach((control) => control.setAttribute("aria-invalid", "true"));
-        missing[0].focus();
-        setStatus(cardStatus, "error", t("Complete all author fields before saving."));
-        updateSaveState();
+      if (!isComplete()) {
+        setStatus(editStatus, "error", t("Complete all author fields before saving."));
+        updateDirtyState();
+        return;
+      }
+      if (!isDirty()) return;
+      if (!saveArmed) {
+        saveArmed = true;
+        save.textContent = t("Confirm");
         return;
       }
 
-      // A full upsert: preserve the fields this form does not edit (bio and any
-      // extra metadata keys) so they are not blanked. Beat/who-i-am/language and the
-      // example lists ride metadata; sources are managed by the Sources sub-tab, so
-      // `sources` is OMITTED here to leave the join untouched.
-      const lang = language.value.trim();
+      const snapshot = profileSnapshot();
       const body = {
         handle,
-        name: displayName.value.trim(),
+        name: snapshot.name,
         bio: author.bio,
-        gender: gender.value,
-        about: about.value,
-        style: style.value,
-        avatar: author.avatar || "",
+        gender: snapshot.gender,
+        about: snapshot.about,
+        style: snapshot.style,
+        avatar: snapshot.avatar,
         topics: Array.isArray(author.topics) ? author.topics : [],
         metadata: {
           ...(author.metadata || {}),
-          beat: beat.value,
-          who_i_am: whoIAm.value,
-          language: lang,
+          beat: snapshot.beat,
+          who_i_am: snapshot.who,
+          language: snapshot.language,
         },
       };
 
       save.disabled = true;
-      setStatus(cardStatus, "pending", t("Saving..."));
+      restore.disabled = true;
+      setStatus(editStatus, "pending", t("Saving..."));
       try {
         await api.upsertAuthor(body);
+        const sourcesChanged = sourcesLoaded && initialSources != null && !sameList(sourceSelection(), initialSources);
+        if (sourcesChanged) await api.putAuthorSources(handle, sourceSelection());
+        initialProfile = profileSnapshot();
+        if (sourcesLoaded) initialSources = sourceSelection();
+        saveArmed = false;
+        save.textContent = t("Save");
+        updateDirtyState();
+        setStatus(editStatus, "done", t("Saved."));
         await load();
         if (onChanged) onChanged();
-        closeEditor();
       } catch (err) {
-        save.disabled = false;
-        setStatus(cardStatus, "error", t("Could not save ({code}): {msg}", { code: err.code, msg: err.message }));
+        setStatus(editStatus, "error", t("Could not save ({code}): {msg}", { code: err.code, msg: err.message }));
+      } finally {
+        updateDirtyState();
       }
     });
-    return form;
 
-    function updateSaveState() {
-      let complete = true;
-      for (const control of required) {
-        const ok = Boolean(control.value.trim());
-        if (!ok) complete = false;
-        control.setAttribute("aria-invalid", ok ? "false" : "true");
-      }
-      save.disabled = !complete;
-    }
-  }
-
-  // The inline source-linking panel: every source as a checkbox, the author's
-  // currently-linked slugs pre-checked. Save REPLACES the whole set (unchecking all
-  // sends []). Loads the live source list and the author's stored slugs together.
-  function buildSourcesPanel(author) {
-    const handle = author.handle;
-    const checksWrap = el("div", { class: "persona-source-checks" });
-    const status = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
-    const save = el("button", { type: "button" }, t("Save sources"));
-
-    const panel = el("div", { class: "persona-sources" }, [
-      el("div", { class: "panel-head" }, [el("h4", {}, t("Linked sources")), help(t(LINK_HELP))]),
-      checksWrap,
-      el("div", { class: "persona-actions" }, [save]),
-      status,
-    ]);
-
-    let boxes = [];
+    initialProfile = profileSnapshot();
+    updateAvatarPreview();
+    updateDirtyState();
+    return { element: form, loadSources };
 
     async function loadSources() {
-      clear(checksWrap);
-      checksWrap.append(el("p", { class: "muted" }, t("Loading sources...")));
-      boxes = [];
+      clear(sourceChecks);
+      sourceBoxes = [];
+      sourcesLoaded = false;
+      sourceChecks.append(el("p", { class: "muted" }, t("Loading sources...")));
       try {
-        // Render every source as a checkbox: Save derives the linked set from the
-        // rendered boxes, so an unrendered linked source would be dropped.
         const [sourcesData, linked] = await Promise.all([
           api.listSources(),
           api.getAuthorSources(handle),
         ]);
         const sources = (sourcesData && sourcesData.sources) || [];
         const selected = new Set((linked && linked.sources) || []);
-        clear(checksWrap);
+        clear(sourceChecks);
         if (!sources.length) {
-          save.disabled = true;
-          checksWrap.append(el("p", { class: "muted" }, t("Add sources in the Sources tab first.")));
+          sourceChecks.append(el("p", { class: "muted" }, t("Add sources in the Sources tab first.")));
+          sourcesLoaded = true;
+          initialSources = [];
+          updateDirtyState();
           return;
         }
-        save.disabled = false;
-        const tbody = el("tbody");
-        for (const source of sources) {
-          const boxId = `ps-${handle}-${source.slug}`;
-          const box = el("input", { type: "checkbox", id: boxId });
-          box.checked = selected.has(source.slug);
-          boxes.push({ id: source.slug, box });
-          const desc = (source.description || "").trim();
-          tbody.append(
-            el("tr", { class: "link-row" }, [
-              el("td", { class: "link-check" }, box),
-              el("td", { class: "link-portal" }, el("label", { for: boxId }, source.domain)),
-              el("td", { class: "link-lean" }, el("span", { class: "source-lean", dataset: { lean: source.lean || "neutral" } }, sourceLeanLabel(source.lean))),
-              el("td", { class: "link-desc", title: desc }, desc || "—"),
-            ]),
-          );
-        }
-        const table = el("table", { class: "link-table" }, [
-          el("thead", {}, el("tr", {}, [
-            el("th", { class: "link-check" }, ""),
-            el("th", {}, t("Source")),
-            el("th", {}, t("Orientation")),
-            el("th", {}, t("Description")),
-          ])),
-          tbody,
-        ]);
-        checksWrap.append(el("div", { class: "link-table-wrap" }, table));
+        sourceChecks.append(sourceCheckboxList(sources, selected, sourceBoxes, `pe-source-${handle}`));
+        sourceBoxes.forEach((item) => item.box.addEventListener("change", () => {
+          markEdited();
+          applySourceFilter(); // a toggle can change what the active/inactive filter shows
+        }));
+        sourcesLoaded = true;
+        initialSources = sourceSelection();
+        applySourceFilter();
+        updateDirtyState();
       } catch (err) {
-        clear(checksWrap);
-        checksWrap.append(el("p", { class: "error", role: "alert" }, t("Could not load sources: {msg}", { msg: err.message })));
+        clear(sourceChecks);
+        sourceChecks.append(el("p", { class: "error", role: "alert" }, t("Could not load sources: {msg}", { msg: err.message })));
       }
     }
 
-    save.addEventListener("click", async () => {
-      const checked = boxes.filter((b) => b.box.checked).map((b) => b.id);
-      save.disabled = true;
-      setStatus(status, "pending", t("Saving..."));
-      try {
-        await api.putAuthorSources(handle, checked);
-        setStatus(status, "done", t("Sources updated."));
-        await loadSources();
-        if (onChanged) onChanged();
-      } catch (err) {
-        save.disabled = false;
-        setStatus(status, "error", t("Could not save sources ({code}): {msg}", { code: err.code, msg: err.message }));
-      }
-    });
+    function profileSnapshot() {
+      return {
+        name: displayName.value.trim(),
+        gender: gender.value,
+        beat: beat.value,
+        language: language.value.trim(),
+        avatar: avatarPath.value.trim(),
+        who: whoIAm.value.trim(),
+        style: style.value.trim(),
+        about: about.value.trim(),
+      };
+    }
 
-    return { panel, load: loadSources };
+    function applyProfile(snapshot) {
+      displayName.value = snapshot.name;
+      gender.value = snapshot.gender;
+      beat.value = snapshot.beat;
+      language.value = snapshot.language;
+      avatarPath.value = snapshot.avatar;
+      whoIAm.value = snapshot.who;
+      style.value = snapshot.style;
+      about.value = snapshot.about;
+      updateAvatarPreview();
+    }
+
+    function sourceSelection() {
+      return sourceBoxes.filter((item) => item.box.checked).map((item) => item.slug).sort((a, b) => a.localeCompare(b));
+    }
+
+    // Show/hide each linked-source row in place (never re-render, so the in-progress
+    // selection survives): keep rows that match the "active on this author" toggle
+    // (linked vs not) AND the orientation filter.
+    function applySourceFilter() {
+      const activeVal = activeFilter.value;
+      const leanVal = leanFilter.value;
+      for (const item of sourceBoxes) {
+        if (!item.item) continue;
+        const activeOk = !activeVal || (activeVal === "active" ? item.box.checked : !item.box.checked);
+        const leanOk = !leanVal || (item.lean || "neutral") === leanVal;
+        item.item.hidden = !(activeOk && leanOk);
+      }
+    }
+
+    function applySources(slugs) {
+      const selected = new Set(slugs || []);
+      sourceBoxes.forEach((item) => {
+        item.box.checked = selected.has(item.slug);
+      });
+    }
+
+    function markEdited() {
+      saveArmed = false;
+      save.textContent = t("Save");
+      if (editStatus.dataset.state === "done") clearStatus(editStatus);
+      updateAvatarPreview();
+      updateDirtyState();
+    }
+
+    function restoreInitial() {
+      applyProfile(initialProfile);
+      if (initialSources) applySources(initialSources);
+      saveArmed = false;
+      save.textContent = t("Save");
+      clearStatus(editStatus);
+      updateDirtyState();
+    }
+
+    function isComplete() {
+      let complete = true;
+      for (const control of required) {
+        const ok = Boolean(control.value.trim());
+        if (!ok) complete = false;
+        control.setAttribute("aria-invalid", ok ? "false" : "true");
+      }
+      return complete;
+    }
+
+    function isDirty() {
+      return !sameProfile(profileSnapshot(), initialProfile) || (initialSources != null && !sameList(sourceSelection(), initialSources));
+    }
+
+    function updateDirtyState() {
+      const complete = isComplete();
+      const dirty = isDirty();
+      save.disabled = !complete || !dirty;
+      restore.disabled = !dirty;
+      if (!dirty) {
+        saveArmed = false;
+        save.textContent = t("Save");
+      }
+    }
+
+    function updateAvatarPreview() {
+      clear(avatarPreview);
+      const src = avatarPath.value.trim();
+      if (isSafeImageSrc(src)) {
+        avatarPreview.append(el("img", { src, alt: "" }));
+        return;
+      }
+      const initial = displayName.value.trim().charAt(0).toUpperCase() || "?";
+      avatarPreview.append(el("span", { class: "avatar avatar--fallback", "aria-hidden": "true" }, initial));
+    }
   }
 
   // Run a card action, then reload the roster. On success the card is replaced by
@@ -364,18 +465,36 @@ function avatar(author) {
   return el("div", { class: "avatar avatar--fallback", "aria-hidden": "true" }, initial);
 }
 
-function sourceLeanLabel(lean) {
-  if (lean === "right") return t("Right");
-  if (lean === "left") return t("Left");
-  return t("Neutral");
-}
-
 function setStatus(node, state, text) {
   node.dataset.state = state;
   node.textContent = text;
   const assertive = state === "error";
   node.setAttribute("role", assertive ? "alert" : "status");
   node.setAttribute("aria-live", assertive ? "assertive" : "polite");
+}
+
+function clearStatus(node) {
+  delete node.dataset.state;
+  node.textContent = "";
+  node.setAttribute("role", "status");
+  node.setAttribute("aria-live", "polite");
+}
+
+function sameProfile(a, b) {
+  if (!a || !b) return false;
+  return a.name === b.name &&
+    a.gender === b.gender &&
+    a.beat === b.beat &&
+    a.language === b.language &&
+    a.avatar === b.avatar &&
+    a.who === b.who &&
+    a.style === b.style &&
+    a.about === b.about;
+}
+
+function sameList(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
 }
 
 function showDialog(dialog) {

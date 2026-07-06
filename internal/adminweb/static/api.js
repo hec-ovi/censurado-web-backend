@@ -121,4 +121,8 @@ export const api = {
   // --- Portadas (the per-day front-page plan) --------------------------
   getPortadas: () => get("/portadas"),
   upsertPortada: (body) => post("/portadas", body),
+
+  // --- Recomendado (global front-page rail) ----------------------------
+  getRecomendado: () => get("/recomendado"),
+  putRecomendado: (slugs) => put("/recomendado", { slugs }),
 };

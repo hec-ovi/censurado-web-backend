@@ -1303,6 +1303,17 @@ input[type="radio"] {
     grid-column: 1 / -1;
   }
 
+  .persona-field-strip,
+  .persona-prompt-grid,
+  .persona-avatar-row {
+    grid-template-columns: 1fr;
+  }
+
+  .persona-field-strip > .field + .field {
+    border-left: 0;
+    border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+
   .backend-row,
   .derived-row {
     grid-template-columns: 1fr;
@@ -1463,19 +1474,20 @@ textarea,
 .editor-tabs-list {
   flex: 0 0 auto;
   display: flex;
-  gap: 0;
+  gap: 4px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-strong);
   background: var(--surface);
+  padding: 0 0 0 10px;
 }
 
 .content-tabs-tab,
 .editor-tabs-tab {
   min-height: 44px;
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--surface-2);
   color: var(--muted);
   box-shadow: none;
   padding: 0 16px;
@@ -1491,6 +1503,7 @@ textarea,
 .content-tabs-tab[aria-selected="true"],
 .editor-tabs-tab[aria-selected="true"] {
   background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 
@@ -1501,7 +1514,7 @@ textarea,
 
 .content-tabs-panel {
   flex: 1 1 auto;
-  padding: 16px;
+  padding: 16px 0 0;
   overflow: hidden;
 }
 
@@ -1963,19 +1976,26 @@ textarea,
 .persona-card {
   --author-accent: var(--text-strong);
   grid-template-columns: auto minmax(0, 1fr) auto;
-  border-top: 1px solid var(--line);
+  border: 0;
   border-left: 4px solid var(--author-accent);
-  background: var(--surface);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 0 12px 14px;
 }
 
 .persona-card[data-section="politics"],
 .author-chip[data-section="politics"] { --author-accent: var(--site-red); }
 .persona-card[data-section="economics"],
-.author-chip[data-section="economics"] { --author-accent: var(--site-green); }
+.persona-card[data-section="misterio-y-conspiracion"],
+.author-chip[data-section="economics"],
+.author-chip[data-section="misterio-y-conspiracion"] { --author-accent: var(--site-green); }
 .persona-card[data-section="tech"],
 .author-chip[data-section="tech"] { --author-accent: var(--site-blue); }
 .persona-card[data-section="world"],
 .author-chip[data-section="world"] { --author-accent: var(--site-plum); }
+.persona-card[data-section="literatura"],
+.author-chip[data-section="literatura"] { --author-accent: var(--site-gold); }
 
 .persona-card .badge {
   background: color-mix(in srgb, var(--author-accent) 16%, transparent);
@@ -1984,16 +2004,19 @@ textarea,
 
 .persona-editor {
   grid-column: 1 / -1;
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .persona-dialog {
-  width: min(980px, calc(100vw - 48px));
-  height: min(820px, calc(100vh - 48px));
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
   max-width: none;
   max-height: none;
+  margin: 0;
   padding: 0;
-  border: 1px solid var(--line-strong);
+  border: 0;
+  border-radius: 0;
   background: var(--surface);
   color: var(--text);
 }
@@ -2003,69 +2026,33 @@ textarea,
 }
 
 .persona-dialog-shell {
+  position: relative;
   height: 100%;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.persona-dialog-head {
-  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: start;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-}
-
-.persona-dialog-head h2 {
-  margin: 4px 0 0;
-  color: var(--text-strong);
-  font-size: 1.15rem;
-  line-height: 1.18;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .persona-dialog-close {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  right: 14px;
   width: 38px;
   min-width: 38px;
+  height: 38px;
+  min-height: 38px;
   padding: 0;
+  border-radius: 999px;
   font-size: 1.25rem;
 }
 
-.persona-dialog .persona-editor,
-.persona-dialog .editor-tabs-shell,
-.persona-dialog .editor-tabs-panel {
+.persona-dialog .persona-editor {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-.persona-dialog .persona-editor {
-  display: flex;
-  flex-direction: column;
-  border-top: 0;
-}
-
-.persona-dialog .editor-tabs-shell {
-  display: flex;
-  flex-direction: column;
-}
-
-.persona-dialog .editor-tabs-panel {
+  height: 100%;
   overflow: auto;
-}
-
-.editor-tabs-list {
-  margin-top: 12px;
-  border: 1px solid var(--line);
-  border-bottom: 0;
-}
-
-.editor-tabs-panel {
-  border: 1px solid var(--line);
-  padding: 14px;
-  background: var(--surface-2);
+  border-top: 0;
 }
 
 .persona-edit,
@@ -2075,8 +2062,129 @@ textarea,
   border-top: 0;
 }
 
+.persona-form,
+.persona-edit {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.persona-dialog .persona-edit {
+  min-height: 100%;
+  padding: 28px clamp(18px, 4vw, 48px) 18px;
+}
+
+.persona-form input,
+.persona-form select,
+.persona-form textarea,
+.persona-edit input,
+.persona-edit select,
+.persona-edit textarea {
+  border-radius: 10px;
+}
+
+.persona-field-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.persona-field-strip > .field {
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.persona-field-strip > .field + .field {
+  border-left: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.persona-field-strip input,
+.persona-field-strip select {
+  border: 0;
+  border-radius: 8px;
+  background-color: var(--surface);
+}
+
+.persona-avatar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 14px;
+  align-items: end;
+}
+
+.persona-avatar-preview-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.persona-avatar-preview {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.persona-avatar-preview img,
+.persona-avatar-preview .avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+.persona-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.persona-prompt-grid textarea,
+.persona-edit > .field textarea,
+.persona-form > .field textarea {
+  min-height: 150px;
+}
+
+.persona-sources {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.persona-source-checks {
+  min-height: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.persona-source-checks > .muted,
+.persona-source-checks > .error {
+  margin: 0;
+  padding: 12px;
+}
+
+.persona-actions--profile {
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
 .persona-actions--profile .danger {
   margin-left: auto;
+}
+
+.persona-dialog .persona-actions--profile .danger {
+  margin-left: 0;
 }
 
 button.danger,

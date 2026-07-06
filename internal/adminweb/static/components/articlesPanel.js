@@ -100,13 +100,6 @@ export function ArticlesPanel({ api } = {}) {
             el("div", { class: "article-day-pager" }, [prevDay, daySelect, nextDay]),
           ]),
         ]),
-        el("fieldset", { class: "article-filter-group article-filter-group-article" }, [
-          el("legend", {}, t("Article")),
-          el("label", { class: "article-title-search", for: "article-title-search" }, [
-            SearchIcon("article-search-icon"),
-            articleSearch,
-          ]),
-        ]),
         el("fieldset", { class: "article-filter-group article-filter-group-authors" }, [
           el("legend", { class: "article-filter-legend" }, t("Author")),
           el("div", { class: "article-author-filter" }, [
@@ -115,6 +108,13 @@ export function ArticlesPanel({ api } = {}) {
               authorSearch,
             ]),
             authorSelect,
+          ]),
+        ]),
+        el("fieldset", { class: "article-filter-group article-filter-group-article" }, [
+          el("legend", {}, t("Article")),
+          el("label", { class: "article-title-search", for: "article-title-search" }, [
+            SearchIcon("article-search-icon"),
+            articleSearch,
           ]),
         ]),
         el("div", { class: "article-filter-actions" }, [clearFilters]),

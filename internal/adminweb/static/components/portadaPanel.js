@@ -1,64 +1,59 @@
-import { el, clear, field, help, isSafeImageSrc, subTabs } from "./el.js";
+import { el, clear, help, isSafeImageSrc } from "./el.js";
+import { SearchIcon } from "./icons.js";
 import { t } from "./i18n.js";
 
 const PORTADA_HELP =
   "A portada is one day's front-page plan. Pick a day, then order its articles (the first row is the day's lead), " +
-  "mark any as important, and check the ones that belong in the recomendado list. Saving writes just that day; the " +
-  "articles themselves are untouched.";
-
-const RECOMMENDED_LIMIT = 10;
+  "and mark any as important. Saving writes just that day; the articles themselves are untouched.";
 
 export function PortadaPanel({ api } = {}) {
   let groups = new Map();
   let plansByDate = new Map();
   let allArticles = [];
+  let dayQuery = "";
   let selectedDate = null;
   let order = [];
   const roles = new Map();
-  const recomendado = new Set();
   let dragSlug = null;
 
-  const daySelect = el("select", { id: "portada-day", onChange: (e) => selectDay(e.target.value) });
+  const daySelect = el("select", { id: "portada-day", "aria-label": t("Day"), onChange: (e) => selectDay(e.target.value) });
+  const daySearch = el("input", { type: "search", id: "portada-day-search", "aria-label": t("Search days") });
+  const prevDay = el("button", { type: "button", class: "secondary article-day-nav portada-day-nav", "aria-label": t("Back") }, "<");
+  const nextDay = el("button", { type: "button", class: "secondary article-day-nav portada-day-nav", "aria-label": t("Next day") }, ">");
   const listEl = el("div", { class: "portada-list scroll-pane" });
-  const recEl = el("div", { class: "portada-recomendado scroll-pane" });
   const save = el("button", { type: "submit" }, t("Guardar portada"));
   const status = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
 
-  const controls = el("div", { class: "pane-toolbar" }, [field(t("Day"), daySelect, "portada-day")]);
+  daySearch.addEventListener("input", () => {
+    dayQuery = daySearch.value.trim();
+    renderDayChoices();
+  });
+  prevDay.addEventListener("click", () => moveDay(-1));
+  nextDay.addEventListener("click", () => moveDay(1));
+
   const form = el("form", { class: "portada-form workspace-form" }, [
-    controls,
+    el("div", { class: "article-filter-bar portada-filter-bar" }, [
+      el("fieldset", { class: "article-filter-group portada-filter-group" }, [
+        el("legend", {}, t("Days")),
+        el("div", { class: "article-day-filter" }, [
+          el("label", { class: "article-day-search", for: "portada-day-search" }, [
+            SearchIcon("article-search-icon"),
+            daySearch,
+          ]),
+          el("div", { class: "article-day-pager portada-day-pager" }, [prevDay, daySelect, nextDay]),
+        ]),
+      ]),
+      el("div", { class: "article-filter-actions portada-filter-actions" }, [save]),
+    ]),
     listEl,
-    el("div", { class: "form-actions" }, [save]),
     status,
   ]);
   form.addEventListener("submit", onSave);
 
-  const tabs = subTabs(
-    [
-      {
-        id: "front",
-        label: t("Portada"),
-        content: el("section", { class: "panel panel-fill" }, [
-          el("div", { class: "panel-head" }, [el("h2", {}, t("Portada")), help(t(PORTADA_HELP))]),
-          form,
-        ]),
-      },
-      {
-        id: "recommended",
-        label: t("Recomendado"),
-        content: el("section", { class: "panel panel-fill" }, [
-          el("div", { class: "panel-head" }, [
-            el("h2", {}, t("Recomendado")),
-            el("p", { class: "muted" }, t("Up to {n} articles.", { n: RECOMMENDED_LIMIT })),
-          ]),
-          recEl,
-        ]),
-      },
-    ],
-    { className: "content-tabs", label: t("Portada sections") },
-  );
-
-  const element = el("div", { class: "portada workspace-section" }, tabs.element);
+  const element = el("div", { class: "portada workspace-section" }, el("section", { class: "panel panel-fill portada-panel" }, [
+    el("div", { class: "panel-head" }, [el("h2", {}, t("Portada")), help(t(PORTADA_HELP))]),
+    form,
+  ]));
 
   function groupByDay(articles) {
     const map = new Map();
@@ -79,11 +74,9 @@ export function PortadaPanel({ api } = {}) {
     selectedDate = date;
     order = [];
     roles.clear();
-    recomendado.clear();
 
     const dayArticles = groups.get(date) || [];
     const bySlug = new Map(dayArticles.map((a) => [a.slug, a]));
-    const byAnySlug = new Map(allArticles.map((a) => [a.slug, a]));
     const plan = plansByDate.get(date);
     const placed = new Set();
 
@@ -101,14 +94,7 @@ export function PortadaPanel({ api } = {}) {
       order.push(article);
       if (!roles.has(article.slug)) roles.set(article.slug, "");
     }
-    if (plan) {
-      for (const slug of (plan.recomendado || []).slice(0, RECOMMENDED_LIMIT)) {
-        if (byAnySlug.has(slug)) recomendado.add(slug);
-      }
-    }
-
     renderList();
-    renderRecomendado(allArticles);
   }
 
   function renderList() {
@@ -250,86 +236,64 @@ export function PortadaPanel({ api } = {}) {
     renderList();
   }
 
-  function renderRecomendado(candidates) {
-    clear(recEl);
-    if (!candidates.length) {
-      recEl.append(el("p", { class: "muted empty-state" }, t("No articles yet.")));
-      return;
-    }
-
-    const count = () => recomendado.size;
-    const note = el("div", { class: "recommended-note" });
-    const updateNote = () => {
-      note.textContent = t("{count}/{limit} recommended selected.", { count: count(), limit: RECOMMENDED_LIMIT });
-    };
-    const updateDisabled = (boxes) => {
-      const full = count() >= RECOMMENDED_LIMIT;
-      boxes.forEach(({ box }) => {
-        box.disabled = full && !box.checked;
-      });
-    };
-
-    const boxes = [];
-    const ordered = [...candidates].sort((a, b) => {
-      const ar = recomendado.has(a.slug) ? 0 : 1;
-      const br = recomendado.has(b.slug) ? 0 : 1;
-      return ar - br || String(b.published_at || "").localeCompare(String(a.published_at || ""));
-    });
-    const list = el("div", { class: "recommended-list" });
-    for (const article of ordered) {
-      const id = `portada-rec-${article.slug}`;
-      const box = el("input", { type: "checkbox", id });
-      box.checked = recomendado.has(article.slug);
-      boxes.push({ box });
-      box.addEventListener("change", () => {
-        if (box.checked) recomendado.add(article.slug);
-        else recomendado.delete(article.slug);
-        updateNote();
-        updateDisabled(boxes);
-      });
-      list.append(
-        el("label", { class: "recommended-choice", for: id, dataset: { slug: article.slug } }, [
-          box,
-          el(
-            "span",
-            { class: "recommended-index", "aria-hidden": "true" },
-            recomendado.has(article.slug) ? String([...recomendado].indexOf(article.slug) + 1) : "—",
-          ),
-          el("span", { class: "recommended-copy" }, [
-            el("strong", {}, article.title || ""),
-            article.metadata && article.metadata.subtitle ? el("small", {}, article.metadata.subtitle) : null,
-          ]),
-        ]),
-      );
-    }
-    updateNote();
-    recEl.append(note, list);
-    updateDisabled(boxes);
-  }
-
   function render() {
     const days = sortedDays();
-    clear(daySelect);
     if (!days.length) {
+      clear(daySelect);
       daySelect.append(el("option", { value: "" }, t("No articles yet.")));
       daySelect.disabled = true;
+      prevDay.disabled = true;
+      nextDay.disabled = true;
       save.disabled = true;
       selectedDate = null;
       order = [];
       roles.clear();
-      recomendado.clear();
       clear(listEl);
       listEl.append(el("p", { class: "muted empty-state" }, t("No articles yet.")));
-      clear(recEl);
-      recEl.append(el("p", { class: "muted empty-state" }, t("No articles yet.")));
       return;
     }
     daySelect.disabled = false;
     save.disabled = false;
-    for (const day of days) daySelect.append(el("option", { value: day }, day));
     const keep = selectedDate && days.includes(selectedDate) ? selectedDate : days[0];
-    daySelect.value = keep;
+    selectedDate = keep;
+    renderDayChoices();
     selectDay(keep);
+  }
+
+  function renderDayChoices() {
+    const days = sortedDays();
+    const query = dayQuery.toLowerCase();
+    let visible = query ? days.filter((day) => day.toLowerCase().includes(query)) : days;
+    if (selectedDate && !visible.includes(selectedDate) && days.includes(selectedDate)) {
+      visible = [selectedDate, ...visible];
+    }
+    clear(daySelect);
+    if (!visible.length) {
+      daySelect.append(el("option", { value: "" }, t("No days match.")));
+      return;
+    }
+    for (const day of visible) daySelect.append(el("option", { value: day }, day));
+    daySelect.value = visible.includes(selectedDate) ? selectedDate : visible[0];
+    updateDayButtons();
+  }
+
+  function moveDay(delta) {
+    const days = sortedDays();
+    const index = days.indexOf(selectedDate);
+    if (index < 0) return;
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= days.length) return;
+    selectedDate = days[nextIndex];
+    daySelect.value = selectedDate;
+    renderDayChoices();
+    selectDay(selectedDate);
+  }
+
+  function updateDayButtons() {
+    const days = sortedDays();
+    const index = days.indexOf(selectedDate);
+    prevDay.disabled = index <= 0;
+    nextDay.disabled = index < 0 || index >= days.length - 1;
   }
 
   async function reload() {
@@ -359,12 +323,11 @@ export function PortadaPanel({ api } = {}) {
     event.preventDefault();
     if (!selectedDate) return;
     const entries = order.map((article) => ({ slug: article.slug, role: roles.get(article.slug) || "" }));
-    const rec = allArticles.map((a) => a.slug).filter((slug) => recomendado.has(slug)).slice(0, RECOMMENDED_LIMIT);
 
     setBusy(save, form, true);
     setStatus(status, "pending", t("Saving..."));
     try {
-      await api.upsertPortada({ date: selectedDate, entries, recomendado: rec });
+      await api.upsertPortada({ date: selectedDate, entries });
       setStatus(status, "done", t("Portada guardada."));
       await reload();
     } catch (err) {
