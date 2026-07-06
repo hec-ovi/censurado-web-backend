@@ -15,7 +15,7 @@ import (
 // the session).
 func openPath(path string) bool {
 	switch path {
-	case "/healthz", "/login", "/logout", "/styles.css":
+	case "/healthz", "/login", "/logout", "/styles.css", "/brand.css", "/controls.css", "/login.css", "/login.js", "/components/i18n.js":
 		return true
 	}
 	return path == "/media" || strings.HasPrefix(path, "/media/")
@@ -75,6 +75,7 @@ func gate(cfg Config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if hasBearer(r) || openPath(path) {
+			noCache(w, path)
 			next.ServeHTTP(w, r)
 			return
 		}

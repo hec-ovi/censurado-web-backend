@@ -14,20 +14,46 @@ const loginPage = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Censurado | Acceso</title>
+<link rel="stylesheet" href="/brand.css">
+<link rel="stylesheet" href="/controls.css">
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/login.css">
 </head>
 <body class="login-page">
-<main class="login-card">
-<div class="login-brand"><span class="brand-mark">CN</span><span>Censurado</span></div>
-<h1>Panel de administraci&oacute;n</h1>
+<div class="admin-controls">
+<div class="admin-lang-switch" role="group" aria-label="Idioma" data-i18n-aria="Language">
+<button type="button" data-lang-choice="en" aria-pressed="false">EN</button>
+<button type="button" data-lang-choice="es" aria-pressed="false">ES</button>
+</div>
+<div class="admin-theme-switch" role="group" aria-label="Tema" data-i18n-aria="Theme">
+<button type="button" data-theme-choice="system" aria-pressed="true" data-i18n="System">Sistema</button>
+<button type="button" data-theme-choice="light" aria-pressed="false" data-i18n="Light">Claro</button>
+<button type="button" data-theme-choice="dark" aria-pressed="false" data-i18n="Dark">Oscuro</button>
+</div>
+</div>
+<main class="login-shell">
+<section class="login-identity" aria-label="El Censurado Web">
+<div class="admin-wordmark admin-wordmark-login" aria-label="El Censurado Web">
+<span class="brand-word brand-word-el"><span class="brand-el-e">E</span><span class="brand-el-l">L</span></span>
+<span class="brand-word brand-word-censurado">censurado</span>
+<span class="brand-word brand-word-web">W<span class="brand-e">e</span>b</span>
+</div>
+<p>Despachos independientes asistidos por IA sobre tecnolog&iacute;a, poder, mercados y pol&iacute;tica.</p>
+</section>
+<div class="login-divider" aria-hidden="true"></div>
+<section class="login-auth" aria-label="Acceso operador">
+<h1 data-i18n="Welcome">Welcome</h1>
+<p class="login-subtitle" data-i18n="Please login to admin dashboard.">Please login to admin dashboard.</p>
 <form class="login-form" method="post" action="/login">
-<label class="field">Token de operador
-<input type="password" name="token" autocomplete="current-password" value="%s" autofocus>
+<label class="field"><span class="visually-hidden" data-i18n="Operator token">Token de operador</span>
+<input type="password" name="token" autocomplete="current-password" value="%s" placeholder="OPERATOR TOKEN" data-i18n-placeholder="OPERATOR TOKEN" autofocus>
 </label>
-<button type="submit">Entrar</button>
+<button class="login-submit" type="submit"><span data-i18n="Login">Login</span><span class="login-submit-arrow" aria-hidden="true">&rsaquo;</span></button>
 </form>
 %s
+</section>
 </main>
+<script type="module" src="/login.js"></script>
 </body></html>
 `
 

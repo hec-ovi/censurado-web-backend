@@ -115,7 +115,6 @@ export const api = {
   getArticle: (slug) => get(`/articles/${enc(slug)}`),
   updateArticle: (slug, body) => put(`/articles/${enc(slug)}`, body),
   deleteArticle: (slug) => del(`/articles/${enc(slug)}`),
-  restoreArticle: (slug) => post(`/articles/${enc(slug)}/restore`),
 
   // --- Portadas (the per-day front-page plan) --------------------------
   getPortadas: () => get("/portadas"),

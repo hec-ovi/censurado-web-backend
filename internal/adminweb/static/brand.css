@@ -1,0 +1,118 @@
+:root {
+  --admin-page: #eef1f3;
+  --admin-ink: #101820;
+  --admin-muted: #52606d;
+  --admin-line: #8a949d;
+  --admin-red: #e01842;
+  --admin-logo-ink: var(--admin-ink);
+}
+
+:root[data-theme="dark"] {
+  --admin-page: #0d1419;
+  --admin-ink: #f8f0e5;
+  --admin-muted: #a9b4bc;
+  --admin-line: #5f6f79;
+  --admin-red: #ff2f64;
+  --admin-logo-ink: var(--admin-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --admin-page: #0d1419;
+    --admin-ink: #f8f0e5;
+    --admin-muted: #a9b4bc;
+    --admin-line: #5f6f79;
+    --admin-red: #ff2f64;
+    --admin-logo-ink: var(--admin-ink);
+  }
+}
+
+.admin-wordmark {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.12em;
+  color: var(--admin-logo-ink);
+  font-family: "Inter Tight", "Aptos Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  font-weight: 950;
+  line-height: 0.84;
+}
+
+.admin-wordmark-login {
+  max-width: 31rem;
+  font-size: clamp(2.7rem, 5.2vw, 4.2rem);
+}
+
+.admin-wordmark-sidebar {
+  --admin-logo-ink: var(--sidebar-text, var(--admin-ink));
+  max-width: 11.5rem;
+  font-size: 1.5rem;
+}
+
+.admin-wordmark-shell {
+  max-width: 12.5rem;
+  font-size: 1.42rem;
+}
+
+.brand-word {
+  position: relative;
+  display: inline-block;
+}
+
+.brand-word-el {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 0.08em 0.04em 0.06em 0.09em;
+  background: var(--admin-red);
+  color: #101820;
+  font-family: Impact, "Arial Black", "Aptos Display", sans-serif;
+  font-size: 0.98em;
+  line-height: 0.8;
+}
+
+.brand-el-e,
+.brand-el-l {
+  display: inline-block;
+}
+
+.brand-el-l {
+  margin-left: -0.04em;
+  transform: scaleX(0.82);
+  transform-origin: left center;
+}
+
+.brand-word-censurado {
+  color: var(--admin-logo-ink);
+}
+
+.brand-word-censurado::after {
+  content: "";
+  position: absolute;
+  left: -0.02em;
+  right: -0.02em;
+  top: 52%;
+  height: 0.075em;
+  background: var(--admin-red);
+  transform: translateY(-50%);
+}
+
+.brand-word-web {
+  flex-basis: 100%;
+  color: var(--admin-red);
+}
+
+.brand-e {
+  position: relative;
+  display: inline-block;
+}
+
+.brand-e::before {
+  content: "";
+  position: absolute;
+  left: 0.06em;
+  right: 0.02em;
+  top: -0.08em;
+  height: 0.055em;
+  background: currentColor;
+  transform: rotate(-8deg);
+}

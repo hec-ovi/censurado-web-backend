@@ -51,7 +51,6 @@ function ThemeControl() {
       "button",
       {
         type: "button",
-        class: "theme-option",
         dataset: { theme },
         "aria-pressed": "false",
         onClick: () => setTheme(theme),
@@ -71,7 +70,18 @@ function ThemeControl() {
   buttons.forEach((button) => {
     button.setAttribute("aria-pressed", button.dataset.theme === initial ? "true" : "false");
   });
-  return el("div", { class: "theme-switch", role: "group", "aria-label": t("Theme") }, buttons);
+  return el("div", { class: "admin-theme-switch", role: "group", "aria-label": t("Theme") }, buttons);
+}
+
+function BrandWordmark(className) {
+  return el("div", { class: className, "aria-label": "El Censurado Web" }, [
+    el("span", { class: "brand-word brand-word-el" }, [
+      el("span", { class: "brand-el-e" }, "E"),
+      el("span", { class: "brand-el-l" }, "L"),
+    ]),
+    el("span", { class: "brand-word brand-word-censurado" }, "censurado"),
+    el("span", { class: "brand-word brand-word-web" }, ["W", el("span", { class: "brand-e" }, "e"), "b"]),
+  ]);
 }
 
 // Mount the panel into `root`. `deps.api` is injectable so a test can mount the
@@ -201,7 +211,6 @@ export function mountApp(root, deps = {}) {
         "button",
         {
           type: "button",
-          class: "lang-option",
           dataset: { lang },
           "aria-pressed": lang === activeLocale ? "true" : "false",
           onClick: () => {
@@ -212,26 +221,23 @@ export function mountApp(root, deps = {}) {
         LANG_LABEL[lang],
       ),
     );
-    return el("div", { class: "lang-switch", role: "group", "aria-label": t("Language") }, buttons);
+    return el("div", { class: "admin-lang-switch", role: "group", "aria-label": t("Language") }, buttons);
   }
 
-  const sidebar = el("aside", { class: "app-sidebar", "aria-label": t("Primary") }, [
-    el("div", { class: "brand" }, [
-      el("span", { class: "brand-mark" }, "CN"),
-      el("span", { class: "brand-name" }, t("Admin Panel")),
-    ]),
-    tablist,
-  ]);
+  const sidebar = el("aside", { class: "app-sidebar", "aria-label": t("Primary") }, tablist);
 
   const topbar = el("header", { class: "app-topbar" }, [
-    el("div", {}, [el("p", { class: "kicker" }, t("Control panel")), pageTitle]),
-    el("div", { class: "topbar-actions" }, [LangControl(), ThemeControl()]),
+    el("div", { class: "app-header-brand" }, [BrandWordmark("admin-wordmark admin-wordmark-shell")]),
+    el("div", { class: "app-header-divider", "aria-hidden": "true" }),
+    el("div", { class: "app-titleblock" }, [el("p", { class: "kicker" }, t("Control panel")), pageTitle]),
+    el("div", { class: "admin-controls" }, [LangControl(), ThemeControl()]),
   ]);
 
   root.replaceChildren(
     el("div", { class: "app-shell" }, [
+      topbar,
       sidebar,
-      el("div", { class: "app-workspace" }, [topbar, el("main", { class: "app-main" }, panels)]),
+      el("div", { class: "app-workspace" }, [el("main", { class: "app-main" }, panels)]),
     ]),
   );
 

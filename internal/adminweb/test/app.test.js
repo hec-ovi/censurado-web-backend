@@ -59,9 +59,9 @@ test("renders a clean zero-state on every surviving tab (backend only, brain dow
   mount();
   await screen.findByText("online");
 
-  await screen.findByText("No articles yet.");
+  assert.ok((await screen.findAllByText("No articles yet.")).length >= 1);
   await screen.findByText("No topics yet.");
-  await screen.findByText(/no authors yet/i);
+  await screen.findByText("No authors yet. Create one to get started.");
   await screen.findByText("No sources yet.");
 });
 

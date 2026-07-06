@@ -1,0 +1,10 @@
+# Admin UI Contract
+
+- Scope: admin UI lives in `internal/adminweb`; server-rendered login is in `login.go`, SPA assets are in `static/`.
+- Shared chrome: `/brand.css` owns the El Censurado Web wordmark and public-site theme tokens; `/controls.css` owns the fixed EN/ES + theme controls used by both login and SPA.
+- SPA shell: `static/app.js` renders one full-width `app-topbar` that contains logo, separator, page title, language, and theme controls; keep the sidebar logo-free and flush under the header with no top label/gap so header alignment stays unified.
+- Login assets: `/login` loads shared `/brand.css`, `/controls.css`, `/styles.css`, isolated `/login.css`, and `/login.js`; keep login-only styling out of the main stylesheet.
+- Articles list: `components/articlesPanel.js` is a list-only table, not cards. It reads `/articles`, `/authors`, and `/portadas`: media filters use the API `card_type` (text/image/youtube/video mapped to youtube), and video cards must preview from `metadata.card.src` or `metadata.video` instead of showing a separate Video tag. Portadas provide per-day position + single/full span role, and authors provide face/name display. Filters are client-side Show checkboxes, Date order radios, searchable day dropdown, and searchable author checkboxes; date order only arranges day blocks, while article order inside a day stays portada order. Rows open by row click and delete through an internal confirmation dialog. `static/articles.css` owns list/table/delete-modal styles.
+- Theme/language: admin theme is `localStorage["panel-theme"]`; language is `localStorage["admin-lang"]`; both login and SPA honor those values.
+- Brand: `.admin-wordmark` mirrors `censurado-web/internal/generate/templates/components/chrome.tmpl`; change wordmark styling in `static/brand.css` so login and SPA move together.
+- Local stack: active admin URL is `http://127.0.0.1:8082/login`; rebuild with the `censurado-web-brain` Compose `publish` service after embedded asset changes.
