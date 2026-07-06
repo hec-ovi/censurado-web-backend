@@ -63,6 +63,46 @@ func (a Article) HasMedia() bool {
 	return videoMarkerRe.MatchString(a.Body)
 }
 
+// cardTypes is the closed set a front-page card's `type` may take (what the
+// listing card shows). Mirrors metadata.card.type in contracts/article.schema.json.
+var cardTypes = map[string]bool{"text": true, "image": true, "youtube": true, "video": true}
+
+// metaString reads a trimmed string value from the open metadata map; a missing
+// key or a non-string value yields "".
+func metaString(m map[string]any, key string) string {
+	if s, ok := m[key].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
+// CardType is the label for what the front-page CARD (the listing preview) shows:
+// "text", "image", "youtube", or "video". It is the AUTHORED metadata.card.type
+// when the writer set a valid one; otherwise it is DERIVED from the legacy media
+// signals for back-compat, so a piece with no `card` block still reports a sensible
+// label. Server-derived, never stored. It describes the CARD only, which is
+// independent of the body: an article whose body embeds several videos can still
+// carry a "text" card. The per-day portada layout keys its alternation off this
+// label, and it replaces reading the raw has_media flag for that purpose.
+func (a Article) CardType() string {
+	if c, ok := a.Metadata["card"].(map[string]any); ok {
+		if t := metaString(c, "type"); cardTypes[t] {
+			return t
+		}
+	}
+	switch {
+	case metaString(a.Metadata, "image") != "":
+		return "image"
+	case metaString(a.Metadata, "youtube") != "" || metaString(a.Metadata, "youtube_id") != "":
+		return "youtube"
+	case metaString(a.Metadata, "video") != "":
+		return "video"
+	case videoMarkerRe.MatchString(a.Body):
+		return "video"
+	}
+	return "text"
+}
+
 // PublishInput is what an author agent submits. It mirrors
 // contracts/article.schema.json. Server-owned fields (id, content_hash,
 // created_at) are never accepted from input.

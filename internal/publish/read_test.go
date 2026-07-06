@@ -301,6 +301,29 @@ func TestReadArticles_HasMedia(t *testing.T) {
 			}
 		}
 	})
+
+	// card_type is the label (what the front-page card shows), derived here for
+	// these legacy pieces (no authored card block): the image piece -> "image", the
+	// body-video piece -> "video", the plain piece -> "text".
+	t.Run("light list carries card_type label", func(t *testing.T) {
+		var got struct {
+			Articles []struct {
+				Slug     string `json:"slug"`
+				CardType string `json:"card_type"`
+			} `json:"articles"`
+		}
+		decodeBody(t, getAuth(t, srv, opToken, "/articles"), &got)
+		seen := map[string]string{}
+		for _, a := range got.Articles {
+			seen[a.Slug] = a.CardType
+		}
+		wantCard := map[string]string{imgSlug: "image", vidSlug: "video", txtSlug: "text"}
+		for slug, exp := range wantCard {
+			if seen[slug] != exp {
+				t.Errorf("list card_type[%s] = %q, want %q", slug, seen[slug], exp)
+			}
+		}
+	})
 }
 
 func TestReadArticles_FilterPagingAndBodyOmitted(t *testing.T) {

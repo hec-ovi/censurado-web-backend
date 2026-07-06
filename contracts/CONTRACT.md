@@ -55,7 +55,9 @@ Exact exported field set and JSON tags (frozen by `domain/contract_shape_test.go
 | CreatedAt | time.Time | `created_at` |
 
 `ContentHash` is SHA-256 over length-prefixed `title|body|author|section` (dedup/idempotency
-identity). `HasMedia()` is a pure server-derived function of body + metadata, never stored.
+identity). `HasMedia()` and `CardType()` are pure server-derived functions of body + metadata,
+never stored: `HasMedia()` reports whether the body/metadata carry any image or video (content);
+`CardType()` returns the card label (`text|image|youtube|video`) the listing preview shows.
 
 ### `domain.PublishInput` (what an author agent submits)
 
@@ -104,9 +106,17 @@ Overlay types the generator reads:
 reads them at render. The key set IS a contract even though nothing enforces it at the column. Frozen
 keys (guarded in the generator by `contract_metadata_test.go`):
 
-`subtitle`, `description`, `image`, `image_alt`, `alt`, `author_name`, `author_bio`,
+`subtitle`, `description`, `card`, `image`, `image_alt`, `alt`, `author_name`, `author_bio`,
 `author_avatar`, `avatar`, `youtube`, `youtube_id`, `video`, `keywords`, `tweets`, `media_checks`,
 `gender`, `beat`, `profile_topics`.
+
+`card` is the authored front-page CARD (the listing preview), an object `{type, src, alt}` where
+`type` is one of `text | image | youtube | video`. It states EXPLICITLY what the card shows and is
+decoupled from the body (a body may embed many videos/images/tweets; the card shows exactly one
+thing). It is separate from `image`/`youtube`/`youtube_id`/`video`, which now govern the article
+HERO (top of the article page) and, for legacy pieces with no `card` block, the back-compat card
+derivation. `CardType()` returns the card label (authored `card.type`, else derived from the legacy
+signals); the read API exposes it as `card_type`.
 
 `tweets` entries carry: id, text, url, name, handle, avatar, verified, erased, views, replies,
 retweets, likes, bookmarks, created_timestamp, created_at. `media_checks[id].available` gates the
@@ -151,7 +161,7 @@ in `/articles:batch` is a literal path byte, no collision.
 | GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
 | GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
 | GET | `/sources` | `{sources:[{slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
-| GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,deleted,content_hash}], total}` (body omitted from list items). Query -> Filter: section, author, topic, q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
+| GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,card_type,deleted,content_hash}], total}` (body omitted from list items). `card_type` is the card label (text/image/youtube/video). Query -> Filter: section, author, topic, q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
 | GET | `/articles/{slug}` | Full article incl. `body`. A soft-deleted article is still returned with `deleted=true`. 404 not_found. |
 | GET | `/media/{name}` | Public, keyless, immutable-cached raw image. `name` must match `^[a-f0-9]{64}\.(jpg\|png\|gif\|webp)$`. 404 not_found. |
 

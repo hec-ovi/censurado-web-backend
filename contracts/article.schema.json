@@ -74,13 +74,33 @@
           "type": "string",
           "description": "Author portrait media URL (/media/<sha256>.<ext> or an absolute http(s) URL), rendered as a circular avatar."
         },
+        "card": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The front-page/listing CARD (the preview shown in the card widget), authored EXPLICITLY and decoupled from the article's body content: a body may embed many videos, images, and tweets, but the card shows exactly ONE thing and `type` states which. This is the single authoritative statement of what the card shows; it replaces the old guess-from-content behavior. Absent on legacy articles, where the card falls back to being derived from the body/hero metadata for back-compat.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["text", "image", "youtube", "video"],
+              "description": "What the card shows, chosen by the author (not inferred from the body): `text` (a plain card, no media), `image` (a still, `src` is its /media path), `youtube` (a YouTube poster with a play badge, `src` is the video id or URL), or `video` (a self-hosted clip's poster with a play badge, `src` is a /media poster-image path since an .mp4 has no auto thumbnail)."
+            },
+            "src": {
+              "type": "string",
+              "description": "The card's media reference: a `/media/<sha256>.<ext>` path (image, or the poster still for a video card) or a YouTube id/URL (youtube card). Empty or absent when `type` is `text`."
+            },
+            "alt": {
+              "type": "string",
+              "description": "Alt text for the card image/poster; falls back to the title."
+            }
+          }
+        },
         "image": {
           "type": "string",
-          "description": "Hero/card image media URL. When absent, the card and article render cleanly with no image and no placeholder."
+          "description": "Article HERO still (top of the article page) and the back-compat card source for legacy pieces with no `card` block. On a piece that authors a `card`, this governs only the hero, never the card. When absent, the hero renders cleanly with no image and no placeholder."
         },
         "image_alt": {
           "type": "string",
-          "description": "Alt text for the hero/card image; falls back to the title."
+          "description": "Alt text for the hero image; falls back to the title."
         },
         "youtube": {
           "type": "string",

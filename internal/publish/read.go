@@ -269,6 +269,7 @@ type articleListItem struct {
 	Topics      []string       `json:"topics"`
 	Metadata    map[string]any `json:"metadata"`
 	HasMedia    bool           `json:"has_media"`
+	CardType    string         `json:"card_type"`
 	Deleted     bool           `json:"deleted"`
 	ContentHash string         `json:"content_hash"`
 }
@@ -306,7 +307,7 @@ func (rh *ReadHandler) ServeArticles(w http.ResponseWriter, r *http.Request) {
 		out.Articles = append(out.Articles, articleListItem{
 			Slug: a.Slug, Title: a.Title, Section: a.Section, Author: a.Author,
 			PublishedAt: rfc3339(a.PublishedAt), Topics: coalesceTopics(a.Topics),
-			Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(),
+			Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(), CardType: a.CardType(),
 			Deleted: a.Deleted, ContentHash: a.ContentHash,
 		})
 	}
@@ -327,6 +328,7 @@ type articleResponse struct {
 	Topics      []string       `json:"topics"`
 	Metadata    map[string]any `json:"metadata"`
 	HasMedia    bool           `json:"has_media"`
+	CardType    string         `json:"card_type"`
 	Deleted     bool           `json:"deleted"`
 	ContentHash string         `json:"content_hash"`
 	CreatedAt   string         `json:"created_at"`
@@ -351,7 +353,7 @@ func (rh *ReadHandler) ServeArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, articleResponse{
 		ID: a.ID, Slug: a.Slug, Title: a.Title, Body: a.Body, Section: a.Section,
 		Author: a.Author, PublishedAt: rfc3339(a.PublishedAt), Topics: coalesceTopics(a.Topics),
-		Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(),
+		Metadata: coalesceMeta(a.Metadata), HasMedia: a.HasMedia(), CardType: a.CardType(),
 		Deleted: a.Deleted, ContentHash: a.ContentHash,
 		CreatedAt: rfc3339(a.CreatedAt),
 	})

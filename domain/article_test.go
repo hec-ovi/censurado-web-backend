@@ -192,3 +192,43 @@ func TestArticleSchemaContract(t *testing.T) {
 		t.Errorf("schema missing required fields: %v", want)
 	}
 }
+
+func TestArticle_CardType(t *testing.T) {
+	card := func(kv ...string) map[string]any {
+		c := map[string]any{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			c[kv[i]] = kv[i+1]
+		}
+		return map[string]any{"card": c}
+	}
+	cases := []struct {
+		name string
+		art  Article
+		want string
+	}{
+		// An authored card is the source of truth for what the card shows.
+		{"authored text", Article{Metadata: card("type", "text")}, "text"},
+		{"authored image", Article{Metadata: card("type", "image", "src", "/media/x.png")}, "image"},
+		{"authored youtube", Article{Metadata: card("type", "youtube", "src", "abc")}, "youtube"},
+		{"authored video", Article{Metadata: card("type", "video", "src", "/media/x.mp4")}, "video"},
+		// The card is decoupled from the body: a text card wins over an embedded video.
+		{"authored text beats body video", Article{Body: "{{video:abc}}", Metadata: card("type", "text")}, "text"},
+		// A blank/invalid authored type falls through to the legacy derivation.
+		{"invalid type -> legacy image", Article{Metadata: map[string]any{"card": map[string]any{"type": "gif"}, "image": "/media/x.png"}}, "image"},
+		// Legacy derivation for a piece with no card block (back-compat labels).
+		{"legacy image", Article{Metadata: map[string]any{"image": "/media/x.png"}}, "image"},
+		{"legacy youtube", Article{Metadata: map[string]any{"youtube": "abc"}}, "youtube"},
+		{"legacy youtube_id", Article{Metadata: map[string]any{"youtube_id": "abc"}}, "youtube"},
+		{"legacy self video", Article{Metadata: map[string]any{"video": "/media/x.mp4"}}, "video"},
+		{"legacy body video marker", Article{Body: "text {{video:abc}} more"}, "video"},
+		{"legacy text only", Article{Body: "just text", Metadata: map[string]any{}}, "text"},
+		{"nil metadata is text", Article{}, "text"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.art.CardType(); got != tc.want {
+				t.Errorf("CardType() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
