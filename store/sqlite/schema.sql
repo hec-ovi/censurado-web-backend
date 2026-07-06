@@ -146,3 +146,15 @@ CREATE TABLE IF NOT EXISTS author_sources (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_author_sources_source ON author_sources (source_slug, author_handle);
+
+-- recomendado is the site's single GLOBAL "Recomendado" list: one ordered slug list
+-- the front page renders as its editor's-pick rail, independent of any day (it
+-- persists across days until an operator changes it, unlike the per-day portada
+-- entries). Exactly one row is ever stored (id = 1, enforced by the CHECK); slugs is
+-- a JSON array (defaulting to '[]'), and updated_at is whole-second RFC3339 TEXT like
+-- the other registries.
+CREATE TABLE IF NOT EXISTS recomendado (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  slugs      TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT ''
+) STRICT;

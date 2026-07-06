@@ -3,6 +3,7 @@ package publish
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -287,6 +288,56 @@ func (oh *OperatorHandler) ServeUpsertPortada(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, toPortadaJSON(p))
+}
+
+// recomendadoMax caps the global editor's-pick list. The front page renders at most
+// this many, so a longer list is rejected rather than silently truncated.
+const recomendadoMax = 10
+
+type recomendadoInput struct {
+	Slugs []string `json:"slugs"`
+}
+
+// ServeSetRecomendado answers PUT /recomendado: replace the site's single GLOBAL
+// editor's-pick list (the front-page rail) wholesale, in order. Blank slugs are
+// dropped and duplicates are removed (first occurrence wins); a list longer than
+// recomendadoMax after cleaning is a 400. admin:write.
+func (oh *OperatorHandler) ServeSetRecomendado(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	var in recomendadoInput
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	seen := make(map[string]struct{}, len(in.Slugs))
+	clean := make([]string, 0, len(in.Slugs))
+	for _, s := range in.Slugs {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		clean = append(clean, s)
+	}
+	if len(clean) > recomendadoMax {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request",
+			Detail: fmt.Sprintf("recomendado accepts at most %d slugs", recomendadoMax)})
+		return
+	}
+	if err := oh.store.SetRecomendado(r.Context(), clean); err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	slugs, err := oh.store.GetRecomendado(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, recomendadoResponse{Slugs: coalesceTopics(slugs)})
 }
 
 // ServeDeletePortada answers DELETE /portadas/{date}: soft-delete the day plan. 404

@@ -392,6 +392,18 @@ type PortadaStore interface {
 	DeletePortada(ctx context.Context, date string) error
 }
 
+// RecomendadoStore is the site's single GLOBAL "Recomendado" list: one ordered slug
+// list the front page renders as its editor's-pick rail, independent of any day. It
+// is a singleton, not a keyed registry like portadas/authors/topics: there is at most
+// one stored list, which persists across days until it is replaced.
+type RecomendadoStore interface {
+	// GetRecomendado returns the stored global recomendado slug list in order, or an
+	// empty slice when none has been set yet.
+	GetRecomendado(ctx context.Context) ([]string, error)
+	// SetRecomendado replaces the global recomendado slug list wholesale, in order.
+	SetRecomendado(ctx context.Context, slugs []string) error
+}
+
 // Source is a managed news source: an outlet the newsroom reads for grounding and
 // cross-checking, and the political-lean axis the sourcing floor balances across.
 // Slug is the stable key (the domain slugified, e.g. "example-com"), like

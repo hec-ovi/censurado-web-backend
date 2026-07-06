@@ -19,6 +19,7 @@ type ReadStore interface {
 	store.AuthorStore
 	store.TopicStore
 	store.PortadaStore
+	store.RecomendadoStore
 	store.SourceStore
 }
 
@@ -170,6 +171,27 @@ func (rh *ReadHandler) ServePortadas(w http.ResponseWriter, r *http.Request) {
 		out.Portadas = append(out.Portadas, toPortadaJSON(p))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// recomendadoResponse is the wire shape of the single global editor's-pick list.
+// Slugs is always a JSON array (never null), in stored order.
+type recomendadoResponse struct {
+	Slugs []string `json:"slugs"`
+}
+
+// ServeRecomendado answers GET /recomendado with the site's single GLOBAL
+// editor's-pick list (the front-page rail), an ordered slug list that persists
+// across days. Slugs is [] when none has been set.
+func (rh *ReadHandler) ServeRecomendado(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	slugs, err := rh.store.GetRecomendado(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, recomendadoResponse{Slugs: coalesceTopics(slugs)})
 }
 
 type sourceJSON struct {

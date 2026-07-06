@@ -58,6 +58,76 @@ func doReq(t *testing.T, h http.Handler, method, token, path, body string) *http
 	return rec
 }
 
+func TestRecomendado_GlobalSetAndGet(t *testing.T) {
+	srv := newOperatorServer(t)
+	op := "ak_op." + opSecret
+	type resp struct {
+		Slugs []string `json:"slugs"`
+	}
+
+	t.Run("empty before any set", func(t *testing.T) {
+		var got resp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/recomendado", ""), &got)
+		if len(got.Slugs) != 0 {
+			t.Fatalf("slugs = %v, want empty", got.Slugs)
+		}
+	})
+
+	t.Run("PUT cleans (trim, drop blanks, dedup) and preserves order", func(t *testing.T) {
+		var got resp
+		rec := doReq(t, srv, http.MethodPut, op, "/recomendado",
+			`{"slugs":["a-slug"," b-slug ","","a-slug","c-slug"]}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PUT status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &got)
+		want := []string{"a-slug", "b-slug", "c-slug"} // blank dropped, dup a-slug removed, order kept
+		if strings.Join(got.Slugs, ",") != strings.Join(want, ",") {
+			t.Errorf("PUT returned %v, want %v", got.Slugs, want)
+		}
+	})
+
+	t.Run("GET reflects the set list (persists, not keyed to any day)", func(t *testing.T) {
+		var got resp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/recomendado", ""), &got)
+		if strings.Join(got.Slugs, ",") != "a-slug,b-slug,c-slug" {
+			t.Errorf("GET after set = %v", got.Slugs)
+		}
+	})
+
+	t.Run("more than 10 is rejected", func(t *testing.T) {
+		many := make([]string, 11)
+		for i := range many {
+			many[i] = "s" + string(rune('a'+i))
+		}
+		body := `{"slugs":["` + strings.Join(many, `","`) + `"]}`
+		rec := doReq(t, srv, http.MethodPut, op, "/recomendado", body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("11 slugs status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("replacing with an empty list clears it", func(t *testing.T) {
+		if rec := doReq(t, srv, http.MethodPut, op, "/recomendado", `{"slugs":[]}`); rec.Code != http.StatusOK {
+			t.Fatalf("clear status = %d", rec.Code)
+		}
+		var got resp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/recomendado", ""), &got)
+		if len(got.Slugs) != 0 {
+			t.Errorf("after clear = %v, want empty", got.Slugs)
+		}
+	})
+
+	t.Run("PUT needs admin:write; GET needs only a valid token", func(t *testing.T) {
+		if rec := doReq(t, srv, http.MethodPut, "ak_ada."+adaSecret, "/recomendado", `{"slugs":["x"]}`); rec.Code != http.StatusForbidden {
+			t.Errorf("agent-key PUT status = %d, want 403", rec.Code)
+		}
+		if rec := doReq(t, srv, http.MethodGet, "", "/recomendado", ""); rec.Code != http.StatusUnauthorized {
+			t.Errorf("no-token GET status = %d, want 401", rec.Code)
+		}
+	})
+}
+
 func TestOperator_RequiresAdminWriteScope(t *testing.T) {
 	srv := newOperatorServer(t)
 	slug := seedArticle(t, srv, "ak_op."+opSecret, "seed1", "Target", "ada", "tech", []string{"go"})

@@ -1431,6 +1431,38 @@ func (s *Store) DeletePortada(ctx context.Context, date string) error {
 	return nil
 }
 
+// GetRecomendado returns the single global recomendado slug list in stored order, or
+// an empty slice when no list has been set (the table holds at most the id=1 row).
+func (s *Store) GetRecomendado(ctx context.Context) ([]string, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT slugs FROM recomendado WHERE id = 1`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalStrings(raw)
+}
+
+// SetRecomendado replaces the single global recomendado slug list wholesale (the
+// id=1 row), in the given order, and stamps updated_at. It is an upsert, so the
+// first call creates the row and later calls overwrite it.
+func (s *Store) SetRecomendado(ctx context.Context, slugs []string) error {
+	blob, err := marshalStrings(slugs)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Truncate(time.Second).Format(timeLayout)
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO recomendado (id, slugs, updated_at) VALUES (1, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET slugs = excluded.slugs, updated_at = excluded.updated_at`,
+		blob, now); err != nil {
+		return fmt.Errorf("set recomendado: %w", err)
+	}
+	return nil
+}
+
 const sourceCols = "id,slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted_at,created_at,updated_at"
 
 // scanSource decodes one sources row, mirroring scanAuthor: feed_urls and metadata
