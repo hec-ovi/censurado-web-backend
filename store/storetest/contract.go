@@ -246,7 +246,7 @@ func RunFilters(t *testing.T, repo store.Repository) {
 	seed := []domain.Article{
 		mustArticle(t, domain.PublishInput{Title: "Election night", Body: "ballots counted across the country", Author: "ada", Section: "politics", Topics: []string{"election"}}, base),
 		mustArticle(t, domain.PublishInput{Title: "Outlook report", Body: "la economía crece despacio", Author: "lin", Section: "economics", Topics: []string{"markets"}}, base.Add(24*time.Hour)),
-		mustArticle(t, domain.PublishInput{Title: "Gadget roundup", Body: "a fresh chip arrives", Author: "bo", Section: "tech", Topics: []string{"ai"}}, base.Add(48*time.Hour)),
+		mustArticle(t, domain.PublishInput{Title: "Gadget roundup", Body: "a fresh chip arrives", Author: "bo", Section: "tech", Topics: []string{"ai"}, Metadata: map[string]any{"subtitle": "portable devices"}}, base.Add(48*time.Hour)),
 		mustArticle(t, domain.PublishInput{Title: "Models on the floor", Body: "traders watch the screens", Author: "ada", Section: "tech", Topics: []string{"ai", "markets"}}, base.Add(72*time.Hour)),
 		mustArticle(t, domain.PublishInput{Title: "Rate decision", Body: "the central bank cut rates", Author: "lin", Section: "economics", Topics: []string{"markets"}}, base.Add(96*time.Hour)),
 		mustArticle(t, domain.PublishInput{Title: "Sale at 50% off", Body: "queues formed early", Author: "cy", Section: "shopping", Topics: []string{"retail"}}, base.Add(120*time.Hour)),
@@ -343,6 +343,28 @@ func RunFilters(t *testing.T, repo store.Repository) {
 		got := findSlugs(t, store.Filter{Query: "economía"})
 		if !equalOrdered(got, []string{seed[1].Slug}) {
 			t.Errorf("Query=economía -> %v, want [%s]", got, seed[1].Slug)
+		}
+	})
+
+	t.Run("TitleSubtitleQuery: title or subtitle, not body", func(t *testing.T) {
+		got := findSlugs(t, store.Filter{TitleSubtitleQuery: "ROUNDUP"})
+		if !equalOrdered(got, []string{seed[2].Slug}) {
+			t.Errorf("TitleSubtitleQuery=ROUNDUP -> %v, want title match [%s]", got, seed[2].Slug)
+		}
+		got = findSlugs(t, store.Filter{TitleSubtitleQuery: "portable"})
+		if !equalOrdered(got, []string{seed[2].Slug}) {
+			t.Errorf("TitleSubtitleQuery=portable -> %v, want subtitle match [%s]", got, seed[2].Slug)
+		}
+		got = findSlugs(t, store.Filter{TitleSubtitleQuery: "fresh chip"})
+		if len(got) != 0 {
+			t.Errorf("TitleSubtitleQuery=fresh chip -> %v, want no body-only match", got)
+		}
+	})
+
+	t.Run("TitleSubtitleQuery: '%' is escaped, not a wildcard", func(t *testing.T) {
+		got := findSlugs(t, store.Filter{TitleSubtitleQuery: "50%"})
+		if !equalOrdered(got, []string{seed[5].Slug}) {
+			t.Errorf("TitleSubtitleQuery=50%% -> %v, want only [%s]", got, seed[5].Slug)
 		}
 	})
 

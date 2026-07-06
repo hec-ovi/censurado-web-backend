@@ -1,4 +1,4 @@
-import { el, field } from "./el.js";
+import { el, clear, field, help, isSafeImageSrc } from "./el.js";
 import { t } from "./i18n.js";
 import { slugify } from "../slugify.js";
 
@@ -10,11 +10,16 @@ export const SECTIONS = ["tech", "world", "politics", "economics"];
 // Gender options for the byline voice. Blank is allowed (unset).
 export const GENDERS = ["female", "male", "nonbinary"];
 
+const LINK_HELP =
+  "An author only researches the sources linked here. Cross-source corroboration across them is what " +
+  "drives relevance: a claim that several linked outlets carry independently rises, an unsourced one does not. " +
+  "Link a few trusted, independent outlets per author.";
+
 // The create-author form. Submitting POSTs the explicit fields to POST /authors (a
 // full upsert; the backend has no partial create). The handle is derived from the
 // display name (the backend keys authors by handle). Beat, who-i-am, and language ride
-// the author's metadata; style/about/gender/topics are first-class columns. On success
-// it resets and calls onCreated(handle) so the roster can refresh.
+// the author's metadata; style/about/gender are first-class columns. On success it
+// resets and calls onCreated(handle) so the roster can refresh.
 export function PersonaForm({ api, onCreated } = {}) {
   const nameInput = el("input", { type: "text", id: "pf-name", autocomplete: "off" });
   // A blank first option so an operator must pick a beat; a blank submission is
@@ -30,48 +35,72 @@ export function PersonaForm({ api, onCreated } = {}) {
   const whoInput = el("textarea", { id: "pf-who", rows: "2" });
   const styleInput = el("textarea", { id: "pf-style", rows: "2" });
   const aboutInput = el("textarea", { id: "pf-about", rows: "2" });
-  const topicsInput = el("input", { type: "text", id: "pf-topics", autocomplete: "off", placeholder: t("comma-separated") });
   const languageInput = el("input", { type: "text", id: "pf-language", autocomplete: "off" });
   const avatarInput = el("input", { type: "text", id: "pf-avatar", autocomplete: "off" });
-  const submit = el("button", { type: "submit" }, t("Create author"));
+  const avatarPreview = el("div", { class: "persona-avatar-preview", "aria-label": t("Avatar preview") });
+  const sourceChecks = el("div", { class: "persona-source-checks persona-source-checks--create" });
+  const sourceStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
+  const submit = el("button", { type: "submit", disabled: true }, t("Create author"));
   const status = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
+  let sourceBoxes = [];
 
   const form = el("form", { class: "persona-form" }, [
-    field(t("Display name"), nameInput, "pf-name"),
-    field(t("Beat"), beatSelect, "pf-beat"),
-    field(t("Gender"), genderSelect, "pf-gender"),
-    field(t("Who I am"), whoInput, "pf-who"),
-    field(t("Style"), styleInput, "pf-style"),
+    el("div", { class: "persona-field-strip" }, [
+      field(t("Display name"), nameInput, "pf-name"),
+      field(t("Gender"), genderSelect, "pf-gender"),
+      field(t("Beat"), beatSelect, "pf-beat"),
+      field(t("Language"), languageInput, "pf-language"),
+    ]),
+    el("div", { class: "persona-avatar-row" }, [
+      field(t("Avatar path"), avatarInput, "pf-avatar"),
+      el("div", { class: "persona-avatar-preview-wrap" }, [
+        el("span", { class: "field-label" }, t("Avatar preview")),
+        avatarPreview,
+      ]),
+    ]),
+    el("div", { class: "persona-prompt-grid" }, [
+      field(t("Who I am"), whoInput, "pf-who"),
+      field(t("Style"), styleInput, "pf-style"),
+    ]),
     field(t("About"), aboutInput, "pf-about"),
-    field(t("Topics"), topicsInput, "pf-topics"),
-    field(t("Language"), languageInput, "pf-language"),
-    field(t("Avatar path"), avatarInput, "pf-avatar"),
-    submit,
+    el("div", { class: "persona-sources persona-sources--create" }, [
+      el("div", { class: "panel-head" }, [el("h4", {}, t("Linked sources")), help(t(LINK_HELP))]),
+      sourceChecks,
+      sourceStatus,
+    ]),
+    el("div", { class: "persona-actions persona-actions--profile" }, [submit]),
     status,
   ]);
 
   form.addEventListener("submit", onSubmit);
+  const required = [nameInput, genderSelect, beatSelect, languageInput, avatarInput, whoInput, styleInput, aboutInput];
+  required.forEach((node) => {
+    node.addEventListener("input", updateSubmitState);
+    node.addEventListener("change", updateSubmitState);
+  });
+  avatarInput.addEventListener("input", updateAvatarPreview);
+  queueMicrotask(loadSources);
+  updateAvatarPreview();
+  updateSubmitState();
 
   async function onSubmit(event) {
     event.preventDefault();
-    const required = [nameInput, beatSelect, whoInput, styleInput];
-    required.forEach((node) => node.setAttribute("aria-invalid", "false"));
-
     const name = nameInput.value.trim();
     const beat = beatSelect.value;
+    const gender = genderSelect.value;
+    const language = languageInput.value.trim();
     const who_i_am = whoInput.value.trim();
     const style = styleInput.value.trim();
+    const about = aboutInput.value.trim();
+    const avatar = avatarInput.value.trim();
     const handle = slugify(name);
 
-    const missing = [];
-    if (!name) missing.push(nameInput);
-    if (!beat) missing.push(beatSelect);
-    if (!who_i_am) missing.push(whoInput);
-    if (!style) missing.push(styleInput);
+    const missing = required.filter((node) => !node.value.trim());
     if (missing.length) {
       missing.forEach((node) => node.setAttribute("aria-invalid", "true"));
       missing[0].focus();
-      setStatus("error", t("Display name, beat, who I am, and style are required."));
+      setStatus("error", t("Complete all author fields before saving."));
+      updateSubmitState();
       return;
     }
     if (!handle) {
@@ -81,19 +110,18 @@ export function PersonaForm({ api, onCreated } = {}) {
       return;
     }
 
-    const metadata = { beat, who_i_am };
-    const language = languageInput.value.trim();
-    if (language) metadata.language = language;
+    const metadata = { beat, who_i_am, language };
 
-    const body = { handle, name, style, metadata };
-    const gender = genderSelect.value;
-    const about = aboutInput.value.trim();
-    const avatar = avatarInput.value.trim();
-    const topics = parseList(topicsInput.value);
-    if (gender) body.gender = gender;
-    if (about) body.about = about;
-    if (avatar) body.avatar = avatar;
-    if (topics.length) body.topics = topics;
+    const body = {
+      handle,
+      name,
+      gender,
+      about,
+      style,
+      avatar,
+      metadata,
+      sources: sourceBoxes.filter((item) => item.box.checked).map((item) => item.slug),
+    };
 
     setBusy(true);
     setStatus("pending", t("Creating..."));
@@ -101,6 +129,11 @@ export function PersonaForm({ api, onCreated } = {}) {
       const author = await api.upsertAuthor(body);
       setStatus("done", t("Created {id}.", { id: author.handle }));
       form.reset();
+      sourceBoxes.forEach((item) => {
+        item.box.checked = false;
+      });
+      updateAvatarPreview();
+      updateSubmitState();
       if (onCreated) onCreated(author.handle);
     } catch (err) {
       setStatus("error", t("Could not create author: {msg}", { msg: err.message }));
@@ -110,8 +143,43 @@ export function PersonaForm({ api, onCreated } = {}) {
   }
 
   function setBusy(busy) {
-    submit.disabled = busy;
+    submit.disabled = busy || !isComplete();
     form.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+  function isComplete() {
+    return required.every((node) => Boolean(node.value.trim()));
+  }
+  function updateSubmitState() {
+    required.forEach((node) => node.setAttribute("aria-invalid", node.value.trim() ? "false" : "true"));
+    submit.disabled = !isComplete() || form.getAttribute("aria-busy") === "true";
+  }
+  function updateAvatarPreview() {
+    clear(avatarPreview);
+    const src = avatarInput.value.trim();
+    if (isSafeImageSrc(src)) {
+      avatarPreview.append(el("img", { src, alt: "" }));
+      return;
+    }
+    const initial = nameInput.value.trim().charAt(0).toUpperCase() || "?";
+    avatarPreview.append(el("span", { class: "avatar avatar--fallback", "aria-hidden": "true" }, initial));
+  }
+  async function loadSources() {
+    clear(sourceChecks);
+    sourceBoxes = [];
+    sourceChecks.append(el("p", { class: "muted" }, t("Loading sources...")));
+    try {
+      const data = await api.listSources();
+      const sources = (data && data.sources) || [];
+      clear(sourceChecks);
+      if (!sources.length) {
+        sourceChecks.append(el("p", { class: "muted" }, t("Add sources in the Sources tab first.")));
+        return;
+      }
+      sourceChecks.append(sourceCheckboxList(sources, new Set(), sourceBoxes, "pf-source"));
+    } catch (err) {
+      clear(sourceChecks);
+      sourceChecks.append(el("p", { class: "error", role: "alert" }, t("Could not load sources: {msg}", { msg: err.message })));
+    }
   }
   function setStatus(state, text) {
     status.dataset.state = state;
@@ -124,17 +192,36 @@ export function PersonaForm({ api, onCreated } = {}) {
   return { element: form };
 }
 
-// parseList splits a comma-separated field into a trimmed, de-duplicated,
-// non-empty string array. An empty field yields [].
-export function parseList(text) {
-  const seen = new Set();
-  const out = [];
-  for (const raw of String(text || "").split(",")) {
-    const v = raw.trim();
-    if (v && !seen.has(v)) {
-      seen.add(v);
-      out.push(v);
-    }
+export function sourceCheckboxList(sources, selected, boxes, prefix) {
+  const tbody = el("tbody");
+  for (const source of sources) {
+    const boxId = `${prefix}-${source.slug}`;
+    const box = el("input", { type: "checkbox", id: boxId });
+    box.checked = selected.has(source.slug);
+    boxes.push({ slug: source.slug, box });
+    const desc = (source.description || "").trim();
+    tbody.append(
+      el("tr", { class: "link-row" }, [
+        el("td", { class: "link-check" }, box),
+        el("td", { class: "link-portal" }, el("label", { for: boxId }, source.domain)),
+        el("td", { class: "link-lean" }, el("span", { class: "source-lean", dataset: { lean: source.lean || "neutral" } }, sourceLeanLabel(source.lean))),
+        el("td", { class: "link-desc", title: desc }, desc || "-"),
+      ]),
+    );
   }
-  return out;
+  return el("div", { class: "link-table-wrap" }, el("table", { class: "link-table" }, [
+    el("thead", {}, el("tr", {}, [
+      el("th", { class: "link-check" }, ""),
+      el("th", {}, t("Source")),
+      el("th", {}, t("Orientation")),
+      el("th", {}, t("Description")),
+    ])),
+    tbody,
+  ]));
+}
+
+export function sourceLeanLabel(lean) {
+  if (lean === "right") return t("Right");
+  if (lean === "left") return t("Left");
+  return t("Neutral");
 }

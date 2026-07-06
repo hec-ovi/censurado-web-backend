@@ -44,7 +44,7 @@ func TestContract_FilterPublicAxes(t *testing.T) {
 	want := []string{
 		"Section", "Author", "Topic",
 		"Sections", "Authors", "Topics",
-		"Query", "From", "To", "Order", "Limit", "Offset", "IncludeDeleted",
+		"Query", "TitleSubtitleQuery", "From", "To", "Order", "Limit", "Offset", "IncludeDeleted",
 	}
 	assertFields(t, "store.Filter", reflect.TypeOf(store.Filter{}), want)
 }

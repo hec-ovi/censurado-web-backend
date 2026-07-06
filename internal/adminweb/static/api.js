@@ -111,6 +111,8 @@ export const api = {
   restoreSource: (slug) => post(`/sources/${enc(slug)}/restore`),
 
   // --- Articles --------------------------------------------------------
+  listArticleDays: (params = {}) => get("/articles:days" + query(params)),
+  listArticleFacets: () => get("/articles:facets"),
   listArticles: (params = {}) => get("/articles" + query(params)),
   getArticle: (slug) => get(`/articles/${enc(slug)}`),
   updateArticle: (slug, body) => put(`/articles/${enc(slug)}`, body),

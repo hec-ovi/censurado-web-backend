@@ -51,7 +51,7 @@ test("renders a clean zero-state for an empty author registry", async () => {
   await screen.findByText(/no authors yet/i);
 });
 
-test("create upserts a backend author: derived handle + metadata beat/who-i-am + gender + topics", async () => {
+test("create upserts a backend author: derived handle + metadata beat/who-i-am/language + gender", async () => {
   let posted = null;
   let created = false;
   server.use(
@@ -72,31 +72,36 @@ test("create upserts a backend author: derived handle + metadata beat/who-i-am +
   await list.reload();
   await screen.findByText(/no authors yet/i);
 
+  // Every author field is required now (topics are curated separately, not on create).
   await user.type(screen.getByLabelText(/display name/i), "Ada Reporter");
-  await user.selectOptions(screen.getByLabelText(/^beat$/i), "world");
   await user.selectOptions(screen.getByLabelText(/^gender$/i), "female");
+  await user.selectOptions(screen.getByLabelText(/^beat$/i), "world");
+  await user.type(screen.getByLabelText(/^language$/i), "es");
+  await user.type(screen.getByLabelText(/avatar path/i), "/media/ada.png");
   await user.type(screen.getByLabelText(/who i am/i), "covers the world desk");
   await user.type(screen.getByLabelText(/^style$/i), "plain and direct");
   await user.type(screen.getByLabelText(/^about$/i), "World desk reporter");
-  await user.type(screen.getByLabelText(/^topics$/i), "politics, economics");
   await user.click(screen.getByRole("button", { name: /create author/i }));
 
   await waitFor(() => assert.ok(posted, "a POST should have been sent"));
-  // Backend author shape: handle derived from the display name; beat + who-i-am ride metadata.
+  // Backend author shape: handle derived from the display name; beat/who-i-am/language ride
+  // metadata; gender/about/style/avatar are first-class. No topics field on the create form.
   assert.equal(posted.handle, "ada-reporter");
   assert.equal(posted.name, "Ada Reporter");
   assert.equal(posted.style, "plain and direct");
   assert.equal(posted.about, "World desk reporter");
   assert.equal(posted.gender, "female");
+  assert.equal(posted.avatar, "/media/ada.png");
   assert.equal(posted.metadata.beat, "world");
   assert.equal(posted.metadata.who_i_am, "covers the world desk");
-  assert.deepEqual(posted.topics, ["politics", "economics"]);
+  assert.equal(posted.metadata.language, "es");
+  assert.equal(posted.topics, undefined);
   // The roster reloads and shows the new author.
   await screen.findByText("Ada Reporter");
   assert.equal(screen.queryByText(/no authors yet/i), null);
 });
 
-test("a blank beat is rejected client-side with no POST (invalid state)", async () => {
+test("a blank beat keeps the form in its invalid state with no POST", async () => {
   let posted = false;
   server.use(
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
@@ -112,9 +117,12 @@ test("a blank beat is rejected client-side with no POST (invalid state)", async 
   await user.type(screen.getByLabelText(/display name/i), "No Beat");
   await user.type(screen.getByLabelText(/who i am/i), "someone");
   await user.type(screen.getByLabelText(/^style$/i), "a style");
-  await user.click(screen.getByRole("button", { name: /create author/i }));
 
-  await screen.findByText(/display name, beat, who i am, and style are required/i);
+  // Beat (among other required fields) left blank: submit stays disabled, so no POST can
+  // fire and the empty beat is flagged aria-invalid.
+  const createBtn = screen.getByRole("button", { name: /create author/i });
+  assert.equal(createBtn.disabled, true);
+  await user.click(createBtn);
   assert.equal(posted, false, "no POST for an invalid form");
   assert.equal(screen.getByLabelText(/^beat$/i).getAttribute("aria-invalid"), "true");
 });

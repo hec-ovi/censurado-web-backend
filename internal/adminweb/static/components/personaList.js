@@ -1,6 +1,6 @@
 import { el, clear, field, help, isSafeImageSrc, subTabs } from "./el.js";
 import { t } from "./i18n.js";
-import { SECTIONS, GENDERS, parseList } from "./personaForm.js";
+import { SECTIONS, GENDERS } from "./personaForm.js";
 
 // The author roster: a beat filter over GET /authors, rendering one card per
 // author with an avatar (or initial fallback), beat badge, and who-i-am line.
@@ -18,28 +18,15 @@ const LINK_HELP =
   "Link a few trusted, independent outlets per author.";
 
 export function PersonaList({ api, onChanged } = {}) {
-  const filter = el("select", { class: "list-filter", id: "pl-filter", "aria-label": t("Filter authors by beat") }, [
-    el("option", { value: "" }, t("All beats")),
-    ...SECTIONS.map((s) => el("option", { value: s }, s)),
-  ]);
   const listEl = el("div", { class: "persona-list" });
-  const element = el("section", { class: "panel" }, [
-    el("div", { class: "panel-head" }, [el("h2", {}, t("Authors")), filter]),
-    listEl,
-  ]);
-
-  filter.addEventListener("change", load);
+  const element = el("section", { class: "panel persona-list-panel" }, [listEl]);
 
   async function load() {
     clear(listEl);
     listEl.append(el("p", { class: "muted" }, t("Loading authors...")));
     try {
       const data = await api.listAuthors();
-      let authors = (data && data.authors) || [];
-      // The backend GET /authors has no beat query param, so the beat filter is
-      // applied client-side against each author's metadata.beat.
-      const beat = filter.value;
-      if (beat) authors = authors.filter((a) => ((a.metadata && a.metadata.beat) || "") === beat);
+      const authors = (data && data.authors) || [];
       clear(listEl);
       if (!authors.length) {
         listEl.append(el("p", { class: "muted" }, t("No authors yet. Create one to get started.")));
@@ -133,10 +120,9 @@ export function PersonaList({ api, onChanged } = {}) {
     return { element: el("div", { class: "persona-editor" }, tabs.element), loadSources: sources.load };
   }
 
-  // The inline edit form: the voice fields plus beat/gender/avatar/topics. `sources`
-  // is NOT here on purpose: linking is its own panel. The few-shot example lists are
-  // JSON-array textareas, prefilled pretty-printed and parsed on save. The handle is
-  // the immutable key, so it is never rendered as an input.
+  // The inline edit form: one compact identity row, the prompt-shaping fields, then
+  // about. Sources stay in their own tab. The handle is immutable, so it is never an
+  // input; hidden legacy fields (avatar/topics/few-shot metadata) are preserved.
   function buildEditForm(author, cardStatus, closeEditor) {
     const handle = author.handle;
     const meta = author.metadata || {};
@@ -149,13 +135,9 @@ export function PersonaList({ api, onChanged } = {}) {
     ]);
     gender.value = author.gender || "";
     const language = el("input", { type: "text", id: `pe-${handle}-language`, value: meta.language || "" });
-    const avatarPath = el("input", { type: "text", id: `pe-${handle}-avatar`, value: author.avatar || "" });
     const whoIAm = el("textarea", { id: `pe-${handle}-who`, rows: "3" }, meta.who_i_am || "");
     const about = el("textarea", { id: `pe-${handle}-about`, rows: "3" }, author.about || "");
     const style = el("textarea", { id: `pe-${handle}-style`, rows: "3" }, author.style || "");
-    const topics = el("input", { type: "text", id: `pe-${handle}-topics`, value: (author.topics || []).join(", ") });
-    const fewPos = el("textarea", { id: `pe-${handle}-pos`, rows: "4" }, JSON.stringify(meta.few_shots_pos || [], null, 2));
-    const fewNeg = el("textarea", { id: `pe-${handle}-neg`, rows: "4" }, JSON.stringify(meta.few_shots_neg || [], null, 2));
 
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
@@ -179,30 +161,40 @@ export function PersonaList({ api, onChanged } = {}) {
     });
 
     const form = el("form", { class: "persona-edit" }, [
-      field(t("Display name"), displayName, `pe-${handle}-name`),
-      field(t("Beat"), beat, `pe-${handle}-beat`),
-      field(t("Gender"), gender, `pe-${handle}-gender`),
-      field(t("Language"), language, `pe-${handle}-language`),
-      field(t("Avatar path"), avatarPath, `pe-${handle}-avatar`),
-      field(t("Who I am"), whoIAm, `pe-${handle}-who`),
+      el("div", { class: "persona-field-strip" }, [
+        field(t("Display name"), displayName, `pe-${handle}-name`),
+        field(t("Gender"), gender, `pe-${handle}-gender`),
+        field(t("Beat"), beat, `pe-${handle}-beat`),
+        field(t("Language"), language, `pe-${handle}-language`),
+      ]),
+      el("div", { class: "persona-prompt-grid" }, [
+        field(t("Who I am"), whoIAm, `pe-${handle}-who`),
+        field(t("Style"), style, `pe-${handle}-style`),
+      ]),
       field(t("About"), about, `pe-${handle}-about`),
-      field(t("Style"), style, `pe-${handle}-style`),
-      field(t("Topics"), topics, `pe-${handle}-topics`),
-      field(t("Positive examples (JSON array)"), fewPos, `pe-${handle}-pos`),
-      field(t("Negative examples (JSON array)"), fewNeg, `pe-${handle}-neg`),
       el("div", { class: "persona-actions persona-actions--profile" }, [save, cancel, deleteBtn]),
     ]);
+    const required = [displayName, gender, beat, language, whoIAm, style, about];
+    required.forEach((control) => {
+      control.addEventListener("input", updateSaveState);
+      control.addEventListener("change", updateSaveState);
+    });
+    updateSaveState();
+
     cancel.addEventListener("click", () => {
       closeEditor();
     });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      // Parse the two example lists first; a bad list aborts before any request.
-      const pos = parseJsonArray(fewPos.value, t("Positive examples"));
-      if (pos.error) return setStatus(cardStatus, "error", pos.error);
-      const neg = parseJsonArray(fewNeg.value, t("Negative examples"));
-      if (neg.error) return setStatus(cardStatus, "error", neg.error);
+      const missing = required.filter((control) => !control.value.trim());
+      if (missing.length) {
+        missing.forEach((control) => control.setAttribute("aria-invalid", "true"));
+        missing[0].focus();
+        setStatus(cardStatus, "error", t("Complete all author fields before saving."));
+        updateSaveState();
+        return;
+      }
 
       // A full upsert: preserve the fields this form does not edit (bio and any
       // extra metadata keys) so they are not blanked. Beat/who-i-am/language and the
@@ -216,15 +208,13 @@ export function PersonaList({ api, onChanged } = {}) {
         gender: gender.value,
         about: about.value,
         style: style.value,
-        avatar: avatarPath.value.trim(),
-        topics: parseList(topics.value),
+        avatar: author.avatar || "",
+        topics: Array.isArray(author.topics) ? author.topics : [],
         metadata: {
           ...(author.metadata || {}),
           beat: beat.value,
           who_i_am: whoIAm.value,
-          few_shots_pos: pos.value,
-          few_shots_neg: neg.value,
-          ...(lang ? { language: lang } : {}),
+          language: lang,
         },
       };
 
@@ -241,6 +231,16 @@ export function PersonaList({ api, onChanged } = {}) {
       }
     });
     return form;
+
+    function updateSaveState() {
+      let complete = true;
+      for (const control of required) {
+        const ok = Boolean(control.value.trim());
+        if (!ok) complete = false;
+        control.setAttribute("aria-invalid", ok ? "false" : "true");
+      }
+      save.disabled = !complete;
+    }
   }
 
   // The inline source-linking panel: every source as a checkbox, the author's
@@ -364,21 +364,6 @@ function sourceLeanLabel(lean) {
   if (lean === "right") return t("Right");
   if (lean === "left") return t("Left");
   return t("Neutral");
-}
-
-// Parse a JSON-array textarea. An empty field means an empty list (not an error),
-// so an operator can clear the examples. Returns { value } on a valid array, or
-// { error } with a message when the text is not valid JSON or not an array.
-function parseJsonArray(text, label) {
-  if (!text.trim()) return { value: [] };
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return { error: t("{label} must be a valid JSON array.", { label }) };
-  }
-  if (!Array.isArray(value)) return { error: t("{label} must be a JSON array.", { label }) };
-  return { value };
 }
 
 function setStatus(node, state, text) {

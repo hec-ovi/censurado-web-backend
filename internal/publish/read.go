@@ -15,6 +15,7 @@ import (
 // these reads.
 type ReadStore interface {
 	store.Repository
+	store.ArticleDayStore
 	store.AuthorStore
 	store.TopicStore
 	store.PortadaStore
@@ -279,10 +280,86 @@ type articlesResponse struct {
 	Total    int               `json:"total"`
 }
 
+type articleDayJSON struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+type articleDaysResponse struct {
+	Days []articleDayJSON `json:"days"`
+}
+
+// ServeArticleDays answers GET /articles:days with the lightweight date index the
+// admin panel uses for one-day-at-a-time pagination. It accepts the same read
+// filters as /articles, including order and date range, but ignores limit/offset.
+func (rh *ReadHandler) ServeArticleDays(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	f, ok := parseFilter(w, r)
+	if !ok {
+		return
+	}
+	days, err := rh.store.ArticleDays(r.Context(), f)
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	out := articleDaysResponse{Days: make([]articleDayJSON, 0, len(days))}
+	for _, day := range days {
+		out.Days = append(out.Days, articleDayJSON{Date: day.Date, Count: day.Count})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type facetJSON struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
+}
+
+type facetsResponse struct {
+	Sections []facetJSON `json:"sections"`
+	Authors  []facetJSON `json:"authors"`
+	Topics   []facetJSON `json:"topics"`
+}
+
+func toFacetJSON(in []store.Facet) []facetJSON {
+	out := make([]facetJSON, 0, len(in))
+	for _, f := range in {
+		out = append(out, facetJSON{Value: f.Value, Count: f.Count})
+	}
+	return out
+}
+
+// ServeFacets answers GET /articles:facets with the distinct section, author, and
+// topic values present on LIVE (non-deleted) articles, each with its article count,
+// ordered count DESC then value ASC. Sections have no registry table (unlike
+// authors/topics/portadas/sources), so this aggregate is the only authoritative
+// list of the section vocabulary actually in use: a renamed or removed section just
+// drops out once its last live article is retagged or deleted, and an orphaned
+// value shows here until then. Tombstoned articles are excluded (Facets filters
+// them), so the counts match what the public site renders.
+func (rh *ReadHandler) ServeFacets(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	facets, err := rh.store.Facets(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, facetsResponse{
+		Sections: toFacetJSON(facets.Sections),
+		Authors:  toFacetJSON(facets.Authors),
+		Topics:   toFacetJSON(facets.Topics),
+	})
+}
+
 // ServeArticles answers GET /articles with a filtered, paged, body-less list and a
 // Total that counts all matches (ignoring paging). Query params map to store.Filter:
-// section, author, topic, q, from, to (RFC3339), limit, offset, order (oldest|newest),
-// include_deleted. A malformed from/to/limit/offset is a 400.
+// section, author, topic, q, title_subtitle_q, date (YYYY-MM-DD), from, to
+// (RFC3339), limit, offset, order (oldest|newest), include_deleted. A malformed
+// date/from/to/limit/offset is a 400.
 func (rh *ReadHandler) ServeArticles(w http.ResponseWriter, r *http.Request) {
 	if !rh.authn(w, r) {
 		return
@@ -360,18 +437,28 @@ func (rh *ReadHandler) ServeArticle(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseFilter maps the query string to a store.Filter, writing a 400 problem and
-// returning ok=false on a malformed from/to/limit/offset.
+// returning ok=false on a malformed date/from/to/limit/offset.
 func parseFilter(w http.ResponseWriter, r *http.Request) (store.Filter, bool) {
 	q := r.URL.Query()
 	f := store.Filter{
-		Section:        q.Get("section"),
-		Author:         q.Get("author"),
-		Topic:          q.Get("topic"),
-		Query:          q.Get("q"),
-		IncludeDeleted: includeDeleted(r),
+		Section:            q.Get("section"),
+		Author:             q.Get("author"),
+		Topic:              q.Get("topic"),
+		Query:              q.Get("q"),
+		TitleSubtitleQuery: q.Get("title_subtitle_q"),
+		IncludeDeleted:     includeDeleted(r),
 	}
 	if q.Get("order") == "oldest" {
 		f.Order = store.OldestFirst
+	}
+	if v := q.Get("date"); v != "" {
+		from, to, err := dayBounds(v)
+		if err != nil {
+			writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_query", Detail: "date must be a YYYY-MM-DD UTC date"})
+			return store.Filter{}, false
+		}
+		f.From = from
+		f.To = to
 	}
 	if v := q.Get("from"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
@@ -406,6 +493,14 @@ func parseFilter(w http.ResponseWriter, r *http.Request) (store.Filter, bool) {
 		f.Offset = n
 	}
 	return f, true
+}
+
+func dayBounds(value string) (time.Time, time.Time, error) {
+	day, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return day, day.AddDate(0, 0, 1), nil
 }
 
 func includeDeleted(r *http.Request) bool {

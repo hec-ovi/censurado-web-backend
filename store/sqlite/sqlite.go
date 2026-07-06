@@ -403,6 +403,28 @@ func (s *Store) Count(ctx context.Context, f store.Filter) (int, error) {
 	return n, nil
 }
 
+// ArticleDays returns distinct UTC publication dates for articles matching the
+// filter, ordered by date. Limit and Offset are ignored because this is the page
+// index, not the page body.
+func (s *Store) ArticleDays(ctx context.Context, f store.Filter) ([]store.ArticleDay, error) {
+	query, args := buildArticleDays(f)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []store.ArticleDay
+	for rows.Next() {
+		var day store.ArticleDay
+		if err := rows.Scan(&day.Date, &day.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, day)
+	}
+	return out, rows.Err()
+}
+
 // Facets returns the distinct section, author, and topic values present with
 // their article counts, ordered Count DESC then Value ASC so the bytes are
 // deterministic and stable run to run. The value tie-break sorts on the TEXT
@@ -459,9 +481,39 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 	} else {
 		b.WriteString("SELECT a.id,a.slug,a.title,a.body,a.author,a.section,a.published_at,a.content_hash,a.metadata,a.created_at,a.deleted_at FROM articles a")
 	}
+	appendArticleFilters(&b, &args, f)
+	if count {
+		return b.String(), args
+	}
+	dir := articleOrderDir(f)
+	fmt.Fprintf(&b, " ORDER BY a.published_at %s, a.id %s", dir, dir)
+	if f.Limit > 0 {
+		b.WriteString(" LIMIT ?")
+		args = append(args, f.Limit)
+	}
+	if f.Offset > 0 {
+		if f.Limit <= 0 {
+			b.WriteString(" LIMIT -1") // SQLite requires LIMIT before OFFSET
+		}
+		b.WriteString(" OFFSET ?")
+		args = append(args, f.Offset)
+	}
+	return b.String(), args
+}
+
+func buildArticleDays(f store.Filter) (string, []any) {
+	var b strings.Builder
+	var args []any
+	b.WriteString("SELECT substr(a.published_at,1,10) AS day, COUNT(*) FROM articles a")
+	appendArticleFilters(&b, &args, f)
+	fmt.Fprintf(&b, " GROUP BY day ORDER BY day %s", articleOrderDir(f))
+	return b.String(), args
+}
+
+func appendArticleFilters(b *strings.Builder, args *[]any, f store.Filter) {
 	if f.Topic != "" {
 		b.WriteString(" JOIN article_topics t ON t.article_id = a.id AND t.topic = ?")
-		args = append(args, f.Topic)
+		*args = append(*args, f.Topic)
 	}
 	b.WriteString(" WHERE 1=1")
 	// Soft-deleted rows are hidden by default; the admin opts into them. The public
@@ -471,19 +523,19 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 	}
 	if f.Section != "" {
 		b.WriteString(" AND a.section = ?")
-		args = append(args, f.Section)
+		*args = append(*args, f.Section)
 	}
 	if f.Author != "" {
 		b.WriteString(" AND a.author = ?")
-		args = append(args, f.Author)
+		*args = append(*args, f.Author)
 	}
 	if !f.From.IsZero() {
 		b.WriteString(" AND a.published_at >= ?")
-		args = append(args, f.From.UTC().Format(timeLayout))
+		*args = append(*args, f.From.UTC().Format(timeLayout))
 	}
 	if !f.To.IsZero() {
 		b.WriteString(" AND a.published_at < ?")
-		args = append(args, f.To.UTC().Format(timeLayout))
+		*args = append(*args, f.To.UTC().Format(timeLayout))
 	}
 	// Multi-value axes (admin only). Each ANDs with the scalar fields above and
 	// ORs within itself via IN/EXISTS. Blank entries are dropped first; an
@@ -491,13 +543,13 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 	if vals := nonBlank(f.Sections); len(vals) > 0 {
 		b.WriteString(" AND a.section IN (" + placeholders(len(vals)) + ")")
 		for _, v := range vals {
-			args = append(args, v)
+			*args = append(*args, v)
 		}
 	}
 	if vals := nonBlank(f.Authors); len(vals) > 0 {
 		b.WriteString(" AND a.author IN (" + placeholders(len(vals)) + ")")
 		for _, v := range vals {
-			args = append(args, v)
+			*args = append(*args, v)
 		}
 	}
 	if vals := nonBlank(f.Topics); len(vals) > 0 {
@@ -505,7 +557,7 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 		// returned once; coexists with the scalar Topic JOIN above (both AND).
 		b.WriteString(" AND EXISTS (SELECT 1 FROM article_topics att WHERE att.article_id = a.id AND att.topic IN (" + placeholders(len(vals)) + "))")
 		for _, v := range vals {
-			args = append(args, v)
+			*args = append(*args, v)
 		}
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
@@ -521,28 +573,20 @@ func buildSelect(f store.Filter, count bool) (string, []any) {
 		// match and is safe to rely on.
 		pat := "%" + likeEscape(q) + "%"
 		b.WriteString(" AND (lower(a.title) LIKE lower(?) ESCAPE '\\' OR lower(a.body) LIKE lower(?) ESCAPE '\\')")
-		args = append(args, pat, pat)
+		*args = append(*args, pat, pat)
 	}
-	if count {
-		return b.String(), args
+	if q := strings.TrimSpace(f.TitleSubtitleQuery); q != "" {
+		pat := "%" + likeEscape(q) + "%"
+		b.WriteString(" AND (lower(a.title) LIKE lower(?) ESCAPE '\\' OR lower(CAST(COALESCE(json_extract(a.metadata, '$.subtitle'), '') AS TEXT)) LIKE lower(?) ESCAPE '\\')")
+		*args = append(*args, pat, pat)
 	}
-	dir := "DESC"
+}
+
+func articleOrderDir(f store.Filter) string {
 	if f.Order == store.OldestFirst {
-		dir = "ASC"
+		return "ASC"
 	}
-	fmt.Fprintf(&b, " ORDER BY a.published_at %s, a.id %s", dir, dir)
-	if f.Limit > 0 {
-		b.WriteString(" LIMIT ?")
-		args = append(args, f.Limit)
-	}
-	if f.Offset > 0 {
-		if f.Limit <= 0 {
-			b.WriteString(" LIMIT -1") // SQLite requires LIMIT before OFFSET
-		}
-		b.WriteString(" OFFSET ?")
-		args = append(args, f.Offset)
-	}
-	return b.String(), args
+	return "DESC"
 }
 
 // nonBlank returns the entries of in that are not empty or whitespace-only,

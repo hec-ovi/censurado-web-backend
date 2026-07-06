@@ -1,7 +1,6 @@
 import { api as defaultApi } from "./api.js";
 import { el, help, subTabs } from "./components/el.js";
 import { t, currentLocale, setLocale, LANGS, LANG_LABEL } from "./components/i18n.js";
-import { Health } from "./components/health.js";
 import { ArticlesPanel } from "./components/articlesPanel.js";
 import { PortadaPanel } from "./components/portadaPanel.js";
 import { PersonaList } from "./components/personaList.js";
@@ -88,8 +87,8 @@ function BrandWordmark(className) {
 // whole app against MSW or a stub; production passes nothing and the real /api
 // client is used. Returns the live component handles for tests.
 //
-// The panel is a SIX-tab ARIA tablist: Articles, Portada, Autores, Temas, Sources,
-// Status. It talks to the backend only (same-origin); there is no brain proxy and no
+// The panel is a five-tab ARIA tablist: Portada, Articles, Authors, Sources, Topics.
+// It talks to the backend only (same-origin); there is no brain proxy and no
 // prompt/workflow editing (those live in the brain's prompt files, edited in git).
 // Switching tabs only toggles `hidden` (hide, not unmount), so controls in inactive
 // tabs stay in the DOM and remain findable by tests and assistive tech. Every tab is
@@ -97,7 +96,6 @@ function BrandWordmark(className) {
 export function mountApp(root, deps = {}) {
   const api = deps.api || defaultApi;
 
-  const health = Health({ api });
   const articles = ArticlesPanel({ api });
   const portada = PortadaPanel({ api });
   const list = PersonaList({ api });
@@ -107,7 +105,7 @@ export function mountApp(root, deps = {}) {
 
   const newPersonaPanel = el("section", { class: "panel" }, [
     el("div", { class: "panel-head" }, [
-      el("h2", {}, t("New persona")),
+      el("h2", {}, t("New author")),
       help(t("Create an author persona from explicit fields. The new author joins the roster below.")),
     ]),
     el("p", { class: "muted" }, t(BYLINE_FREEZE_NOTE)),
@@ -115,27 +113,18 @@ export function mountApp(root, deps = {}) {
   ]);
   const authorsSurface = subTabs(
     [
-      { id: "new-author", label: t("New persona"), content: newPersonaPanel },
       { id: "authors-list", label: t("Authors"), content: list.element },
+      { id: "new-author", label: t("New author"), content: newPersonaPanel },
     ],
     { className: "content-tabs", label: t("Author sections") },
   );
 
-  const healthPanel = el("section", { class: "panel" }, [
-    el("div", { class: "panel-head" }, [
-      el("h2", {}, t("Health")),
-      help(t("Live ping of the backend that serves this panel. Green means it answered.")),
-    ]),
-    health.element,
-  ]);
-
   const tabs = [
-    { id: "articles", label: t("Articles"), content: [articles.element] },
     { id: "portada", label: t("Portada"), content: [portada.element] },
+    { id: "articles", label: t("Articles"), content: [articles.element] },
     { id: "authors", label: t("Authors"), content: [authorsSurface.element] },
-    { id: "temas", label: t("Topics"), content: [temas.element] },
     { id: "sources", label: t("Sources"), content: [sources.element] },
-    { id: "status", label: t("Status"), content: [healthPanel] },
+    { id: "temas", label: t("Topics"), content: [temas.element] },
   ];
 
   const tabButtons = [];
@@ -245,14 +234,13 @@ export function mountApp(root, deps = {}) {
   document.documentElement.lang = currentLocale();
   document.title = t("Admin Panel");
 
-  health.check();
   articles.reload();
   portada.reload();
   list.reload();
   temas.reload();
   sources.reload();
 
-  return { health, articles, portada, list, form, temas, sources, tabs: tabButtons, panels, select };
+  return { articles, portada, list, form, temas, sources, tabs: tabButtons, panels, select };
 }
 
 // Browser entry point. index.html loads this module under a strict CSP (no inline

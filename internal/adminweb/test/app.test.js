@@ -11,9 +11,9 @@ import { mountApp } from "../static/app.js";
 installDom();
 const server = installServer();
 
-// Every mount pings the whole surface, and it is ALL same-origin backend now: the
-// liveness probe, the empty author + source registries, and the article corpus (used
-// by both the Articles and Temas tabs) + portadas. There is NO brain: MSW runs in
+// Every mount pings the whole panel surface, and it is ALL same-origin backend now:
+// the empty author + source registries, the article day index + corpus (used by
+// Articles and Temas), and portadas. There is NO brain: MSW runs in
 // onUnhandledRequest:"error" mode, so if any component reached for a /api/brain/* (or
 // any un-stubbed) route the mount would hard-fail. Registering ONLY backend handlers
 // is therefore the "brain down" checkpoint: the panel works with just the backend up.
@@ -22,9 +22,10 @@ const server = installServer();
 function baseHandlers(extra = []) {
   return [
     ...extra,
-    http.get(`${ORIGIN}/healthz`, () => new HttpResponse("ok")),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
     http.get(`${ORIGIN}/sources`, () => HttpResponse.json({ sources: [] })),
+    http.get(`${ORIGIN}/articles:days`, () => HttpResponse.json({ days: [] })),
+    http.get(`${ORIGIN}/articles:facets`, () => HttpResponse.json({ sections: [], authors: [], topics: [] })),
     http.get(`${ORIGIN}/articles`, () => HttpResponse.json({ articles: [], total: 0 })),
     http.get(`${ORIGIN}/portadas`, () => HttpResponse.json({ portadas: [] })),
   ];
@@ -36,20 +37,20 @@ function mount() {
   return mountApp(root);
 }
 
-test("mounts exactly six tabs in order, with no Editorial or Agentic tab", async () => {
+test("mounts exactly five tabs in order, with no Editorial, Agentic, or Status tab", async () => {
   server.use(...baseHandlers());
   mount();
-  await screen.findByText("online");
 
   const consoleTablist = screen.getByRole("tablist", { name: "Console sections" });
   const tabs = within(consoleTablist).getAllByRole("tab");
-  assert.equal(tabs.length, 6, "six operator tabs");
+  assert.equal(tabs.length, 5, "five operator tabs");
   assert.deepEqual(
     tabs.map((tab) => tab.textContent),
-    ["Articles", "Portada", "Authors", "Topics", "Sources", "Status"],
+    ["Portada", "Articles", "Authors", "Sources", "Topics"],
   );
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /editorial/i }), null, "no Editorial tab");
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /agentic/i }), null, "no Agentic workflow tab");
+  assert.equal(within(consoleTablist).queryByRole("tab", { name: /status/i }), null, "no Status tab");
 
   assert.equal(tabs[0].getAttribute("aria-selected"), "true");
 });
@@ -57,7 +58,6 @@ test("mounts exactly six tabs in order, with no Editorial or Agentic tab", async
 test("renders a clean zero-state on every surviving tab (backend only, brain down)", async () => {
   server.use(...baseHandlers());
   mount();
-  await screen.findByText("online");
 
   assert.ok((await screen.findAllByText("No articles yet.")).length >= 1);
   await screen.findByText("No topics yet.");
@@ -79,7 +79,6 @@ test("the Temas tab renders derived topic rows with stable slugs", async () => {
   );
   const user = userEvent.setup();
   mount();
-  await screen.findByText("online");
 
   await user.click(screen.getByRole("tab", { name: /topics/i }));
   const panel = screen.getByRole("tabpanel", { name: /topics/i });
@@ -93,9 +92,9 @@ test("the Autores tab shows the byline-freeze note", async () => {
   server.use(...baseHandlers());
   const user = userEvent.setup();
   mount();
-  await screen.findByText("online");
 
   await user.click(screen.getByRole("tab", { name: /authors/i }));
-  const panel = screen.getByRole("tabpanel", { name: /authors/i });
-  assert.ok(within(panel).getByText(/does not rewrite already-published bylines/i));
+  // The Autores surface nests its own Authors/New-author tablist, so two tabpanels
+  // carry the accessible name "Authors"; assert the freeze note by its unique text.
+  assert.ok(await screen.findByText(/does not rewrite already-published bylines/i));
 });

@@ -22,11 +22,12 @@ import "net/http"
 //
 // When readH is non-nil, the authenticated JSON read API is mounted: GET /authors,
 // GET /authors/{handle}/sources, GET /topics, GET /portadas, GET /sources, GET
-// /articles, and GET /articles/{slug}. These are method-specific patterns, so GET
-// /articles takes precedence over the method-less /articles write route for GET while
-// POST still reaches the write handler; reads are not rate limited (idempotent,
-// cacheable). A nil readH leaves the read API off, so the write handler keeps
-// answering 405 for a GET /articles.
+// /articles:days, GET /articles:facets, GET /articles, and GET /articles/{slug}.
+// These are method-specific
+// patterns, so GET /articles takes precedence over the method-less /articles write
+// route for GET while POST still reaches the write handler; reads are not rate
+// limited (idempotent, cacheable). A nil readH leaves the read API off, so the write
+// handler keeps answering 405 for a GET /articles.
 //
 // When opH is non-nil, the operator mutation lane is mounted behind ScopeAdminWrite:
 // POST/DELETE/restore for /authors, /topics, /portadas, and /sources, PUT
@@ -60,6 +61,8 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 		mux.HandleFunc("GET /topics", readH.ServeTopics)
 		mux.HandleFunc("GET /portadas", readH.ServePortadas)
 		mux.HandleFunc("GET /sources", readH.ServeSources)
+		mux.HandleFunc("GET /articles:days", readH.ServeArticleDays)
+		mux.HandleFunc("GET /articles:facets", readH.ServeFacets)
 		mux.HandleFunc("GET /articles", readH.ServeArticles)
 		mux.HandleFunc("GET /articles/{slug}", readH.ServeArticle)
 	}

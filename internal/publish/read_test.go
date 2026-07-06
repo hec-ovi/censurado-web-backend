@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hec-ovi/censurado-web-backend/domain"
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
 	"github.com/hec-ovi/censurado-web-backend/store"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
@@ -68,6 +69,28 @@ func seedArticle(t *testing.T, srv http.Handler, opToken, key, title, author, se
 	return slug
 }
 
+func seedStoredArticle(t *testing.T, repo store.Repository, title, author, section string, topics []string, at time.Time) string {
+	return seedStoredArticleWithMetadata(t, repo, title, author, section, topics, nil, at)
+}
+
+func seedStoredArticleWithMetadata(t *testing.T, repo store.Repository, title, author, section string, topics []string, metadata map[string]any, at time.Time) string {
+	t.Helper()
+	article, err := domain.NewArticle(domain.PublishInput{
+		Title: title, Body: "# H\n\nbody for " + title,
+		Author: author, Section: section, Topics: topics,
+		Metadata:    metadata,
+		PublishedAt: &at,
+	}, at)
+	if err != nil {
+		t.Fatalf("new article %q: %v", title, err)
+	}
+	res, err := repo.Upsert(context.Background(), article)
+	if err != nil {
+		t.Fatalf("upsert %q: %v", title, err)
+	}
+	return res.Article.Slug
+}
+
 type authorsResp struct {
 	Authors []struct {
 		Handle   string         `json:"handle"`
@@ -97,6 +120,13 @@ type articlesResp struct {
 		Deleted  bool     `json:"deleted"`
 	} `json:"articles"`
 	Total int `json:"total"`
+}
+
+type articleDaysResp struct {
+	Days []struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	} `json:"days"`
 }
 
 func TestReadAPI_AuthRequired(t *testing.T) {
@@ -392,6 +422,156 @@ func TestReadArticles_FilterPagingAndBodyOmitted(t *testing.T) {
 	})
 }
 
+func TestReadArticles_DayIndexAndDatePage(t *testing.T) {
+	srv, repo := newReadServer(t)
+	opToken := "ak_op." + opSecret
+	base := time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC)
+
+	oldSlug := seedStoredArticle(t, repo, "Older day", "ada", "tech", []string{"go"}, base)
+	latestAda := seedStoredArticle(t, repo, "Latest Ada", "ada", "tech", []string{"go"}, base.AddDate(0, 0, 2))
+	latestBo := seedStoredArticle(t, repo, "Latest Bo", "bo", "world", []string{"diplomacy"}, base.AddDate(0, 0, 2).Add(2*time.Hour))
+
+	t.Run("day index defaults newest first", func(t *testing.T) {
+		var got articleDaysResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles:days"), &got)
+		if len(got.Days) != 2 {
+			t.Fatalf("days = %+v, want 2 days", got.Days)
+		}
+		if got.Days[0].Date != "2026-06-24" || got.Days[0].Count != 2 || got.Days[1].Date != "2026-06-22" || got.Days[1].Count != 1 {
+			t.Errorf("days = %+v, want latest day count 2 then older day count 1", got.Days)
+		}
+	})
+
+	t.Run("day index can be oldest first and filtered by author", func(t *testing.T) {
+		var got articleDaysResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles:days?order=oldest&author=ada"), &got)
+		if len(got.Days) != 2 {
+			t.Fatalf("days = %+v, want 2 ada days", got.Days)
+		}
+		if got.Days[0].Date != "2026-06-22" || got.Days[0].Count != 1 || got.Days[1].Date != "2026-06-24" || got.Days[1].Count != 1 {
+			t.Errorf("author-filtered days = %+v, want oldest ada day then latest ada day", got.Days)
+		}
+	})
+
+	t.Run("date param loads only that UTC day", func(t *testing.T) {
+		var got articlesResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles?date=2026-06-24&order=oldest"), &got)
+		if got.Total != 2 || len(got.Articles) != 2 {
+			t.Fatalf("date page total=%d len=%d, want 2/2", got.Total, len(got.Articles))
+		}
+		slugs := []string{got.Articles[0].Slug, got.Articles[1].Slug}
+		if slugs[0] != latestAda || slugs[1] != latestBo {
+			t.Errorf("date page slugs = %v, want [%s %s]", slugs, latestAda, latestBo)
+		}
+
+		decodeBody(t, getAuth(t, srv, opToken, "/articles?date=2026-06-22&order=oldest"), &got)
+		if got.Total != 1 || len(got.Articles) != 1 || got.Articles[0].Slug != oldSlug {
+			t.Errorf("older date page = %+v, want only %s", got, oldSlug)
+		}
+	})
+}
+
+func TestReadFacets_DistinctLiveValuesWithCounts(t *testing.T) {
+	srv, repo := newReadServer(t)
+	opToken := "ak_op." + opSecret
+	base := time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC)
+
+	seedStoredArticle(t, repo, "P1", "ada", "politics", []string{"milei", "go"}, base)
+	seedStoredArticle(t, repo, "P2", "ada", "politics", []string{"milei"}, base.Add(time.Hour))
+	seedStoredArticle(t, repo, "T1", "bo", "tech", []string{"go"}, base.Add(2*time.Hour))
+	// An old article on a section that is being retired: soft-deleting it must drop
+	// `economics` out of the live facet list entirely (the point of the endpoint).
+	gone := seedStoredArticle(t, repo, "Old economics piece", "bo", "economics", []string{"go"}, base.Add(3*time.Hour))
+	if err := repo.DeleteArticle(context.Background(), gone); err != nil {
+		t.Fatalf("soft-delete economics article: %v", err)
+	}
+
+	type facet struct {
+		Value string `json:"value"`
+		Count int    `json:"count"`
+	}
+	var got struct {
+		Sections []facet `json:"sections"`
+		Authors  []facet `json:"authors"`
+		Topics   []facet `json:"topics"`
+	}
+	decodeBody(t, getAuth(t, srv, opToken, "/articles:facets"), &got)
+
+	// sections: politics(2) before tech(1) by count DESC; economics excluded (deleted).
+	wantSections := []facet{{"politics", 2}, {"tech", 1}}
+	if len(got.Sections) != len(wantSections) {
+		t.Fatalf("sections = %+v, want %+v (economics must be absent)", got.Sections, wantSections)
+	}
+	for i, w := range wantSections {
+		if got.Sections[i] != w {
+			t.Errorf("sections[%d] = %+v, want %+v", i, got.Sections[i], w)
+		}
+	}
+	for _, s := range got.Sections {
+		if s.Value == "economics" {
+			t.Error("economics section still present after its only article was tombstoned")
+		}
+	}
+
+	// authors and topics come back over the same call (the impact on authors the
+	// consult verb surfaces): ada wrote both live politics pieces, bo one live tech.
+	authorCount := map[string]int{}
+	for _, a := range got.Authors {
+		authorCount[a.Value] = a.Count
+	}
+	if authorCount["ada"] != 2 || authorCount["bo"] != 1 {
+		t.Errorf("authors = %+v, want ada:2 bo:1 (deleted piece excluded)", got.Authors)
+	}
+	topicCount := map[string]int{}
+	for _, tp := range got.Topics {
+		topicCount[tp.Value] = tp.Count
+	}
+	if topicCount["milei"] != 2 || topicCount["go"] != 2 {
+		t.Errorf("topics = %+v, want milei:2 go:2 (go on the deleted piece excluded)", got.Topics)
+	}
+
+	t.Run("requires a valid bearer token", func(t *testing.T) {
+		if rec := getAuth(t, srv, "", "/articles:facets"); rec.Code != http.StatusUnauthorized {
+			t.Errorf("no-token status = %d, want 401", rec.Code)
+		}
+	})
+}
+
+func TestReadArticles_TitleSubtitleQuery(t *testing.T) {
+	srv, repo := newReadServer(t)
+	opToken := "ak_op." + opSecret
+	base := time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC)
+
+	titleSlug := seedStoredArticle(t, repo, "Mercury dispatch", "ada", "tech", []string{"go"}, base)
+	subtitleSlug := seedStoredArticleWithMetadata(t, repo, "Quiet headline", "bo", "world", []string{"diplomacy"}, map[string]any{"subtitle": "Mercury appears in the deck"}, base.Add(24*time.Hour))
+	bodyOnlySlug := seedStoredArticle(t, repo, "No visible match", "cy", "world", []string{"misc"}, base.Add(48*time.Hour))
+
+	t.Run("matches title and subtitle across dates", func(t *testing.T) {
+		var got articlesResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles?title_subtitle_q=mercury&order=oldest"), &got)
+		if got.Total != 2 || len(got.Articles) != 2 {
+			t.Fatalf("total=%d len=%d, want 2/2", got.Total, len(got.Articles))
+		}
+		slugs := []string{got.Articles[0].Slug, got.Articles[1].Slug}
+		if slugs[0] != titleSlug || slugs[1] != subtitleSlug {
+			t.Errorf("title_subtitle_q slugs = %v, want [%s %s]", slugs, titleSlug, subtitleSlug)
+		}
+		for _, a := range got.Articles {
+			if a.Slug == bodyOnlySlug {
+				t.Error("body-only article matched title_subtitle_q")
+			}
+		}
+	})
+
+	t.Run("does not search body-only text", func(t *testing.T) {
+		var got articlesResp
+		decodeBody(t, getAuth(t, srv, opToken, "/articles?title_subtitle_q=body%20for%20No%20visible%20match"), &got)
+		if got.Total != 0 || len(got.Articles) != 0 {
+			t.Errorf("body-only title_subtitle_q = %+v, want empty", got)
+		}
+	})
+}
+
 func TestReadArticles_SoftDeleteVisibility(t *testing.T) {
 	srv, repo := newReadServer(t)
 	ctx := context.Background()
@@ -463,7 +643,7 @@ func TestReadArticles_InvalidQuery(t *testing.T) {
 	srv, _ := newReadServer(t)
 	opToken := "ak_op." + opSecret
 
-	for _, path := range []string{"/articles?limit=abc", "/articles?offset=-1", "/articles?from=not-a-time"} {
+	for _, path := range []string{"/articles?limit=abc", "/articles?offset=-1", "/articles?from=not-a-time", "/articles?date=not-a-day"} {
 		if rec := getAuth(t, srv, opToken, path); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400 (%s)", path, rec.Code, rec.Body.String())
 		}

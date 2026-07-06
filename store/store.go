@@ -33,11 +33,11 @@ const (
 //
 // Axes AND together. The scalar Section/Author/Topic fields are the stable public
 // surface the generator relies on. The plural Sections/Authors/Topics slices and
-// the Query field are an admin-only widening (Phase 5): within a single plural
-// axis the values OR (membership), and a scalar field and its plural counterpart
-// are independent constraints that AND together (the plural never overrides the
-// scalar). Blank or whitespace-only entries inside a slice are ignored, and a
-// slice of only blanks is treated as no constraint.
+// the Query and TitleSubtitleQuery fields are an admin-only widening (Phase 5):
+// within a single plural axis the values OR (membership), and a scalar field and
+// its plural counterpart are independent constraints that AND together (the
+// plural never overrides the scalar). Blank or whitespace-only entries inside a
+// slice are ignored, and a slice of only blanks is treated as no constraint.
 type Filter struct {
 	// Scalar hot axes. The public generator uses ONLY these (plus From/To/Order/
 	// paging); they must keep their exact meaning.
@@ -62,6 +62,11 @@ type Filter struct {
 	// not unicode) and the exact contract.
 	Query string
 
+	// TitleSubtitleQuery is an admin-only substring filter over title OR
+	// metadata.subtitle. It intentionally does not search the body, so the operator
+	// article-search box can return only visible headline/deck matches.
+	TitleSubtitleQuery string
+
 	From   time.Time // inclusive lower bound on PublishedAt; zero = open
 	To     time.Time // exclusive upper bound on PublishedAt; zero = open
 	Order  Order
@@ -80,6 +85,22 @@ type Filter struct {
 type Facet struct {
 	Value string
 	Count int
+}
+
+// ArticleDay is one UTC publication date and the number of matching articles on
+// that date. It feeds admin pagination without loading whole article pages.
+type ArticleDay struct {
+	Date  string
+	Count int
+}
+
+// ArticleDayStore is the lightweight date-index read surface used by the admin
+// panel. It is kept separate from Repository so the public article contract stays
+// stable.
+type ArticleDayStore interface {
+	// ArticleDays returns distinct UTC publication dates for articles matching the
+	// filter, ordered by Filter.Order. Paging fields on the filter are ignored.
+	ArticleDays(ctx context.Context, f Filter) ([]ArticleDay, error)
 }
 
 // Facets is the distinct set of filter values present in the store, per axis,

@@ -85,8 +85,8 @@ whole set is frozen so an internal store change cannot silently break Layer 1's 
 
 `store.Filter` public axes (frozen): the scalar hot axes `Section`, `Author`, `Topic` plus
 `From`, `To`, `Order`, `Limit`, `Offset`, `IncludeDeleted` are the **public generator surface** and
-keep their exact meaning. The plural `Sections`/`Authors`/`Topics` slices, `Query`, and `Facets` are
-an admin-only widening.
+keep their exact meaning. The plural `Sections`/`Authors`/`Topics` slices, `Query`,
+`TitleSubtitleQuery`, and `Facets` are an admin-only widening.
 
 Overlay types the generator reads:
 - `store.Author` (ID, Handle, Name, Bio, Avatar, **Gender, About, Style, Topics, Sources**, Metadata,
@@ -161,7 +161,8 @@ in `/articles:batch` is a literal path byte, no collision.
 | GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
 | GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
 | GET | `/sources` | `{sources:[{slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
-| GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,card_type,deleted,content_hash}], total}` (body omitted from list items). `card_type` is the card label (text/image/youtube/video). Query -> Filter: section, author, topic, q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
+| GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,card_type,deleted,content_hash}], total}` (body omitted from list items). `card_type` is the card label (text/image/youtube/video). Query -> Filter: section, author, topic, q, title_subtitle_q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
+| GET | `/articles:days` | `{days:[{date,count}]}` with distinct UTC publication dates matching the same read filters used by `/articles`, including author/topic/q/title_subtitle_q and order. The admin UI uses it as a lightweight date index. |
 | GET | `/articles/{slug}` | Full article incl. `body`. A soft-deleted article is still returned with `deleted=true`. 404 not_found. |
 | GET | `/media/{name}` | Public, keyless, immutable-cached raw image. `name` must match `^[a-f0-9]{64}\.(jpg\|png\|gif\|webp)$`. 404 not_found. |
 
