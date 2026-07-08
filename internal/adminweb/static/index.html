@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,7 +10,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; img-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     />
-    <title>Panel de administración</title>
+    <title>Admin Panel</title>
     <link rel="stylesheet" href="./brand.css?v=admin-shared-1" />
     <link rel="stylesheet" href="./controls.css?v=admin-shared-1" />
     <link rel="stylesheet" href="./styles.css?v=admin-remaster-8" />
@@ -18,6 +18,12 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- The server replaces the placeholder token below with the panel_text strings +
+         shared section labels as JSON. type="application/json" is an inert data block
+         (not gated by the script-src CSP); app.js reads it and installs the catalog
+         before first render. Left as the literal token it is invalid JSON, so app.js's
+         JSON.parse falls back to the English identity. -->
+    <script type="application/json" id="panel-i18n">__PANEL_I18N__</script>
     <script type="module" src="./app.js?v=admin-remaster-20"></script>
   </body>
 </html>

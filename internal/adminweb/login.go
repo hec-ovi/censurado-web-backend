@@ -11,9 +11,9 @@ import (
 )
 
 const loginPage = `<!doctype html>
-<html lang="es"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Censurado | Acceso</title>
+<title>Censurado | Sign in</title>
 <link rel="stylesheet" href="/brand.css">
 <link rel="stylesheet" href="/controls.css">
 <link rel="stylesheet" href="/styles.css">
@@ -21,14 +21,10 @@ const loginPage = `<!doctype html>
 </head>
 <body class="login-page">
 <div class="admin-controls">
-<div class="admin-lang-switch" role="group" aria-label="Idioma" data-i18n-aria="Language">
-<button type="button" data-lang-choice="en" aria-pressed="false">EN</button>
-<button type="button" data-lang-choice="es" aria-pressed="false">ES</button>
-</div>
-<div class="admin-theme-switch" role="group" aria-label="Tema" data-i18n-aria="Theme">
-<button type="button" data-theme-choice="system" aria-pressed="true" data-i18n="System">Sistema</button>
-<button type="button" data-theme-choice="light" aria-pressed="false" data-i18n="Light">Claro</button>
-<button type="button" data-theme-choice="dark" aria-pressed="false" data-i18n="Dark">Oscuro</button>
+<div class="admin-theme-switch" role="group" aria-label="Theme">
+<button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+<button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+<button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
 </div>
 </div>
 <main class="login-shell">
@@ -38,17 +34,17 @@ const loginPage = `<!doctype html>
 <span class="brand-word brand-word-censurado">censurado</span>
 <span class="brand-word brand-word-web">W<span class="brand-e">e</span>b</span>
 </div>
-<p>Despachos independientes asistidos por IA sobre tecnolog&iacute;a, poder, mercados y pol&iacute;tica.</p>
+<p>Independent AI-assisted dispatches on technology, power, markets, and politics.</p>
 </section>
 <div class="login-divider" aria-hidden="true"></div>
-<section class="login-auth" aria-label="Acceso operador">
-<h1 data-i18n="Welcome">Welcome</h1>
-<p class="login-subtitle" data-i18n="Please login to admin dashboard.">Please login to admin dashboard.</p>
+<section class="login-auth" aria-label="Operator access">
+<h1>Welcome</h1>
+<p class="login-subtitle">Please login to admin dashboard.</p>
 <form class="login-form" method="post" action="/login">
-<label class="field"><span class="visually-hidden" data-i18n="Operator token">Token de operador</span>
-<input type="password" name="token" autocomplete="current-password" value="%s" placeholder="OPERATOR TOKEN" data-i18n-placeholder="OPERATOR TOKEN" autofocus>
+<label class="field"><span class="visually-hidden">Operator token</span>
+<input type="password" name="token" autocomplete="current-password" value="%s" placeholder="OPERATOR TOKEN" autofocus>
 </label>
-<button class="login-submit" type="submit"><span data-i18n="Login">Login</span><span class="login-submit-arrow" aria-hidden="true">&rsaquo;</span></button>
+<button class="login-submit" type="submit"><span>Login</span><span class="login-submit-arrow" aria-hidden="true">&rsaquo;</span></button>
 </form>
 %s
 </section>
@@ -133,7 +129,7 @@ func (h *handler) loginPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Generic error; never reflect the submitted token. No cookie is set.
-	renderLogin(w, h.cfg, http.StatusOK, `<p class="login-error">Token inv&aacute;lido.</p>`)
+	renderLogin(w, h.cfg, http.StatusOK, `<p class="login-error">Invalid token.</p>`)
 }
 
 func (h *handler) logout(w http.ResponseWriter, r *http.Request) {

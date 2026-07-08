@@ -35,6 +35,7 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/internal/adminweb"
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
 	"github.com/hec-ovi/censurado-web-backend/media"
+	"github.com/hec-ovi/censurado-web-backend/store"
 	"github.com/hec-ovi/censurado-web-backend/store/sqlite"
 )
 
@@ -234,6 +235,18 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		LoginTokenHash: *f.panelLoginHash,
 		LoginToken:     *f.panelLoginToken,
 		SecureCookies:  *f.panelSecure,
+		// The panel reads its own chrome strings from panel_text and its section labels
+		// from the shared frontend_text rows, both injected into the SPA shell.
+		PanelText: func(ctx context.Context, lang string) (map[string]string, error) {
+			return repo.Text(ctx, store.ScopePanel, lang)
+		},
+		SectionLabels: func(ctx context.Context, lang string) (map[string]string, error) {
+			front, err := repo.Text(ctx, store.ScopeFrontend, lang)
+			if err != nil {
+				return nil, err
+			}
+			return adminweb.SectionLabelsFromFrontend(front), nil
+		},
 	}, handler)
 
 	srv := newServer(*f.addr, handler)

@@ -7,13 +7,11 @@
   gap: 1rem;
 }
 
-.admin-lang-switch,
 .admin-theme-switch {
   display: flex;
   gap: 0.85rem;
 }
 
-.admin-lang-switch button,
 .admin-theme-switch button {
   min-height: 1.7rem;
   padding: 0;
@@ -28,8 +26,6 @@
   box-shadow: none;
 }
 
-.admin-lang-switch button:hover,
-.admin-lang-switch button[aria-pressed="true"],
 .admin-theme-switch button:hover,
 .admin-theme-switch button[aria-pressed="true"] {
   border-color: var(--admin-red);

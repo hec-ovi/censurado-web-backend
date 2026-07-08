@@ -1,6 +1,6 @@
 import { api as defaultApi } from "./api.js";
 import { el } from "./components/el.js";
-import { t, currentLocale, setLocale, LANGS, LANG_LABEL } from "./components/i18n.js";
+import { t, applyCatalog } from "./components/i18n.js";
 import { ArticlesPanel } from "./components/articlesPanel.js";
 import { PortadaPanel } from "./components/portadaPanel.js";
 import { PersonaList } from "./components/personaList.js";
@@ -169,36 +169,13 @@ export function mountApp(root, deps = {}) {
     tablist.append(button);
   });
 
-  // The language switch mirrors ThemeControl: two buttons (EN/ES), aria-pressed by
-  // the active locale. Switching persists the choice and RE-MOUNTS the whole app
-  // through mountApp(root, deps), so every string rebuilds in the new locale.
-  function LangControl() {
-    const activeLocale = currentLocale();
-    const buttons = LANGS.map((lang) =>
-      el(
-        "button",
-        {
-          type: "button",
-          dataset: { lang },
-          "aria-pressed": lang === activeLocale ? "true" : "false",
-          onClick: () => {
-            setLocale(lang);
-            mountApp(root, deps);
-          },
-        },
-        LANG_LABEL[lang],
-      ),
-    );
-    return el("div", { class: "admin-lang-switch", role: "group", "aria-label": t("Language") }, buttons);
-  }
-
   const sidebar = el("aside", { class: "app-sidebar", "aria-label": t("Primary") }, tablist);
 
   const topbar = el("header", { class: "app-topbar" }, [
     el("div", { class: "app-header-brand" }, [BrandWordmark("admin-wordmark admin-wordmark-shell")]),
     el("div", { class: "app-header-divider", "aria-hidden": "true" }),
     el("div", { class: "app-titleblock" }, [el("p", { class: "kicker" }, t("Control panel")), pageTitle]),
-    el("div", { class: "admin-controls" }, [LangControl(), ThemeControl()]),
+    el("div", { class: "admin-controls" }, [ThemeControl()]),
   ]);
 
   root.replaceChildren(
@@ -209,8 +186,8 @@ export function mountApp(root, deps = {}) {
     ]),
   );
 
-  // Keep the document chrome in step with the active locale.
-  document.documentElement.lang = currentLocale();
+  // The panel is English-only.
+  document.documentElement.lang = "en";
   document.title = t("Admin Panel");
 
   articles.reload();
@@ -227,5 +204,20 @@ export function mountApp(root, deps = {}) {
 // script), so the boot runs here rather than from an inline <script>. Guarded on
 // the #app element so importing mountApp in a test (where no #app exists at import
 // time) has no side effect.
+//
+// Install the server-injected string catalog BEFORE the first render: the server
+// writes panel_text strings + shared section labels into the #panel-i18n data block
+// (type="application/json", inert under the CSP). A missing or malformed block leaves
+// the catalog empty, so t() renders the English identity and the panel never blanks.
+if (typeof document !== "undefined") {
+  const block = document.getElementById("panel-i18n");
+  if (block && block.textContent) {
+    try {
+      applyCatalog(JSON.parse(block.textContent));
+    } catch {
+      /* leave the catalog empty; t() falls back to the English key. */
+    }
+  }
+}
 const root = typeof document !== "undefined" ? document.getElementById("app") : null;
 if (root) mountApp(root);

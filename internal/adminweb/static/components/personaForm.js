@@ -1,5 +1,5 @@
 import { el, clear, field, help, isSafeImageSrc } from "./el.js";
-import { t } from "./i18n.js";
+import { t, sectionLabelFor } from "./i18n.js";
 import { slugify } from "../slugify.js";
 
 // The site's canonical section vocabulary: the sections the public nav presents, so the
@@ -8,8 +8,11 @@ import { slugify } from "../slugify.js";
 // here. Beat is carried in the author's metadata (the author row has no beat column).
 export const SECTIONS = ["politics", "world", "misterio-y-conspiracion", "tech", "literatura"];
 
-// Gender options for the byline voice. Blank is allowed (unset).
+// Gender options for the byline voice. Blank is allowed (unset). The enum value is
+// behavior-bearing (posted to the server and asserted on), so it stays the option
+// value; only the display label is translated, keyed by GENDER_LABELS.
 export const GENDERS = ["female", "male", "nonbinary"];
+export const GENDER_LABELS = { female: "Female", male: "Male", nonbinary: "Nonbinary" };
 
 const LINK_HELP =
   "An author only researches the sources linked here. Cross-source corroboration across them is what " +
@@ -27,11 +30,11 @@ export function PersonaForm({ api, onCreated } = {}) {
   // rejected client-side (the invalid state) before any request goes out.
   const beatSelect = el("select", { id: "pf-beat" }, [
     el("option", { value: "" }, t("Select a beat")),
-    ...SECTIONS.map((s) => el("option", { value: s }, s)),
+    ...SECTIONS.map((s) => el("option", { value: s }, sectionLabelFor(s))),
   ]);
   const genderSelect = el("select", { id: "pf-gender" }, [
     el("option", { value: "" }, t("Unspecified")),
-    ...GENDERS.map((g) => el("option", { value: g }, t(g))),
+    ...GENDERS.map((g) => el("option", { value: g }, t(GENDER_LABELS[g]))),
   ]);
   const whoInput = el("textarea", { id: "pf-who", rows: "2" });
   const styleInput = el("textarea", { id: "pf-style", rows: "2" });

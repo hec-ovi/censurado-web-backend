@@ -1,5 +1,5 @@
 import { el, clear, help } from "./el.js";
-import { t } from "./i18n.js";
+import { t, sectionLabelFor } from "./i18n.js";
 import { slugify } from "../slugify.js";
 
 const TEMAS_HELP =
@@ -106,7 +106,7 @@ export function TemasPanel({ api } = {}) {
           : null,
       ]),
       el("div", { class: "topic-chips" }, [
-        ...[...facet.sections].slice(0, 4).map((section) => el("span", { class: "topic-chip" }, section)),
+        ...[...facet.sections].slice(0, 4).map((section) => el("span", { class: "topic-chip" }, sectionLabelFor(section))),
         ...[...facet.authors].slice(0, 4).map((author) => el("span", { class: "author-chip" }, author)),
       ]),
     ]);
@@ -149,7 +149,7 @@ export function TemasPanel({ api } = {}) {
 
     clear(sectionFilter);
     sectionFilter.append(el("option", { value: "" }, t("All sections")));
-    sections.forEach((section) => sectionFilter.append(el("option", { value: section }, section)));
+    sections.forEach((section) => sectionFilter.append(el("option", { value: section }, sectionLabelFor(section))));
     sectionFilter.value = sections.includes(currentSection) ? currentSection : "";
   }
 

@@ -1,6 +1,6 @@
 import { el, clear, help, isSafeImageSrc } from "./el.js";
 import { SearchIcon } from "./icons.js";
-import { t } from "./i18n.js";
+import { t, sectionLabelFor } from "./i18n.js";
 
 const PORTADA_HELP =
   "A portada is one day's front-page plan. Pick a day, then order its articles (the first row is the day's lead), " +
@@ -21,7 +21,7 @@ export function PortadaPanel({ api } = {}) {
   const prevDay = el("button", { type: "button", class: "secondary article-day-nav portada-day-nav", "aria-label": t("Back") }, "<");
   const nextDay = el("button", { type: "button", class: "secondary article-day-nav portada-day-nav", "aria-label": t("Next day") }, ">");
   const listEl = el("div", { class: "portada-list scroll-pane" });
-  const save = el("button", { type: "submit" }, t("Guardar portada"));
+  const save = el("button", { type: "submit" }, t("Save portada"));
   const status = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
 
   daySearch.addEventListener("input", () => {
@@ -328,7 +328,7 @@ export function PortadaPanel({ api } = {}) {
     setStatus(status, "pending", t("Saving..."));
     try {
       await api.upsertPortada({ date: selectedDate, entries });
-      setStatus(status, "done", t("Portada guardada."));
+      setStatus(status, "done", t("Portada saved."));
       await reload();
     } catch (err) {
       setStatus(status, "error", t("Could not save portada ({code}): {msg}", { code: err.code, msg: err.message }));
@@ -350,7 +350,7 @@ function miniPreview(article, isLead) {
   }, [
     hasImage ? el("figure", { class: "portada-preview-media" }, el("img", { src: image, alt: article.title || "" })) : null,
     el("div", { class: "portada-preview-body" }, [
-      el("span", { class: "portada-preview-section" }, article.section || ""),
+      el("span", { class: "portada-preview-section" }, sectionLabelFor(article.section)),
       el("h3", { class: "portada-title" }, el("span", { class: "portada-title-text" }, article.title || "")),
       metadata.subtitle ? el("p", { class: "portada-preview-subtitle" }, metadata.subtitle) : null,
     ]),

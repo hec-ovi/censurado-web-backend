@@ -16,12 +16,6 @@ if (!globalThis.__JSDOM_INSTALLED__) {
   globalThis.__JSDOM_INSTALLED__ = true;
 }
 
-// Pin the UI locale to English for every test. The served product defaults to
-// Spanish (i18n.js DEFAULT = "es"), but t() is identity under "en", so every
-// existing English assertion holds byte-for-byte. Set it unconditionally on each
-// import so a test file that ran a switch cannot leak "es" into the next file.
-try {
-  globalThis.localStorage.setItem("admin-lang", "en");
-} catch {
-  /* localStorage can be unavailable in hardened environments. */
-}
+// The panel is single-language English: t() returns the English key unless a test
+// installs a catalog via applyCatalog(), so every English assertion holds with no
+// locale to pin. (A component test never injects a catalog, so it sees pure English.)

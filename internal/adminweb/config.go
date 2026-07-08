@@ -1,6 +1,7 @@
 package adminweb
 
 import (
+	"context"
 	"time"
 
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
@@ -32,6 +33,14 @@ type Config struct {
 	SessionTTL time.Duration
 	// Now is an injectable clock for tests; nil means time.Now.
 	Now func() time.Time
+	// PanelText returns the panel_text catalog for a language as a key->value map,
+	// which the server injects into the SPA shell so t() renders from the DB. Nil (or
+	// an error) leaves the panel on its compiled English identity fallback.
+	PanelText func(ctx context.Context, lang string) (map[string]string, error)
+	// SectionLabels returns the shared section labels (slug->label) the panel shows in
+	// its section pickers, read from frontend_text via SectionLabelsFromFrontend. Nil
+	// (or an error) falls the panel back to raw slugs.
+	SectionLabels func(ctx context.Context, lang string) (map[string]string, error)
 }
 
 // Enabled reports whether the panel is configured. Both the signing key and the

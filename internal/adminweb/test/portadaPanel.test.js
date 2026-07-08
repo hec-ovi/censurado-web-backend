@@ -133,7 +133,7 @@ test("reordering and a role change post the new plan without per-day recomendado
   // Mark Charlie important. Global recomendado is managed in its own panel now.
   await user.selectOptions(screen.getByLabelText("Role for Charlie"), "important");
 
-  await user.click(screen.getByRole("button", { name: "Guardar portada" }));
+  await user.click(screen.getByRole("button", { name: "Save portada" }));
 
   await waitFor(() => assert.ok(posted, "the save issued a POST"));
   assert.equal(posted.date, "2026-06-30");
@@ -143,7 +143,7 @@ test("reordering and a role change post the new plan without per-day recomendado
     { slug: "c", role: "important" },
   ]);
   assert.equal(Object.hasOwn(posted, "recomendado"), false);
-  await screen.findByText("Portada guardada.");
+  await screen.findByText("Portada saved.");
 });
 
 test("prefills the selected day's order and roles from an existing plan", async () => {
@@ -209,14 +209,14 @@ test("dragging a card onto another card's full-row zone reorders it and marks it
   assert.deepEqual(rows().map((r) => r.dataset.slug), ["c", "a", "b"]);
   assert.equal(rowFor("c").dataset.role, "important");
 
-  await user.click(screen.getByRole("button", { name: "Guardar portada" }));
+  await user.click(screen.getByRole("button", { name: "Save portada" }));
   await waitFor(() => assert.ok(posted, "the save issued a POST"));
   assert.deepEqual(posted.entries, [
     { slug: "c", role: "important" },
     { slug: "a", role: "" },
     { slug: "b", role: "" },
   ]);
-  await screen.findByText("Portada guardada.");
+  await screen.findByText("Portada saved.");
 });
 
 test("dropping a card on another card's right zone reorders it as a half-width card", async () => {
@@ -244,7 +244,7 @@ test("dropping a card on another card's right zone reorders it as a half-width c
   assert.deepEqual(rows().map((r) => r.dataset.slug), ["b", "c", "a"]);
   assert.equal(rowFor("a").dataset.role, "");
 
-  await user.click(screen.getByRole("button", { name: "Guardar portada" }));
+  await user.click(screen.getByRole("button", { name: "Save portada" }));
   await waitFor(() => assert.ok(posted, "the save issued a POST"));
   assert.deepEqual(posted.entries, [
     { slug: "b", role: "" },

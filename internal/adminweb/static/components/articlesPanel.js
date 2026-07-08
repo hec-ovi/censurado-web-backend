@@ -1,6 +1,6 @@
 import { el, clear, field, isSafeImageSrc } from "./el.js";
 import { SearchIcon, TrashIcon } from "./icons.js";
-import { t } from "./i18n.js";
+import { t, sectionLabelFor } from "./i18n.js";
 
 const MEDIA_FILTERS = ["text", "image", "youtube"];
 
@@ -601,7 +601,7 @@ export function ArticlesPanel({ api } = {}) {
     const title = el("input", { type: "text", id: `ae-${slug}-title`, value: full.title || "" });
     const subtitle = el("input", { type: "text", id: `ae-${slug}-subtitle`, value: (full.metadata && full.metadata.subtitle) || "" });
     const sectionValues = sectionChoices(full.section);
-    const section = el("select", { id: `ae-${slug}-section` }, sectionValues.map((s) => el("option", { value: s }, s)));
+    const section = el("select", { id: `ae-${slug}-section` }, sectionValues.map((s) => el("option", { value: s }, sectionLabelFor(s))));
     section.value = full.section || sectionValues[0] || "";
     const body = el("textarea", { id: `ae-${slug}-body`, class: "article-body-editor" }, full.body || "");
     let initialSnapshot;

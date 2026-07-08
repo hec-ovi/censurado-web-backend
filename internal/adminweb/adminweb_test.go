@@ -210,9 +210,7 @@ func TestLoginSetsSessionThenServesSPA(t *testing.T) {
 	if !strings.Contains(page.Body.String(), `id="app"`) {
 		t.Fatalf("SPA shell not served:\n%s", page.Body.String())
 	}
-	if csp := page.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
-		t.Fatalf("missing same-origin CSP on the shell: %q", csp)
-	}
+	assertStrictCSP(t, page.Header().Get("Content-Security-Policy"))
 }
 
 func TestLoginRejectsWrongToken(t *testing.T) {

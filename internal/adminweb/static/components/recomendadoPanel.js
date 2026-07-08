@@ -1,6 +1,6 @@
 import { el, clear } from "./el.js";
 import { SearchIcon, TrashIcon } from "./icons.js";
-import { t } from "./i18n.js";
+import { t, sectionLabelFor } from "./i18n.js";
 
 const RECOMMENDED_LIMIT = 10;
 
@@ -168,7 +168,7 @@ export function RecomendadoPanel({ api } = {}) {
       el("div", { class: "recommended-index" }, active && index != null ? String(index + 1) : "+"),
       el("div", { class: "recomendado-copy" }, [
         el("div", { class: "recomendado-meta" }, [
-          article.section ? el("span", { class: "portada-preview-section" }, sectionLabel(article.section)) : null,
+          article.section ? el("span", { class: "portada-preview-section" }, sectionLabelFor(article.section)) : null,
           article.published_at ? el("span", {}, articleDate(article)) : null,
           article.card_type ? el("span", {}, article.card_type) : null,
         ]),
@@ -241,15 +241,6 @@ function articleDate(article) {
 
 function unique(values) {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
-}
-
-function sectionLabel(slug) {
-  if (slug === "politics") return "Política";
-  if (slug === "world") return "Mundo";
-  if (slug === "misterio-y-conspiracion") return "Misterio y conspiración";
-  if (slug === "tech") return "Tecnología";
-  if (slug === "literatura") return "Literatura";
-  return slug || "";
 }
 
 function setStatus(node, state, text) {

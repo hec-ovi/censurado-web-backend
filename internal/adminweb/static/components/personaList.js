@@ -1,6 +1,6 @@
 import { el, clear, field, help, isSafeImageSrc } from "./el.js";
-import { t } from "./i18n.js";
-import { SECTIONS, GENDERS, sourceCheckboxList, sourceLeanLabel } from "./personaForm.js";
+import { t, sectionLabelFor } from "./i18n.js";
+import { SECTIONS, GENDERS, GENDER_LABELS, sourceCheckboxList, sourceLeanLabel } from "./personaForm.js";
 
 // The author roster: a GET /authors table with an avatar (or initial fallback),
 // beat badge, and who-i-am line. Clicking a row opens the fullscreen modal editor.
@@ -61,7 +61,7 @@ export function PersonaList({ api, onChanged } = {}) {
     const tableRow = el("tr", { class: "persona-row article-row", tabindex: "0", dataset: { id: author.handle, section: meta.beat || "", parity: index % 2 === 0 ? "even" : "odd" } }, [
       el("td", { class: "persona-avatar-cell" }, avatar(author)),
       el("td", { class: "persona-name-cell" }, el("strong", {}, author.name)),
-      el("td", { class: "persona-beat-cell" }, el("span", { class: "badge" }, meta.beat || t("(unset)"))),
+      el("td", { class: "persona-beat-cell" }, el("span", { class: "badge" }, meta.beat ? sectionLabelFor(meta.beat) : t("(unset)"))),
       el("td", { class: "persona-who-cell" }, el("span", {}, meta.who_i_am || "")),
     ]);
     tableRow.setAttribute("aria-expanded", "false");
@@ -123,11 +123,11 @@ export function PersonaList({ api, onChanged } = {}) {
     // it is a legacy/off-list value (a removed or renamed section), so editing another
     // field never silently rewrites the beat to the first option.
     const beatOptions = meta.beat && !SECTIONS.includes(meta.beat) ? [meta.beat, ...SECTIONS] : SECTIONS;
-    const beat = el("select", { id: `pe-${handle}-beat` }, beatOptions.map((s) => el("option", { value: s }, s)));
+    const beat = el("select", { id: `pe-${handle}-beat` }, beatOptions.map((s) => el("option", { value: s }, sectionLabelFor(s))));
     beat.value = meta.beat || SECTIONS[0];
     const gender = el("select", { id: `pe-${handle}-gender` }, [
       el("option", { value: "" }, t("Unspecified")),
-      ...GENDERS.map((g) => el("option", { value: g }, t(g))),
+      ...GENDERS.map((g) => el("option", { value: g }, t(GENDER_LABELS[g]))),
     ]);
     gender.value = author.gender || "";
     const language = el("input", { type: "text", id: `pe-${handle}-language`, value: meta.language || "" });

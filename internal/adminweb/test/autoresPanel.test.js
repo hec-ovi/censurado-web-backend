@@ -1,5 +1,5 @@
 import "./setup.js";
-import { test } from "node:test";
+import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { http, HttpResponse } from "msw";
 import { screen, within, waitFor } from "@testing-library/dom";
@@ -8,10 +8,14 @@ import { installServer, ORIGIN } from "./msw.js";
 import { installDom } from "./dom.js";
 import { PersonaList } from "../static/components/personaList.js";
 import { PersonaForm } from "../static/components/personaForm.js";
+import { applyCatalog } from "../static/components/i18n.js";
 import { api } from "../static/api.js";
 
 installDom();
 const server = installServer();
+
+// The section catalog is shared module state; reset it after any test that injects one.
+afterEach(() => applyCatalog({}));
 
 // Mount the form + list wired together exactly as the app does (the create form
 // reloads the roster on success), so the test exercises the real Autores surface
@@ -28,7 +32,10 @@ function sourcesHandler(sources = []) {
   return http.get(`${ORIGIN}/sources`, () => HttpResponse.json({ sources }));
 }
 
-test("lists authors from the backend /authors (beat lives in metadata)", async () => {
+test("lists authors from the backend /authors, with the beat badge showing the shared section label", async () => {
+  // With the shared section catalog injected, the roster beat badge renders the label
+  // (the same source of record the beat pickers use), not the raw slug.
+  applyCatalog({ sections: { tech: "Technology" } });
   server.use(
     sourcesHandler(),
     http.get(`${ORIGIN}/authors`, () =>
@@ -44,7 +51,10 @@ test("lists authors from the backend /authors (beat lives in metadata)", async (
   const heading = await screen.findByText("Ada Lovelace");
   const row = heading.closest(".persona-row");
   assert.ok(row);
-  assert.ok(within(row).getByText("tech"));
+  // The badge shows the injected label, not the raw slug (which the dataset keeps).
+  assert.ok(within(row).getByText("Technology"), "beat badge shows the section label");
+  assert.equal(within(row).queryByText("tech"), null, "beat badge does not show the raw slug");
+  assert.equal(row.dataset.section, "tech", "the behavior-bearing slug stays on the dataset");
   assert.ok(within(row).getByText("Computing pioneer"));
   assert.equal(within(row).queryByRole("button", { name: /^edit$/i }), null);
 });
@@ -272,4 +282,47 @@ test("single author edit saves checked source slugs via the fullscreen editor", 
   await waitFor(() => assert.ok(putBody, "a PUT should have been sent"));
   assert.deepEqual(putBody.sources, ["example-com"]);
   await within(dialog).findByText(/saved/i);
+});
+
+test("the gender select shows English labels while each option value stays the enum", async () => {
+  server.use(sourcesHandler(), http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })));
+  const { list } = mount();
+  await list.reload();
+
+  const gender = screen.getByLabelText(/^gender$/i);
+  const options = [...gender.querySelectorAll("option")];
+  // The behavior-bearing enum stays the option value (posted to the server); only the
+  // visible label is the English word, no longer the raw lowercase enum.
+  assert.deepEqual(options.map((o) => o.value), ["", "female", "male", "nonbinary"]);
+  assert.deepEqual(options.map((o) => o.textContent), ["Unspecified", "Female", "Male", "Nonbinary"]);
+});
+
+test("a display name with no letters or digits is rejected with no POST", async () => {
+  let posted = false;
+  server.use(
+    sourcesHandler(),
+    http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
+    http.post(`${ORIGIN}/authors`, () => {
+      posted = true;
+      return HttpResponse.json({ handle: "x" });
+    }),
+  );
+  const user = userEvent.setup();
+  const { list } = mount();
+  await list.reload();
+
+  // Every required field is filled (so submit enables), but the display name has no
+  // alphanumerics, so its derived handle is empty and the client rejects it.
+  await user.type(screen.getByLabelText(/display name/i), "!!!");
+  await user.selectOptions(screen.getByLabelText(/^gender$/i), "female");
+  await user.selectOptions(screen.getByLabelText(/^beat$/i), "world");
+  await user.type(screen.getByLabelText(/^language$/i), "es");
+  await user.type(screen.getByLabelText(/avatar path/i), "/media/x.png");
+  await user.type(screen.getByLabelText(/who i am/i), "someone");
+  await user.type(screen.getByLabelText(/^style$/i), "a style");
+  await user.type(screen.getByLabelText(/^about$/i), "about");
+  await user.click(screen.getByRole("button", { name: /create author/i }));
+
+  await screen.findByText("Display name must contain letters or digits.");
+  assert.equal(posted, false, "no POST for a name that slugifies to empty");
 });
