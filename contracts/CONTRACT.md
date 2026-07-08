@@ -84,6 +84,15 @@ whole set is frozen so an internal store change cannot silently break Layer 1's 
   the source AND detaches it from every author (removes its `author_sources` rows) in one transaction.
 - `SubmissionLog`: FindSubmission, RecordSubmission, ListSubmissions (audit/idempotency, not read by
   the generator).
+- `TextStore` (the UI-string catalog): Text, ListText, UpsertText, DeleteText. It backs the
+  `frontend_text` (reader-facing site strings) and `panel_text` (operator panel strings) tables as
+  `(key, lang, value)` rows, so the product is translated by adding rows, not by editing code. The
+  generator reads `Text(ctx, store.ScopeFrontend, lang)` once per build to render a language from the
+  DB instead of hardcoded literals, so the method set is frozen like the other store interfaces.
+  `Text()` returns a plain `key->value` map, so it adds NO new frozen overlay shape;
+  `ListText`/`UpsertText`/`DeleteText` back the panel and the one-time translate CLI over Seam B. `en`
+  is the base language every key is authored in; other languages are translation rows the panel or the
+  translate CLI fills in.
 
 `store.Filter` public axes (frozen): the scalar hot axes `Section`, `Author`, `Topic` plus
 `From`, `To`, `Order`, `Limit`, `Offset`, `IncludeDeleted` are the **public generator surface** and
@@ -96,6 +105,10 @@ Overlay types the generator reads:
   voice/writing prompt (a plain field the public site never renders); `Topics` is the author's curated
   profile beats; `Sources` is the attached-source slug set, hydrated from the join.
 - `store.Topic`, `store.PortadaDay` (Date, Entries, Recomendado, ...), `store.PortadaEntry` (Slug, Role).
+- `store.TextEntry` (Key, Lang, Value, Metadata, Deleted, CreatedAt, UpdatedAt), with `store.TextScope`
+  (`ScopeFrontend` | `ScopePanel`) selecting the catalog. It is the row shape `ListText` returns and
+  the panel/CLI consume over Seam B; the generator reads the `Text()` `key->value` map, not this
+  struct, so `TextEntry` is intentionally NOT in the Seam A overlay-shape freeze.
 - `store.Source` (ID, Slug, Domain, Homepage, Description, FeedURLs, FeedType, Language,
   OwnershipGroup, Lean, Enabled, Status, LastChecked, LastOK, Metadata, Deleted, CreatedAt, UpdatedAt).
   `Slug` is the stable key (the domain slugified); `Domain` is unique; `Lean` is `right|neutral|left`;
@@ -166,6 +179,8 @@ in `/articles:batch` is a literal path byte, no collision.
 | GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
 | GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
 | GET | `/sources` | `{sources:[{slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
+| GET | `/frontend-text` | `{scope, lang, entries:[{key,lang,value,metadata,deleted,created_at,updated_at}]}`. The reader-facing site string catalog for `?lang` (default `en`); `?include_deleted=true`. |
+| GET | `/panel-text` | Same shape for the operator admin panel string catalog. |
 | GET | `/articles` | `{articles:[{slug,title,section,author,published_at,topics,metadata,has_media,card_type,deleted,content_hash}], total}` (body omitted from list items). `card_type` is the card label (text/image/youtube/video). Query -> Filter: section, author, topic, q, title_subtitle_q, from, to, limit, offset, order, include_deleted. 400 invalid_query. |
 | GET | `/articles:days` | `{days:[{date,count}]}` with distinct UTC publication dates matching the same read filters used by `/articles`, including author/topic/q/title_subtitle_q and order. The admin UI uses it as a lightweight date index. |
 | GET | `/articles/{slug}` | Full article incl. `body`. A soft-deleted article is still returned with `deleted=true`. 404 not_found. |
@@ -191,6 +206,8 @@ edit/delete.
 | POST | `/sources` | `{domain*, slug?, homepage, description, feed_urls?, feed_type, language, ownership_group, lean, enabled?, status, last_checked, last_ok, metadata}` (upsert). `slug` defaults to the slugified domain; `lean`/`feed_type` are validated. | 200 (400 on missing domain or invalid lean/feed_type) |
 | DELETE | `/sources/{slug}` | (also detaches the source from every author) | 204 (404 on absent slug) |
 | POST | `/sources/{slug}/restore` | (author links are NOT re-attached) | 200 (404 on absent) |
+| POST | `/frontend-text` | `{key*, lang?, value, metadata?}` (upsert one reader-facing UI string; `lang` defaults to `en`) | 200 (400 on missing key) |
+| POST | `/panel-text` | `{key*, lang?, value, metadata?}` (upsert one operator-panel UI string) | 200 (400 on missing key) |
 | PUT | `/articles/{slug}` | `{title,body,author,section,topics?,metadata?}`; `id/slug/created_at` preserved | 200 (404 not_found, 409 edit_conflict on content-hash collision) |
 | DELETE | `/articles/{slug}` | | 204 |
 | POST | `/articles/{slug}/restore` | | 204 |

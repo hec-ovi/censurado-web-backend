@@ -31,6 +31,8 @@ func TestContract_StoreInterfaces(t *testing.T) {
 			[]string{"DeletePortada", "ListPortadas", "PortadaByDate", "UpsertPortada"}},
 		{"SourceStore", reflect.TypeOf((*store.SourceStore)(nil)).Elem(),
 			[]string{"DeleteSource", "ListSources", "SourceBySlug", "UpsertSource"}},
+		{"TextStore", reflect.TypeOf((*store.TextStore)(nil)).Elem(),
+			[]string{"DeleteText", "ListText", "Text", "UpsertText"}},
 	}
 	for _, c := range cases {
 		got := methodSet(c.typ)

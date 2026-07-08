@@ -22,8 +22,8 @@ import "net/http"
 //
 // When readH is non-nil, the authenticated JSON read API is mounted: GET /authors,
 // GET /authors/{handle}/sources, GET /topics, GET /portadas, GET /sources, GET
-// /articles:days, GET /articles:facets, GET /articles, and GET /articles/{slug}.
-// These are method-specific
+// /frontend-text, GET /panel-text, GET /articles:days, GET /articles:facets, GET
+// /articles, and GET /articles/{slug}. These are method-specific
 // patterns, so GET /articles takes precedence over the method-less /articles write
 // route for GET while POST still reaches the write handler; reads are not rate
 // limited (idempotent, cacheable). A nil readH leaves the read API off, so the write
@@ -31,7 +31,8 @@ import "net/http"
 //
 // When opH is non-nil, the operator mutation lane is mounted behind ScopeAdminWrite:
 // POST/DELETE/restore for /authors, /topics, /portadas, and /sources, PUT
-// /authors/{handle}/sources (replace an author's attached-source set), and PUT
+// /authors/{handle}/sources (replace an author's attached-source set), POST
+// /frontend-text and POST /panel-text (upsert one UI string), and PUT
 // /articles/{slug}, DELETE /articles/{slug}, POST /articles/{slug}/restore. These are
 // method-specific patterns that coexist with the method-less /articles write route
 // (PUT/DELETE reach the operator handler, POST still reaches the append-only write
@@ -62,6 +63,8 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 		mux.HandleFunc("GET /portadas", readH.ServePortadas)
 		mux.HandleFunc("GET /recomendado", readH.ServeRecomendado)
 		mux.HandleFunc("GET /sources", readH.ServeSources)
+		mux.HandleFunc("GET /frontend-text", readH.ServeFrontendText)
+		mux.HandleFunc("GET /panel-text", readH.ServePanelText)
 		mux.HandleFunc("GET /articles:days", readH.ServeArticleDays)
 		mux.HandleFunc("GET /articles:facets", readH.ServeFacets)
 		mux.HandleFunc("GET /articles", readH.ServeArticles)
@@ -83,6 +86,8 @@ func NewServerHandler(h *Handler, limiter *RateLimiter, mediaH *MediaHandler, re
 		mux.HandleFunc("POST /sources", opH.ServeUpsertSource)
 		mux.HandleFunc("DELETE /sources/{slug}", opH.ServeDeleteSource)
 		mux.HandleFunc("POST /sources/{slug}/restore", opH.ServeRestoreSource)
+		mux.HandleFunc("POST /frontend-text", opH.ServeUpsertFrontendText)
+		mux.HandleFunc("POST /panel-text", opH.ServeUpsertPanelText)
 		mux.HandleFunc("PUT /articles/{slug}", opH.ServeUpdateArticle)
 		mux.HandleFunc("DELETE /articles/{slug}", opH.ServeDeleteArticle)
 		mux.HandleFunc("POST /articles/{slug}/restore", opH.ServeRestoreArticle)

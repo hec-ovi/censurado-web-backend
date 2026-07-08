@@ -10,8 +10,8 @@ import (
 )
 
 // ReadStore is the read surface the JSON read API needs: the article Repository
-// plus the operator-owned author, topic, portada, and source registries. The
-// SQLite store satisfies it, so the same concrete store backs the write path and
+// plus the operator-owned author, topic, portada, source, and UI-text registries.
+// The SQLite store satisfies it, so the same concrete store backs the write path and
 // these reads.
 type ReadStore interface {
 	store.Repository
@@ -21,6 +21,7 @@ type ReadStore interface {
 	store.PortadaStore
 	store.RecomendadoStore
 	store.SourceStore
+	store.TextStore
 }
 
 // ReadHandler serves the authenticated JSON read API: GET /authors, /topics,

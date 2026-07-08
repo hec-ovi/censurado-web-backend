@@ -158,3 +158,41 @@ CREATE TABLE IF NOT EXISTS recomendado (
   slugs      TEXT NOT NULL DEFAULT '[]',
   updated_at TEXT NOT NULL DEFAULT ''
 ) STRICT;
+
+-- frontend_text and panel_text are the UI-string catalogs: every human-facing label
+-- the public site (frontend_text) and the operator admin panel (panel_text) render,
+-- stored as (key, lang) pairs so the product is translated by adding rows, not by
+-- editing code. key is the stable lookup id (e.g. 'nav.about'); lang is the language
+-- code ('en' is the base every key is authored in, 'es'/others are translations a
+-- one-time CLI or the panel fills in); value is the rendered string. The two are the
+-- same shape but separate tables so the reader-facing site and the operator panel
+-- version independently. They mirror the registry conventions: (key, lang) is the
+-- natural unique key, deleted_at is the tombstone ('' = active), metadata is the JSON
+-- tail, and the timestamps are whole-second RFC3339 TEXT like the other registries.
+CREATE TABLE IF NOT EXISTS frontend_text (
+  id         INTEGER PRIMARY KEY,
+  key        TEXT NOT NULL,
+  lang       TEXT NOT NULL DEFAULT 'en',
+  value      TEXT NOT NULL DEFAULT '',
+  metadata   TEXT NOT NULL DEFAULT '{}',
+  deleted_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (key, lang)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_frontend_text_lang ON frontend_text (lang, key);
+
+CREATE TABLE IF NOT EXISTS panel_text (
+  id         INTEGER PRIMARY KEY,
+  key        TEXT NOT NULL,
+  lang       TEXT NOT NULL DEFAULT 'en',
+  value      TEXT NOT NULL DEFAULT '',
+  metadata   TEXT NOT NULL DEFAULT '{}',
+  deleted_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (key, lang)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_panel_text_lang ON panel_text (lang, key);
