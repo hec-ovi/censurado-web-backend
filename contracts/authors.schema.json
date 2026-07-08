@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://censurado.local/contracts/authors.schema.json",
+  "title": "UpsertAuthorInput",
+  "description": "The payload the brain/CLI or admin panel submits to POST /authors (scope admin:write) to create or update a managed author, keyed on handle (upsert). This file is the single cross-layer contract for the author write shape; it mirrors the Go authorInput. Server-owned/read-only fields (deleted, created_at, updated_at) are computed server-side and are not accepted here. sources is optional and TRISTATE: omit it to leave the attached-source join untouched, or send an array (possibly empty) to replace the set.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["handle"],
+  "properties": {
+    "handle": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "The stable author id/slug; the upsert key. The only required field."
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Display name / byline. Optional; defaults to empty server-side."
+    },
+    "bio": {
+      "type": "string",
+      "description": "Short bio shown on cards. Optional."
+    },
+    "avatar": {
+      "type": "string",
+      "description": "Avatar/photo media URL (e.g. a /media path). Optional."
+    },
+    "gender": {
+      "type": "string",
+      "description": "Optional grammatical-gender hint used for voice consistency."
+    },
+    "about": {
+      "type": "string",
+      "description": "Long public about-page text (newlines preserved as paragraphs). Optional."
+    },
+    "style": {
+      "type": "string",
+      "description": "Private voice/writing prompt. Served to the panel but NEVER rendered publicly. Optional."
+    },
+    "topics": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Curated public-profile beats/topics. Optional; replaces the set when present."
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Attached source-outlet slugs. Optional and tristate: omit to leave the join untouched; an array (even empty) replaces the attached-source set."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free-form JSON sidecar. Optional."
+    }
+  }
+}

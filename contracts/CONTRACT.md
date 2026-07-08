@@ -20,6 +20,8 @@ Guardrails:
   with its consumer).
 - Seam B route table + read shapes: `internal/publish/contract_conformance_test.go`.
 - Publish input shape: `contracts/article.schema.json` (+ batch request/response schemas).
+- Author write shape: `contracts/authors.schema.json` (POST /authors upsert body; guarded by
+  `internal/publish/authors_contract_test.go`, which mirrors it against the Go `authorInput`).
 
 ## How to change the contract (deliberately)
 
