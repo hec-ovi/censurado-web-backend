@@ -9,8 +9,9 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/store"
 )
 
-// textCols is the column list shared by the frontend_text and panel_text catalogs,
-// which are identical in shape (see schema.sql); the scope selects which table.
+// textCols is the column list shared by the frontend_text, panel_text, and
+// editorial_text catalogs, which are identical in shape (see schema.sql); the scope
+// selects which table.
 const textCols = "key,lang,value,metadata,deleted_at,created_at,updated_at"
 
 // textTable maps a scope to its physical table name. It is the ONLY place a scope
@@ -21,6 +22,8 @@ func textTable(scope store.TextScope) (string, error) {
 		return "frontend_text", nil
 	case store.ScopePanel:
 		return "panel_text", nil
+	case store.ScopeEditorial:
+		return "editorial_text", nil
 	default:
 		return "", fmt.Errorf("store: unknown text scope %q", scope)
 	}

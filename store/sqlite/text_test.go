@@ -142,6 +142,25 @@ func TestTextStore(t *testing.T) {
 		}
 	})
 
+	t.Run("editorial is a third isolated scope", func(t *testing.T) {
+		if _, err := s.UpsertText(ctx, store.ScopeEditorial, store.TextEntry{Key: "lexicon.bans", Lang: "es", Value: `["demoledor"]`}); err != nil {
+			t.Fatalf("upsert editorial: %v", err)
+		}
+		ed, _ := s.Text(ctx, store.ScopeEditorial, "es")
+		if ed["lexicon.bans"] != `["demoledor"]` {
+			t.Errorf("editorial[lexicon.bans] = %q, want the JSON list", ed["lexicon.bans"])
+		}
+		// The editorial key is invisible to the two UI scopes.
+		front, _ := s.Text(ctx, store.ScopeFrontend, "es")
+		if _, ok := front["lexicon.bans"]; ok {
+			t.Error("editorial key leaked into frontend scope")
+		}
+		panel, _ := s.Text(ctx, store.ScopePanel, "es")
+		if _, ok := panel["lexicon.bans"]; ok {
+			t.Error("editorial key leaked into panel scope")
+		}
+	})
+
 	t.Run("DeleteText on an absent entry is ErrNotFound", func(t *testing.T) {
 		if err := s.DeleteText(ctx, store.ScopeFrontend, "does.not.exist", "en"); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("delete absent = %v, want ErrNotFound", err)

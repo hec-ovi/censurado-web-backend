@@ -82,6 +82,43 @@ func TestUIText_ReadWriteScopesAndAuth(t *testing.T) {
 		}
 	})
 
+	t.Run("editorial-text is a separate Spanish-authored catalog", func(t *testing.T) {
+		if rec := doReq(t, srv, http.MethodPost, op, "/editorial-text", `{"key":"attribution.example","lang":"es","value":"según X"}`); rec.Code != http.StatusOK {
+			t.Fatalf("POST editorial status = %d", rec.Code)
+		}
+		// The default (en) read is empty: editorial has no English base.
+		var en textResp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/editorial-text", ""), &en)
+		if en.Lang != "en" || len(en.Entries) != 0 {
+			t.Errorf("editorial en catalog = %+v, want empty (no base row)", en.Entries)
+		}
+		// The es read carries the anchor, and it does not leak into the UI catalogs.
+		var es textResp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/editorial-text?lang=es", ""), &es)
+		if es.Lang != "es" || len(es.Entries) != 1 || es.Entries[0].Key != "attribution.example" || es.Entries[0].Value != "según X" {
+			t.Errorf("editorial es catalog = %+v", es.Entries)
+		}
+		var front textResp
+		decodeBody(t, doReq(t, srv, http.MethodGet, op, "/frontend-text?lang=es", ""), &front)
+		for _, e := range front.Entries {
+			if e.Key == "attribution.example" {
+				t.Error("editorial key leaked into frontend-text GET")
+			}
+		}
+	})
+
+	t.Run("editorial POST needs admin:write; GET needs only a valid token", func(t *testing.T) {
+		if rec := doReq(t, srv, http.MethodPost, ada, "/editorial-text", `{"key":"x","value":"y"}`); rec.Code != http.StatusForbidden {
+			t.Errorf("agent-key editorial POST status = %d, want 403", rec.Code)
+		}
+		if rec := doReq(t, srv, http.MethodGet, "", "/editorial-text", ""); rec.Code != http.StatusUnauthorized {
+			t.Errorf("no-token editorial GET status = %d, want 401", rec.Code)
+		}
+		if rec := doReq(t, srv, http.MethodGet, ada, "/editorial-text", ""); rec.Code != http.StatusOK {
+			t.Errorf("agent-key editorial GET status = %d, want 200", rec.Code)
+		}
+	})
+
 	t.Run("POST without a key is a 400", func(t *testing.T) {
 		if rec := doReq(t, srv, http.MethodPost, op, "/frontend-text", `{"value":"x"}`); rec.Code != http.StatusBadRequest {
 			t.Errorf("keyless POST status = %d, want 400", rec.Code)

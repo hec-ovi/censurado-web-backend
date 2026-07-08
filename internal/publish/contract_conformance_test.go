@@ -102,6 +102,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{"/sources", []string{`"sources"`}},
 		{"/frontend-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/panel-text", []string{`"scope"`, `"lang"`, `"entries"`}},
+		{"/editorial-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/articles", []string{`"articles"`, `"total"`}},
 	}
 	for _, r := range reads {
@@ -154,6 +155,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 
 		{http.MethodPost, "/frontend-text", `{"key":"nav.about","value":"About"}`, http.StatusOK},
 		{http.MethodPost, "/panel-text", `{"key":"nav.articles","value":"Articles"}`, http.StatusOK},
+		{http.MethodPost, "/editorial-text", `{"key":"attribution.example","lang":"es","value":"según X"}`, http.StatusOK},
 
 		{http.MethodPut, "/articles/" + slug, `{"title":"Edited","body":"# H\n\nedited body here","author":"ada","section":"tech"}`, http.StatusOK},
 		{http.MethodDelete, "/articles/" + slug, "", http.StatusNoContent},

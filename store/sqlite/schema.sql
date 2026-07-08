@@ -196,3 +196,24 @@ CREATE TABLE IF NOT EXISTS panel_text (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_panel_text_lang ON panel_text (lang, key);
+
+-- editorial_text is the newsroom's per-language editorial config: the language-specific
+-- writing anchors the workflow prompts apply (lexicon bans/swaps, orthography, slop
+-- phrases, attribution and disclaimer exemplars) and the Telegram bot response directive,
+-- stored as (key, lang) rows like the two UI catalogs so it versions independently and the
+-- panel/CLI edit it the same way. It differs in one respect: there is NO 'en' base row.
+-- Each row is authored in its own language (Spanish slop words are not the English ones),
+-- so today it carries only 'es'; a new language is generated per language, not translated.
+CREATE TABLE IF NOT EXISTS editorial_text (
+  id         INTEGER PRIMARY KEY,
+  key        TEXT NOT NULL,
+  lang       TEXT NOT NULL DEFAULT 'en',
+  value      TEXT NOT NULL DEFAULT '',
+  metadata   TEXT NOT NULL DEFAULT '{}',
+  deleted_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (key, lang)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_editorial_text_lang ON editorial_text (lang, key);

@@ -5,11 +5,13 @@ import (
 	"time"
 )
 
-// TextScope selects which UI-string catalog a text operation targets: the
-// reader-facing site strings (frontend_text) or the operator-facing admin panel
-// strings (panel_text). The two are separate tables of identical shape that version
-// independently, so the site can carry several languages while the panel stays single
-// language.
+// TextScope selects which per-language text catalog a text operation targets: the
+// reader-facing site strings (frontend_text), the operator-facing admin panel strings
+// (panel_text), or the newsroom's per-language editorial config (editorial_text). The
+// three are separate tables of identical shape that version independently, so the site
+// can carry several languages, the panel stays single language, and the editorial
+// anchors (the language-specific lexicon, orthography, slop phrases, attribution and
+// disclaimer exemplars, and the Telegram bot directive) are authored per language.
 type TextScope string
 
 const (
@@ -17,6 +19,13 @@ const (
 	ScopeFrontend TextScope = "frontend"
 	// ScopePanel is the operator-facing admin panel string catalog (panel_text).
 	ScopePanel TextScope = "panel"
+	// ScopeEditorial is the newsroom's per-language editorial config (editorial_text):
+	// the language-specific writing anchors the workflow prompts apply (lexicon bans and
+	// swaps, orthography, slop phrases, attribution and disclaimer exemplars) plus the
+	// Telegram bot's response directive. Unlike the two UI catalogs it has no English
+	// base row: each row is authored in its own language (Spanish slop words are not the
+	// English ones), so a new language is generated, not translated.
+	ScopeEditorial TextScope = "editorial"
 )
 
 // TextEntry is one UI string: a (Key, Lang) pair and its Value. Key is the stable

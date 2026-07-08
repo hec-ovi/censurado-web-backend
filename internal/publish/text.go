@@ -72,6 +72,14 @@ func (rh *ReadHandler) ServePanelText(w http.ResponseWriter, r *http.Request) {
 	rh.serveText(w, r, store.ScopePanel)
 }
 
+// ServeEditorialText answers GET /editorial-text with the newsroom's per-language
+// editorial config (lexicon, orthography, slop phrases, exemplars, bot directive) for a
+// language. Unlike the UI catalogs the base authored language is Spanish, so a bare read
+// still defaults to ?lang=en and simply returns an empty catalog until a language is set.
+func (rh *ReadHandler) ServeEditorialText(w http.ResponseWriter, r *http.Request) {
+	rh.serveText(w, r, store.ScopeEditorial)
+}
+
 // textInput is the POST body for a text upsert. lang defaults to the base language.
 type textInput struct {
 	Key      string         `json:"key"`
@@ -117,4 +125,10 @@ func (oh *OperatorHandler) ServeUpsertFrontendText(w http.ResponseWriter, r *htt
 // ServeUpsertPanelText answers POST /panel-text: upsert an operator-facing string.
 func (oh *OperatorHandler) ServeUpsertPanelText(w http.ResponseWriter, r *http.Request) {
 	oh.upsertText(w, r, store.ScopePanel)
+}
+
+// ServeUpsertEditorialText answers POST /editorial-text: upsert one per-language
+// editorial-config entry (an anchor row or the bot directive).
+func (oh *OperatorHandler) ServeUpsertEditorialText(w http.ResponseWriter, r *http.Request) {
+	oh.upsertText(w, r, store.ScopeEditorial)
 }
