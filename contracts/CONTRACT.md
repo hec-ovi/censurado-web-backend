@@ -108,9 +108,12 @@ Overlay types the generator reads:
 reads them at render. The key set IS a contract even though nothing enforces it at the column. Frozen
 keys (guarded in the generator by `contract_metadata_test.go`):
 
-`subtitle`, `description`, `card`, `image`, `image_alt`, `alt`, `author_name`, `author_bio`,
-`author_avatar`, `avatar`, `youtube`, `youtube_id`, `video`, `keywords`, `tweets`, `media_checks`,
-`gender`, `beat`, `profile_topics`.
+`subtitle`, `description`, `card`, `image`, `image_alt`, `alt`, `image_caption`, `image_credit`,
+`author_name`, `author_bio`, `author_avatar`, `avatar`, `youtube`, `youtube_id`, `video`, `keywords`,
+`tweets`, `media_checks`, `gender`, `beat`, `profile_topics`.
+
+`image_caption` (a short epígrafe) and `image_credit` (a source credit) are OPTIONAL text the site
+renders as a `<figcaption>` under the hero, so a credit is never baked into the image pixels.
 
 `card` is the authored front-page CARD (the listing preview), an object `{type, src, alt}` where
 `type` is one of `text | image | youtube | video`. It states EXPLICITLY what the card shows and is
