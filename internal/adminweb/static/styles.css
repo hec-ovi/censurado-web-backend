@@ -691,37 +691,6 @@ input[type="radio"] {
   background: var(--warn-soft);
 }
 
-.health {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 38px;
-  padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.health-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--warn);
-  box-shadow: 0 0 0 3px var(--warn-soft);
-}
-
-.health-dot[data-state="online"] {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-soft);
-}
-
-.health-dot[data-state="offline"] {
-  background: var(--err);
-  box-shadow: 0 0 0 3px var(--err-soft);
-}
-
 .source-list,
 .temas-list,
 .link-table-wrap,
@@ -1391,7 +1360,6 @@ input,
 select,
 textarea,
 .panel,
-.health,
 .help-popover,
 .persona-card,
 .version-row,
@@ -1404,8 +1372,7 @@ textarea,
 .status,
 .author-chip,
 .topic-chip,
-.portada-kicker,
-.health-dot {
+.portada-kicker {
   border-radius: 999px;
 }
 

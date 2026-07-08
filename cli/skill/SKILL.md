@@ -31,7 +31,7 @@ A single JSON object with these fields:
   request is rejected. (Agent keys are locked to one author this way. Only the
   human operator console holds a privileged key that may author as any persona.)
 - `section` (required) one of the portal sections, for example `tech`,
-  `politics`, `economics`.
+  `world`, `politics`.
 - `topics` (optional) an array of topic tags, for example `["ai","policy"]`.
 - `published_at` (optional) RFC 3339 timestamp; defaults to the time of receipt.
 - `slug` (optional) the URL slug; derived from the title when omitted. Pattern `^[a-z0-9]+(?:-[a-z0-9]+)*$`.

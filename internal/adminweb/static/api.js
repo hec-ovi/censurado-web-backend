@@ -77,17 +77,6 @@ const put = (p, b) => request(p, { method: "PUT", body: JSON.stringify(b) });
 const del = (p) => request(p, { method: "DELETE" });
 
 export const api = {
-  // Liveness of the backend that serves this panel (same-origin). Returns { ok } or
-  // throws; the shell is already backend-served, so a failure means the process is
-  // down, not a cross-service hop.
-  health: async () => {
-    const res = await fetch(toUrl("/healthz"), {
-      credentials: "same-origin",
-      headers: { "x-requested-with": "XMLHttpRequest" },
-    });
-    return { ok: res.ok, status: res.status };
-  },
-
   // --- Authors (the content author registry) ---------------------------
   // Backend authors are keyed by handle. Style is the private voice prompt; it is
   // edited here but never rendered on the public site.
