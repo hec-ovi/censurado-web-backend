@@ -49,7 +49,7 @@ entry.
 
 ## Build and test
 
-There is no host Go toolchain; everything runs in the pinned `golang:1.26.4-trixie`
+There is no host Go toolchain; everything runs in the pinned `golang:1.26.4-alpine`
 container. With `make` available:
 
 ```sh
