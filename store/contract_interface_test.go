@@ -69,7 +69,7 @@ func TestContract_OverlayShapes(t *testing.T) {
 	assertFields(t, "store.Source", reflect.TypeOf(store.Source{}),
 		[]string{"ID", "Slug", "Domain", "Homepage", "Description", "FeedURLs", "FeedType", "Language", "OwnershipGroup", "Lean", "Enabled", "Status", "LastChecked", "LastOK", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
 	assertFields(t, "store.Schedule", reflect.TypeOf(store.Schedule{}),
-		[]string{"ID", "Slug", "Name", "Cadence", "Times", "Weekdays", "Monthdays", "Mode", "Authors", "Enabled", "Runs", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
+		[]string{"ID", "Slug", "Name", "Cadence", "Times", "Weekdays", "Monthdays", "Mode", "Prompt", "Authors", "Enabled", "Runs", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
 	assertFields(t, "store.ScheduleRun", reflect.TypeOf(store.ScheduleRun{}),
 		[]string{"RunID", "Status", "Detail", "StartedAt", "FinishedAt"})
 }

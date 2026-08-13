@@ -1,5 +1,5 @@
 import { el, clear, field, help, subTabs } from "./el.js";
-import { TrashIcon } from "./icons.js";
+import { NewsroomIcon, PenIcon, TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
 import { ClockIcon } from "./clockIcon.js";
 import { ModelsSection } from "./modelsSection.js";
@@ -30,9 +30,10 @@ const AUTOMATION_HELP =
   "The executor runs while Docker runs: firings that come due while a batch is in flight queue behind " +
   "it, and times missed while the executor is off are skipped, never replayed.";
 
-const AUTHORS_HELP =
-  "Leave every author unchecked to run the whole newsroom: each author with a beat and linked sources " +
-  "pitches candidates. Check authors to restrict the edition to them.";
+const PROMPT_HELP =
+  "Empty prompt = a GENERIC run: the whole newsroom pitches and the jefe picks freely. With a prompt " +
+  "it is a CUSTOM run: your instruction (e.g. \"using this author cover the march downtown\") steers " +
+  "what the authors pitch and what the jefe selects.";
 
 // The public production origin the per-row link points at (its /YYYY/MM/ month
 // archive). The panel itself stays localhost-only; this is only an href.
@@ -43,7 +44,6 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 
 export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   let schedules = [];
-  let authors = [];
   let liveStatus = {};
   const models = ModelsSection({ api });
 
@@ -83,11 +83,10 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     listEl.append(el("p", { class: "muted" }, t("Loading schedules...")));
     clearStatus(listStatus);
     try {
-      const [scheduleData, authorData, statusData] = await Promise.all([
-        api.listSchedules(), api.listAuthors(), api.getAutomationStatus(),
+      const [scheduleData, statusData] = await Promise.all([
+        api.listSchedules(), api.getAutomationStatus(),
       ]);
       schedules = (scheduleData && scheduleData.schedules) || [];
-      authors = (authorData && authorData.authors) || [];
       liveStatus = (statusData && statusData.settings) || {};
       renderTable();
       renderRuns();
@@ -203,7 +202,13 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   }
 
   function row(schedule, index, now) {
+    const custom = !!(schedule.prompt || "").trim();
+    const kindIcon = el("span", {
+      class: "automation-kind", dataset: { kind: custom ? "custom" : "generic" },
+      title: custom ? t("Custom run (has a prompt)") : t("Generic run (whole newsroom)"),
+    }, [custom ? PenIcon("automation-kind-icon") : NewsroomIcon("automation-kind-icon")]);
     const nameCell = el("td", { class: "automation-name-cell" }, el("div", { class: "automation-name" }, [
+      kindIcon,
       el("span", { class: "automation-title" }, schedule.name || schedule.slug),
       el("span", { class: "muted automation-mode-word" }, schedule.mode === "auto" ? t("auto") : t("preview")),
     ]));
@@ -260,13 +265,67 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const tableRow = el("tr", { class: "automation-row article-row", tabindex: "0", dataset: { id: schedule.slug, parity: index % 2 === 0 ? "even" : "odd" } }, [
       nameCell, statusCell, monthCell, dayCell, timeCell, prodCell, actionsCell,
     ]);
-    tableRow.addEventListener("click", () => openEditor(schedule));
+    tableRow.addEventListener("click", () => openDetails(schedule));
     tableRow.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      openEditor(schedule);
+      openDetails(schedule);
     });
     return tableRow;
+  }
+
+  // ---- the run-history summary (a row click) --------------------------------
+
+  function openDetails(schedule) {
+    const close = el("button", { type: "button", class: "secondary source-dialog-close", "aria-label": t("Close") }, "×");
+    const dialog = el("dialog", { class: "source-dialog automation-details-dialog", "aria-label": t("Run history") });
+    const closeDetails = () => closeDialog(dialog);
+    close.addEventListener("click", closeDetails);
+    dialog.addEventListener("cancel", closeDetails);
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+
+    const edit = el("button", { type: "button" }, t("Edit schedule"));
+    edit.addEventListener("click", () => {
+      closeDetails();
+      openEditor(schedule);
+    });
+
+    const runs = schedule.runs || [];
+    const okCount = runs.filter((r) => r.status === "ok").length;
+    const failedCount = runs.filter((r) => r.status === "failed").length;
+
+    const list = el("div", { class: "automation-details-runs" },
+      runs.length
+        ? runs.map((run) => el("div", { class: "automation-run-row", dataset: { runId: run.run_id } }, [
+            el("span", { class: "status", dataset: { state: RUN_STATE[run.status] || "running" } }, runLabel(run.status)),
+            el("span", { class: "automation-run-detail" }, run.detail || run.run_id),
+            el("span", { class: "automation-run-when muted" }, (run.started_at || "").replace("T", " ").slice(0, 16)),
+          ]))
+        : [el("p", { class: "muted empty-state" }, t("No runs recorded yet."))]);
+
+    dialog.append(el("div", { class: "source-dialog-shell" }, [
+      close,
+      el("div", { class: "automation-details" }, [
+        el("div", { class: "automation-details-head" }, [
+          el("h2", {}, schedule.name || schedule.slug),
+          el("span", { class: "status", dataset: { state: schedule.enabled ? "active" : "offline" } },
+            schedule.enabled ? t("Active") : t("Paused")),
+        ]),
+        el("p", { class: "muted automation-details-meta" },
+          `${cadenceLabel(schedule.cadence)} · ${dayPattern(schedule)} · ${(schedule.times || []).join("  ")}`),
+        (schedule.prompt || "").trim()
+          ? el("p", { class: "automation-details-prompt" }, schedule.prompt)
+          : null,
+        el("div", { class: "automation-details-counts" }, [
+          el("span", { class: "status", dataset: { state: "done" } }, `${okCount} ok`),
+          el("span", { class: "status", dataset: { state: "failed" } }, `${failedCount} ${t("failed")}`),
+        ]),
+        list,
+        el("div", { class: "automation-details-actions" }, [edit]),
+      ]),
+    ]));
+    document.body.append(dialog);
+    showDialog(dialog);
   }
 
   // The recent-runs strip: the newest run records across every schedule.
@@ -319,7 +378,6 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
       times: [...((schedule && schedule.times) || [])],
       weekdays: new Set((schedule && schedule.weekdays) || []),
       monthdays: new Set((schedule && schedule.monthdays) || []),
-      authors: new Set((schedule && schedule.authors) || []),
     };
 
     const name = el("input", { type: "text", id: `sch-${id}-name`, value: (schedule && schedule.name) || "" });
@@ -391,35 +449,31 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     });
     renderChips();
 
-    const authorBoxes = authors.map((author) => {
-      const box = el("input", { type: "checkbox", id: `sch-${id}-author-${author.handle}` });
-      box.checked = draft.authors.has(author.handle);
-      box.addEventListener("change", () => {
-        if (box.checked) draft.authors.add(author.handle);
-        else draft.authors.delete(author.handle);
-      });
-      return el("span", { class: "automation-author-choice" }, [
-        box,
-        el("label", { for: `sch-${id}-author-${author.handle}` }, author.name || author.handle),
-      ]);
+    // The custom-run prompt: free text steering the batch. Empty = generic.
+    const prompt = el("textarea", {
+      id: `sch-${id}-prompt`, rows: "6",
+      placeholder: t("Empty = generic run (whole newsroom). Write an instruction to make it a custom run."),
     });
+    prompt.value = (schedule && schedule.prompt) || "";
 
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
 
-    // The editor card: a form SIDEBAR (name, cadence, mode, authors, enabled,
-    // actions) beside the MAIN area (the month calendar and the time picker),
-    // the shape of a calendar app's event editor.
+    // The editor card: a form SIDEBAR (name, mode, prompt, active, actions)
+    // beside the MAIN area (the month calendar and the time picker), the shape
+    // of a calendar app's event editor.
     const editForm = el("form", { class: "automation-edit" }, [
       el("div", { class: "automation-editor-card" }, [
         el("aside", { class: "automation-editor-side" }, [
           el("h2", { class: "automation-editor-title" }, isNew ? t("New schedule") : t("Schedule editor")),
           field(t("Name"), name, `sch-${id}-name`),
           field(t("Mode"), mode, `sch-${id}-mode`),
-          el("div", { class: "field automation-authors-field" }, [
-            el("span", { class: "field-label" }, [el("label", {}, t("Authors")), help(t(AUTHORS_HELP))]),
-            el("div", { class: "automation-author-choices" },
-              authorBoxes.length ? authorBoxes : [el("span", { class: "muted" }, t("No authors registered yet."))]),
+          el("div", { class: "field automation-prompt-field" }, [
+            el("span", { class: "field-label" }, [
+              el("label", { for: `sch-${id}-prompt` }, t("Prompt (optional)")),
+              help(t(PROMPT_HELP)),
+            ]),
+            prompt,
           ]),
           el("div", { class: "field field-check" }, [
             enabled,
@@ -451,7 +505,7 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         cadence: cadenceValue,
         times: [...draft.times].sort(),
         mode: mode.value,
-        authors: [...draft.authors].sort(),
+        prompt: prompt.value.trim(),
         enabled: enabled.checked,
       };
       if (!isNew) body.slug = schedule.slug;
@@ -494,6 +548,12 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   return { element, reload };
 }
 
+function cadenceLabel(cadence) {
+  if (cadence === "weekly") return t("Weekly");
+  if (cadence === "monthly") return t("Monthly");
+  return t("Daily");
+}
+
 function runLabel(status) {
   if (status === "ok") return t("ok");
   if (status === "failed") return t("failed");
@@ -534,5 +594,7 @@ function closeDialog(dialog) {
     return;
   }
   dialog.removeAttribute("open");
-  dialog.dispatchEvent(new Event("close"));
+  // The event must come from the dialog's own realm (jsdom under tests).
+  const EventCtor = (dialog.ownerDocument.defaultView || globalThis).Event;
+  dialog.dispatchEvent(new EventCtor("close"));
 }

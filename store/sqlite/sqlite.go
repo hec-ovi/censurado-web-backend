@@ -89,6 +89,9 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		{"authors", "about", "ALTER TABLE authors ADD COLUMN about TEXT NOT NULL DEFAULT ''"},
 		{"authors", "style", "ALTER TABLE authors ADD COLUMN style TEXT NOT NULL DEFAULT ''"},
 		{"authors", "topics", "ALTER TABLE authors ADD COLUMN topics TEXT NOT NULL DEFAULT '[]'"},
+		// The schedule prompt (custom-run directive) shipped after the first
+		// schedules table, so a pre-existing database needs it added.
+		{"schedules", "prompt", "ALTER TABLE schedules ADD COLUMN prompt TEXT NOT NULL DEFAULT ''"},
 	}
 	for _, a := range adds {
 		has, err := hasColumn(ctx, db, a.table, a.column)

@@ -40,6 +40,24 @@ export function MonthCalendar({ weekdays, monthdays } = {}) {
     title.textContent = `${t(MONTH_LONG[shown.getMonth()])} ${shown.getFullYear()}`;
     clear(grid);
 
+    // Daily needs no day choice at all: the whole calendar collapses to its
+    // caption and the editor shows only the time picker.
+    const daily = mode === "daily";
+    grid.hidden = daily;
+    element.querySelector(".cal-head").hidden = daily;
+    if (daily) {
+      caption.textContent = t("Fires every day at the listed times.");
+      return;
+    }
+
+    // Weekly: an arrow pointing at the clickable weekday row.
+    if (mode === "weekly") {
+      grid.append(el("div", { class: "cal-hint" }, [
+        el("span", { class: "cal-hint-arrow", "aria-hidden": "true" }, "↓"),
+        t("Tap the weekday initials to pick the days"),
+      ]));
+    }
+
     // Weekday header: toggle buttons in weekly mode, plain labels otherwise.
     for (let day = 0; day < 7; day++) {
       const label = t(WEEKDAY_SHORT[day]);
@@ -87,9 +105,9 @@ export function MonthCalendar({ weekdays, monthdays } = {}) {
         }, String(day)));
       }
     }
-    if (mode === "daily") caption.textContent = t("Fires every day at the listed times.");
-    else if (mode === "weekly") caption.textContent = t("Pick weekdays on the header row.");
-    else caption.textContent = t("Pick the days of the month.");
+    caption.textContent = mode === "weekly"
+      ? t("Pick weekdays on the header row.")
+      : t("Pick the days of the month.");
   }
 
   function setMode(next) {

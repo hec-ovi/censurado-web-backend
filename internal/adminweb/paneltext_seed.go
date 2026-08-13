@@ -18,7 +18,7 @@ type PanelTextSeedEntry struct {
 	Es  string
 }
 
-// PanelTextSeed returns the live panel UI-string catalog: 295 keys.
+// PanelTextSeed returns the live panel UI-string catalog: 301 keys.
 func PanelTextSeed() []PanelTextSeedEntry {
 	return panelTextSeed
 }
@@ -102,6 +102,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Create author", "Create author", "Crear autor"},
 	{"Created {id}.", "Created {id}.", "Se creó {id}."},
 	{"Creating...", "Creating...", "Creando..."},
+	{"Custom run (has a prompt)", "Custom run (has a prompt)", "Corrida personalizada (con prompt)"},
 	{"Daily", "Daily", "Diario"},
 	{"Dark", "Dark", "Oscuro"},
 	{"Date", "Date", "Fecha"},
@@ -124,6 +125,9 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Draft", "Draft", "Borrador"},
 	{"Drag to reorder", "Drag to reorder", "Arrastrar para reordenar"},
 	{"Edit article", "Edit article", "Editar artículo"},
+	{"Edit schedule", "Edit schedule", "Editar cronograma"},
+	{"Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Vacío = corrida genérica (toda la redacción). Escribí una instrucción para hacerla personalizada."},
+	{"Empty prompt = a GENERIC run: the whole newsroom pitches and the jefe picks freely. With a prompt it is a CUSTOM run: your instruction (e.g. \"using this author cover the march downtown\") steers what the authors pitch and what the jefe selects.", "Empty prompt = a GENERIC run: the whole newsroom pitches and the jefe picks freely. With a prompt it is a CUSTOM run: your instruction (e.g. \"using this author cover the march downtown\") steers what the authors pitch and what the jefe selects.", "Prompt vacío = corrida GENÉRICA: toda la redacción propone y el jefe elige libre. Con prompt es una corrida PERSONALIZADA: tu instrucción (p. ej. \"con este autor cubrí la marcha del centro\") guía qué proponen los autores y qué elige el jefe."},
 	{"Enabled", "Enabled", "Habilitada"},
 	{"Endpoint", "Endpoint", "Endpoint"},
 	{"Every day", "Every day", "Todos los días"},
@@ -146,6 +150,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Full row", "Full row", "Fila completa"},
 	{"Gate (editor de mesa)", "Gate (editor de mesa)", "Mesa (editor de mesa)"},
 	{"Gender", "Gender", ""},
+	{"Generic run (whole newsroom)", "Generic run (whole newsroom)", "Corrida genérica (toda la redacción)"},
 	{"Homepage", "Homepage", "Página principal"},
 	{"Idle", "Idle", "En espera"},
 	{"Image", "Image", "Imagen"},
@@ -160,7 +165,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Language", "Language", "Idioma"},
 	{"Last run", "Last run", "Última corrida"},
 	{"Latest first", "Latest first", "Más recientes"},
-	{"Leave every author unchecked to run the whole newsroom: each author with a beat and linked sources pitches candidates. Check authors to restrict the edition to them.", "Leave every author unchecked to run the whole newsroom: each author with a beat and linked sources pitches candidates. Check authors to restrict the edition to them.", "Deje todos los autores sin marcar para correr toda la redacción: cada autor con sección y fuentes vinculadas propone candidatas. Marque autores para restringir la edición a ellos."},
 	{"Left", "Left", "Izquierda"},
 	{"Light", "Light", "Claro"},
 	{"Linked sources", "Linked sources", "Fuentes vinculadas"},
@@ -201,7 +205,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"No articles yet.", "No articles yet.", "Todavía no hay artículos."},
 	{"No authors assigned", "No authors assigned", "Sin autores asignados"},
 	{"No authors match.", "No authors match.", "Ningún autor coincide."},
-	{"No authors registered yet.", "No authors registered yet.", "Todavía no hay autores registrados."},
 	{"No authors yet.", "No authors yet.", "Todavía no hay autores."},
 	{"No authors yet. Create one to get started.", "No authors yet. Create one to get started.", ""},
 	{"No batch in flight.", "No batch in flight.", "Ningún lote en marcha."},
@@ -239,6 +242,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Previous month", "Previous month", "Mes anterior"},
 	{"Primary", "Primary", "Principal"},
 	{"Prod", "Prod", "Prod"},
+	{"Prompt (optional)", "Prompt (optional)", "Prompt (opcional)"},
 	{"Prompt instructions", "Prompt instructions", "Instrucciones de prompt"},
 	{"Queued", "Queued", "En cola"},
 	{"Queued:", "Queued:", "En cola:"},
@@ -252,6 +256,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Restore", "Restore", "Restaurar"},
 	{"Right", "Right", "Derecha"},
 	{"Role for {title}", "Role for {title}", "Rol de {title}"},
+	{"Run history", "Run history", "Historial de corridas"},
 	{"Sat", "Sat", "Sáb"},
 	{"Save", "Save", "Guardar"},
 	{"Save article", "Save article", "Guardar artículo"},
@@ -285,6 +290,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Subtitle", "Subtitle", "Subtítulo"},
 	{"Sun", "Sun", "Dom"},
 	{"System", "System", "Sistema"},
+	{"Tap the weekday initials to pick the days", "Tap the weekday initials to pick the days", "Tocá las iniciales de los días para elegirlos"},
 	{"Text", "Text", "Texto"},
 	{"The time {time} is already on the list.", "The time {time} is already on the list.", "La hora {time} ya está en la lista."},
 	{"Theme", "Theme", "Tema"},

@@ -18,7 +18,7 @@ import (
 	"github.com/hec-ovi/censurado-web-backend/store"
 )
 
-const scheduleCols = "id,slug,name,cadence,times,weekdays,monthdays,mode,authors,enabled,runs,metadata,deleted_at,created_at,updated_at"
+const scheduleCols = "id,slug,name,cadence,times,weekdays,monthdays,mode,prompt,authors,enabled,runs,metadata,deleted_at,created_at,updated_at"
 
 // GetAutomationSettings returns the single global automation-settings object, or an
 // empty map when none has been set (the table holds at most the id=1 row).
@@ -143,12 +143,12 @@ func unmarshalRuns(s string) ([]store.ScheduleRun, error) {
 // Shared by ScheduleBySlug and ListSchedules.
 func scanSchedule(sc scanner) (store.Schedule, error) {
 	var (
-		id                                                    int64
-		slug, name, cadence, times, weekdays, monthdays, mode string
-		authors, runs, meta, deleted, created, updated        string
-		enabled                                               int64
+		id                                                            int64
+		slug, name, cadence, times, weekdays, monthdays, mode, prompt string
+		authors, runs, meta, deleted, created, updated                string
+		enabled                                                       int64
 	)
-	if err := sc.Scan(&id, &slug, &name, &cadence, &times, &weekdays, &monthdays, &mode, &authors, &enabled, &runs, &meta, &deleted, &created, &updated); err != nil {
+	if err := sc.Scan(&id, &slug, &name, &cadence, &times, &weekdays, &monthdays, &mode, &prompt, &authors, &enabled, &runs, &meta, &deleted, &created, &updated); err != nil {
 		return store.Schedule{}, err
 	}
 	timesL, err := unmarshalStrings(times)
@@ -192,6 +192,7 @@ func scanSchedule(sc scanner) (store.Schedule, error) {
 		Weekdays:  weekdaysL,
 		Monthdays: monthdaysL,
 		Mode:      mode,
+		Prompt:    prompt,
 		Authors:   authorsL,
 		Enabled:   enabled != 0,
 		Runs:      runsL,
@@ -240,14 +241,14 @@ func (s *Store) UpsertSchedule(ctx context.Context, sch store.Schedule) (store.S
 		enabled = 1
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO schedules (slug,name,cadence,times,weekdays,monthdays,mode,authors,enabled,runs,metadata,deleted_at,created_at,updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,'[]',?,'',?,?)
+		`INSERT INTO schedules (slug,name,cadence,times,weekdays,monthdays,mode,prompt,authors,enabled,runs,metadata,deleted_at,created_at,updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,'',?,?)
 		 ON CONFLICT(slug) DO UPDATE SET
 		   name=excluded.name, cadence=excluded.cadence, times=excluded.times,
 		   weekdays=excluded.weekdays, monthdays=excluded.monthdays, mode=excluded.mode,
-		   authors=excluded.authors, enabled=excluded.enabled,
+		   prompt=excluded.prompt, authors=excluded.authors, enabled=excluded.enabled,
 		   metadata=excluded.metadata, deleted_at='', updated_at=excluded.updated_at`,
-		sch.Slug, sch.Name, sch.Cadence, times, weekdays, monthdays, sch.Mode, authors,
+		sch.Slug, sch.Name, sch.Cadence, times, weekdays, monthdays, sch.Mode, sch.Prompt, authors,
 		enabled, meta,
 		created.UTC().Truncate(time.Second).Format(timeLayout),
 		updated.UTC().Truncate(time.Second).Format(timeLayout),

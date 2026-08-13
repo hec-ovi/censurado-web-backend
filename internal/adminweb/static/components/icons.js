@@ -28,6 +28,24 @@ export function SearchIcon(className = "icon") {
   ]);
 }
 
+// The whole-newsroom run: a grid of authors, no extra instruction.
+export function NewsroomIcon(className = "icon") {
+  return svgIcon(className, [
+    svgNode("rect", { x: "3", y: "3", width: "7", height: "7" }),
+    svgNode("rect", { x: "14", y: "3", width: "7", height: "7" }),
+    svgNode("rect", { x: "3", y: "14", width: "7", height: "7" }),
+    svgNode("rect", { x: "14", y: "14", width: "7", height: "7" }),
+  ]);
+}
+
+// A custom run: the operator's written directive.
+export function PenIcon(className = "icon") {
+  return svgIcon(className, [
+    svgNode("path", { d: "M12 20h9" }),
+    svgNode("path", { d: "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" }),
+  ]);
+}
+
 export function TrashIcon(className = "icon") {
   return svgIcon(className, [
     svgNode("path", { d: "M3 6h18" }),

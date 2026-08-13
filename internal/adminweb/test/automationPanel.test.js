@@ -28,6 +28,7 @@ function schedule(over = {}) {
     weekdays: [1, 5],
     monthdays: [],
     mode: "auto",
+    prompt: "",
     authors: ["borge"],
     enabled: true,
     runs: [
@@ -64,6 +65,8 @@ test("lists schedules with status, next month/day, clock icons, and a production
   const row = await rowFor("edicion-manana");
   assert.ok(within(row).getByText("Edición mañana"));
   assert.ok(within(row).getByText("Active"));
+  assert.equal(row.querySelector(".automation-kind").dataset.kind, "generic",
+    "no prompt = the generic (whole newsroom) icon");
   assert.ok(within(row).getByText("auto"), "the mode rides under the name");
 
   const cells = row.querySelectorAll("td");
@@ -168,7 +171,8 @@ test("creates a weekly schedule from the calendar editor: time select, weekday h
   await user.click(within(dialog).getByRole("button", { name: "Fri" }));
 
   await user.selectOptions(within(dialog).getByLabelText("Mode"), "auto");
-  await user.click(within(dialog).getByLabelText("Giuliano"));
+  await user.type(within(dialog).getByLabelText("Prompt (optional)"),
+    "usando borge cubri la marcha del centro");
   await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
   await waitFor(() => assert.ok(posted, "a POST should have been sent"));
@@ -178,7 +182,8 @@ test("creates a weekly schedule from the calendar editor: time select, weekday h
   assert.deepEqual(posted.weekdays, [1, 5]);
   assert.equal(posted.monthdays, undefined, "monthdays are not sent for a weekly cadence");
   assert.equal(posted.mode, "auto");
-  assert.deepEqual(posted.authors, ["giuliano"]);
+  assert.equal(posted.prompt, "usando borge cubri la marcha del centro",
+    "the custom-run prompt rides the upsert");
   assert.equal(posted.slug, undefined, "a create carries no slug; the server derives it");
 });
 
@@ -236,7 +241,7 @@ test("refuses to save without a time, before any request is sent", async () => {
   assert.equal(posted, false, "no request reaches the backend");
 });
 
-test("editing an existing schedule sends a full upsert with the explicit slug", async () => {
+test("a row click opens the run-history summary; editing is behind its button", async () => {
   let posted = null;
   stubLists({ schedules: [schedule()], authors: [{ handle: "borge", name: "Borge" }] });
   server.use(
@@ -249,7 +254,17 @@ test("editing an existing schedule sends a full upsert with the explicit slug", 
   const panel = mount();
   await panel.reload();
 
+  // The summary: every recorded firing with its outcome, plus the ok/failed tally.
   await user.click(await rowFor("edicion-manana"));
+  const summary = await screen.findByRole("dialog", { name: "Run history" });
+  assert.equal(summary.querySelectorAll(".automation-run-row").length, 2);
+  assert.ok(within(summary).getByText("5/8 published"));
+  assert.ok(within(summary).getByText("adapter down"));
+  assert.ok(within(summary).getByText("1 ok"));
+  assert.ok(within(summary).getByText("1 failed"));
+
+  // Editing is an explicit step from the summary, and stays a full upsert.
+  await user.click(within(summary).getByRole("button", { name: "Edit schedule" }));
   const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
   await user.click(within(dialog).getByLabelText("Active"));
   await user.click(within(dialog).getByRole("button", { name: "Save" }));

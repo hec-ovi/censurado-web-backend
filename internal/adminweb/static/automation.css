@@ -59,17 +59,32 @@
   margin-left: auto;
 }
 
-/* The settings view: status and recent runs side by side, models below. */
+/* The settings view, one clear page: the status bar across the top, the model
+   setup on the left, the recent runs on the right. */
 .automation-config {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
-  gap: 1.2rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.4rem 2rem;
   align-items: start;
 }
 
-.automation-config .models-section {
+.automation-config .automation-status {
   grid-column: 1 / -1;
-  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.automation-config .models-section {
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 0;
+}
+
+.automation-config .automation-runs-block {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 /* --- the live status card ------------------------------------------------- */
@@ -157,9 +172,24 @@
 
 .automation-name {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+.automation-kind {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+.automation-kind[data-kind="custom"] {
+  color: var(--admin-red);
+}
+
+.automation-kind-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .automation-title {
@@ -392,21 +422,68 @@
   color: var(--muted);
 }
 
-.automation-author-choices {
-  display: grid;
-  gap: 0.45rem;
+.automation-prompt-field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 8rem;
+  font: inherit;
+  line-height: 1.45;
 }
 
-.automation-author-choice {
-  display: inline-flex;
+/* --- the run-history summary (row click) ----------------------------------- */
+
+.automation-details-dialog .source-dialog-shell {
+  display: block;
+  overflow-y: auto;
+  padding: 3rem 1.5rem;
+}
+
+.automation-details {
+  max-width: 46rem;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 1.8rem 2rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.automation-details-head {
+  display: flex;
   align-items: center;
+  gap: 0.8rem;
+}
+
+.automation-details-head h2 {
+  margin: 0;
+}
+
+.automation-details-meta {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-details-counts {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.automation-details-prompt {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--admin-red);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+}
+
+.automation-details-runs {
+  display: grid;
   gap: 0.4rem;
 }
 
-.automation-author-choice input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  min-height: 0;
+.automation-details-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* --- the month calendar: plain numbers, filled-disc selection --------------- */
@@ -420,6 +497,13 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.7rem;
+}
+
+/* The explicit display rules would beat the hidden attribute (the daily view
+   collapses the whole calendar to its caption). */
+.cal-head[hidden],
+.cal-grid[hidden] {
+  display: none;
 }
 
 .cal-title {
@@ -448,6 +532,23 @@
   grid-template-columns: repeat(7, 2.6rem);
   gap: 0.15rem;
   justify-content: start;
+}
+
+/* The weekly hint: an arrow pointing at the clickable weekday row. */
+.cal-hint {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-bottom: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--admin-red);
+  font-weight: 700;
+}
+
+.cal-hint-arrow {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .cal-weekday,
@@ -586,14 +687,23 @@ button.cal-day.cal-today {
 /* --- models section ------------------------------------------------------ */
 
 .models-section {
-  margin-top: 1.6rem;
   display: grid;
   gap: 0.9rem;
 }
 
+/* The Models heading and its explainer stack, never floating side by side. */
+.models-section .panel-head {
+  display: block;
+}
+
+.models-section .panel-head h2 {
+  margin: 0 0 0.4rem;
+}
+
 .models-help {
   font-size: 0.85rem;
-  max-width: 60rem;
+  max-width: 46rem;
+  margin: 0;
 }
 
 .models-lanes {
@@ -617,9 +727,31 @@ button.cal-day.cal-today {
   letter-spacing: 0.04em;
 }
 
+.models-stages {
+  table-layout: fixed;
+}
+
+/* Same base-table quirk as the schedule list: header and body rows lay out
+   independently, so both need the widths for the columns to line up. */
+.models-stages th:nth-child(1), .models-stages td:nth-child(1) { width: 40%; }
+.models-stages th:nth-child(2), .models-stages td:nth-child(2) { width: 28%; }
+.models-stages th:nth-child(3), .models-stages td:nth-child(3) { width: 32%; }
+
+.models-stages th:nth-child(1),
+.models-stages td:nth-child(1) {
+  text-align: left;
+  padding-left: 14px;
+}
+
 .models-stages td,
 .models-stages th {
   vertical-align: middle;
+}
+
+.models-stages tbody tr > td {
+  height: 52px;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .models-stages select,

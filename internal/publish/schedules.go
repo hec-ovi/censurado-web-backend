@@ -43,6 +43,7 @@ type scheduleJSON struct {
 	Weekdays  []int             `json:"weekdays"`
 	Monthdays []int             `json:"monthdays"`
 	Mode      string            `json:"mode"`
+	Prompt    string            `json:"prompt"`
 	Authors   []string          `json:"authors"`
 	Enabled   bool              `json:"enabled"`
 	Runs      []scheduleRunJSON `json:"runs"`
@@ -73,7 +74,7 @@ func toScheduleJSON(s store.Schedule) scheduleJSON {
 	}
 	return scheduleJSON{
 		Slug: s.Slug, Name: s.Name, Cadence: s.Cadence, Times: coalesceTopics(s.Times),
-		Weekdays: weekdays, Monthdays: monthdays, Mode: s.Mode,
+		Weekdays: weekdays, Monthdays: monthdays, Mode: s.Mode, Prompt: s.Prompt,
 		Authors: coalesceTopics(s.Authors), Enabled: s.Enabled, Runs: runs,
 		Metadata: coalesceMeta(s.Metadata), Deleted: s.Deleted,
 		CreatedAt: rfc3339(s.CreatedAt), UpdatedAt: rfc3339(s.UpdatedAt),
@@ -187,6 +188,7 @@ type scheduleInput struct {
 	Weekdays  []int          `json:"weekdays,omitempty"`
 	Monthdays []int          `json:"monthdays,omitempty"`
 	Mode      string         `json:"mode"`
+	Prompt    string         `json:"prompt"`
 	Authors   []string       `json:"authors,omitempty"`
 	Enabled   *bool          `json:"enabled,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
@@ -313,7 +315,8 @@ func (oh *OperatorHandler) ServeUpsertSchedule(w http.ResponseWriter, r *http.Re
 	}
 	sch, err := oh.store.UpsertSchedule(r.Context(), store.Schedule{
 		Slug: slug, Name: name, Cadence: cadence, Times: times,
-		Weekdays: weekdays, Monthdays: monthdays, Mode: mode, Authors: authors,
+		Weekdays: weekdays, Monthdays: monthdays, Mode: mode,
+		Prompt: strings.TrimSpace(in.Prompt), Authors: authors,
 		Enabled: enabled, Metadata: in.Metadata,
 	})
 	if err != nil {

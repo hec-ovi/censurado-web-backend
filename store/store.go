@@ -457,9 +457,11 @@ const ScheduleRunsCap = 20
 // list of "HH:MM" wall-clock fire times (several per day allowed), interpreted in the
 // executor's local timezone; Weekdays (0=Sunday..6, weekly only) and Monthdays
 // (1..31, monthly only) narrow which days fire. Mode is the batch mode
-// ("preview"|"auto") and Authors an optional author-handle filter (empty = every
-// author with a beat). Enabled is the operator's toggle; Runs is the recent-run
-// strip, newest first, capped at ScheduleRunsCap and written only by
+// ("preview"|"auto"). Prompt is the operator's free-text directive for a CUSTOM
+// schedule ("using this author do this and that"); empty means a GENERIC run (the
+// whole newsroom, no extra instruction). Authors is an optional author-handle filter
+// (empty = every author with a beat). Enabled is the operator's toggle; Runs is the
+// recent-run strip, newest first, capped at ScheduleRunsCap and written only by
 // RecordScheduleRun (UpsertSchedule never touches it). Deleted is the tombstone.
 type Schedule struct {
 	ID        string
@@ -470,6 +472,7 @@ type Schedule struct {
 	Weekdays  []int
 	Monthdays []int
 	Mode      string
+	Prompt    string
 	Authors   []string
 	Enabled   bool
 	Runs      []ScheduleRun
