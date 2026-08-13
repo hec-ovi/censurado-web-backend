@@ -18,7 +18,7 @@ type PanelTextSeedEntry struct {
 	Es  string
 }
 
-// PanelTextSeed returns the live panel UI-string catalog: 317 keys.
+// PanelTextSeed returns the live panel UI-string catalog: 314 keys.
 func PanelTextSeed() []PanelTextSeedEntry {
 	return panelTextSeed
 }
@@ -127,7 +127,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Drag to reorder", "Drag to reorder", "Arrastrar para reordenar"},
 	{"Each pipeline stage runs on the lane you pick: the local model or the remote API.", "Each pipeline stage runs on the lane you pick: the local model or the remote API.", "Cada etapa del pipeline corre en el carril que elijas: el modelo local o la API remota."},
 	{"Edit article", "Edit article", "Editar artículo"},
-	{"Edit schedule", "Edit schedule", "Editar tarea"},
 	{"Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Vacío = corrida genérica (toda la redacción). Escribí una instrucción para hacerla personalizada."},
 	{"Empty prompt = a GENERIC run: the whole newsroom pitches and the jefe picks freely. With a prompt it is a CUSTOM run: your instruction (e.g. \"using this author cover the march downtown\") steers what the authors pitch and what the jefe selects.", "Empty prompt = a GENERIC run: the whole newsroom pitches and the jefe picks freely. With a prompt it is a CUSTOM run: your instruction (e.g. \"using this author cover the march downtown\") steers what the authors pitch and what the jefe selects.", "Prompt vacío = corrida GENÉRICA: toda la redacción propone y el jefe elige libre. Con prompt es una corrida PERSONALIZADA: tu instrucción (p. ej. \"con este autor cubrí la marcha del centro\") guía qué proponen los autores y qué elige el jefe."},
 	{"Enabled", "Enabled", "Habilitada"},
@@ -163,7 +162,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"July", "July", "Julio"},
 	{"Jun", "Jun", "Jun"},
 	{"June", "June", "Junio"},
-	{"Key saved. Leave empty to keep it.", "Key saved. Leave empty to keep it.", "Clave guardada. Dejá vacío para conservarla."},
 	{"Lane", "Lane", "Carril"},
 	{"Language", "Language", "Idioma"},
 	{"Last run", "Last run", "Última corrida"},
@@ -211,7 +209,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"No batch in flight.", "No batch in flight.", "Ningún lote en marcha."},
 	{"No days", "No days", "Sin días"},
 	{"No days match.", "No days match.", "Ningún día coincide."},
-	{"No key yet: paste it here or set OPENROUTER_API_KEY in .env.", "No key yet: paste it here or set OPENROUTER_API_KEY in .env.", "Sin clave: pegala acá o definí OPENROUTER_API_KEY en .env."},
 	{"No recommended articles selected.", "No recommended articles selected.", "No hay artículos recomendados seleccionados."},
 	{"No runs recorded yet.", "No runs recorded yet.", "Todavía no hay corridas registradas."},
 	{"No schedules yet. Create one to put the newsroom on a clock.", "No schedules yet. Create one to put the newsroom on a clock.", "Todavía no hay tareas. Creá una para poner la redacción en horario."},

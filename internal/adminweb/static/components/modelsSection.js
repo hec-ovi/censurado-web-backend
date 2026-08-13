@@ -11,8 +11,10 @@ import { t } from "./i18n.js";
 //   Modelos - the two lanes. LOCAL is the llama.cpp server; REMOTE is ANY
 //             OpenAI-compatible inference API authenticated with a Bearer key
 //             (OpenRouter, OpenAI, xAI/Grok, Groq, DeepSeek...) — the provider
-//             preset fills the endpoint, the key stays masked behind the eye.
-//             Each lane shows its live health with a Verify refresh.
+//             preset fills the endpoint. The stored key loads into its field
+//             masked as dots (an admin-session secrets read); the eye toggles
+//             the real value. Each lane shows its live health with a Verify
+//             refresh.
 //   Etapas  - which lane each pipeline stage runs on. Local or Remote, nothing
 //             else to decide: the lane's model applies.
 //
@@ -54,44 +56,32 @@ const HEARTBEAT_FRESH_MS = 180000;
 
 export function ModelsSection({ api } = {}) {
   let stored = {};        // the settings singleton as last loaded/saved (authoritative once set)
+  let storedKey = "";     // the remote lane's stored key, kept OUT of `stored` so saves never round-trip it
   let effective = null;   // the executor's FRESH running config, null = stale or no heartbeat
   let health = {};        // {at, llama_ok, remote_state} from the freshest heartbeat
   let saving = false;     // one save at a time: the two buttons share the lock
-  let revealed = false;
 
   const laneInputs = {};
   const stageControls = {};
   const modelsStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
   const stagesStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
-  const keyHint = el("p", { class: "muted models-key-hint" });
   const offlineNote = el("p", { class: "muted models-offline-note" });
   const saveModels = el("button", { type: "button" }, t("Save models"));
   const saveStages = el("button", { type: "button" }, t("Save stages"));
 
   // --- the masked key with its eye ------------------------------------------
+  // The stored key is preloaded into the field masked as dots (the load is the
+  // admin-session secrets read); the eye only flips visibility.
   const keyInput = el("input", {
     type: "password", id: "models-openrouter-key", autocomplete: "off",
   });
   const eye = el("button", {
     type: "button", class: "models-eye", "aria-label": t("Show the key"), "aria-pressed": "false",
   }, [EyeIcon("models-eye-icon")]);
-  eye.addEventListener("click", async () => {
-    revealed = !revealed;
-    eye.setAttribute("aria-pressed", revealed ? "true" : "false");
-    keyInput.type = revealed ? "text" : "password";
-    if (revealed && !keyInput.value) {
-      // Fetch the stored secret only on this deliberate click, never on load.
-      try {
-        const data = await api.getAutomationSettingsSecrets();
-        const lanes = (data && data.settings && data.settings.lanes) || {};
-        keyInput.value = (lanes.openrouter && lanes.openrouter.api_key) || "";
-      } catch {
-        /* the hint already tells whether a key exists */
-      }
-    }
-    if (!revealed && keyInput.value && !keyInput.dataset.edited) {
-      keyInput.value = ""; // masked again: back to "empty keeps the stored key"
-    }
+  eye.addEventListener("click", () => {
+    const show = keyInput.type === "password";
+    keyInput.type = show ? "text" : "password";
+    eye.setAttribute("aria-pressed", show ? "true" : "false");
   });
   keyInput.addEventListener("input", () => { keyInput.dataset.edited = "true"; });
 
@@ -190,7 +180,6 @@ export function ModelsSection({ api } = {}) {
     el("div", { class: "field" }, [
       el("label", { for: "models-openrouter-key" }, t("API key")),
       el("div", { class: "models-key-row" }, [keyInput, eye]),
-      keyHint,
     ]),
   ]);
 
@@ -241,19 +230,10 @@ export function ModelsSection({ api } = {}) {
       laneInputs[key].model.value = saved.model || eff.model || "";
     }
     syncProvider();
-    keyInput.value = "";
+    keyInput.value = storedKey;
     keyInput.type = "password";
     delete keyInput.dataset.edited;
-    revealed = false;
     eye.setAttribute("aria-pressed", "false");
-    const so = storedLanes.openrouter || {};
-    const keySet = !!(so.api_key || so.api_key_set)
-      || !!(effLanes.openrouter && effLanes.openrouter.key_set);
-    keyInput.placeholder = keySet ? "••••••••••••" : "";
-    keyHint.textContent = keySet
-      ? t("Key saved. Leave empty to keep it.")
-      : t("No key yet: paste it here or set OPENROUTER_API_KEY in .env.");
-    keyHint.dataset.state = keySet ? "set" : "missing";
 
     const effStages = (effective && effective.stages) || {};
     const storedStages = (stored && stored.stages) || {};
@@ -280,7 +260,10 @@ export function ModelsSection({ api } = {}) {
     // A typed key is sent; otherwise the SERVER keeps the stored one (the key
     // never round-trips through the browser on a routine save).
     const typed = keyInput.dataset.edited ? keyInput.value.trim() : "";
-    if (typed) lanes.openrouter.api_key = typed;
+    if (typed) {
+      lanes.openrouter.api_key = typed;
+      storedKey = typed; // what the field shows (masked) after the save
+    }
     for (const lane of Object.values(lanes)) {
       for (const [k, v] of Object.entries(lane)) if (v === "") delete lane[k];
     }
@@ -305,6 +288,8 @@ export function ModelsSection({ api } = {}) {
       const next = { ...stored, ...half };
       const data = await api.putAutomationSettings(next);
       stored = (data && data.settings) || next;
+      // The secret lives in storedKey only; keep it out of the merge base.
+      if (stored.lanes && stored.lanes.openrouter) delete stored.lanes.openrouter.api_key;
       fill(); // the form now shows exactly what was saved (= what fires next)
       setStatus(statusNode, "done", t("Saved. The next firing uses this."));
     } catch (err) {
@@ -320,10 +305,16 @@ export function ModelsSection({ api } = {}) {
 
   async function reload() {
     try {
+      // The settings load includes the stored secret (admin session), so the
+      // key field opens filled and masked. The secret moves to storedKey and
+      // leaves `stored`, keeping it out of every save body.
       const [settingsData, statusData] = await Promise.all([
-        api.getAutomationSettings(), api.getAutomationStatus(),
+        api.getAutomationSettingsSecrets(), api.getAutomationStatus(),
       ]);
       stored = (settingsData && settingsData.settings) || {};
+      const so = (stored.lanes && stored.lanes.openrouter) || {};
+      storedKey = so.api_key || "";
+      delete so.api_key;
       const live = (statusData && statusData.settings) || {};
       health = { at: live.at, llama_ok: live.llama_ok, remote_state: live.remote_state };
       // Only a FRESH heartbeat counts: a dead executor's snapshot must never

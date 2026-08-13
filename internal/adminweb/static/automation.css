@@ -486,6 +486,12 @@
 
 /* --- the run-history summary (row click) ----------------------------------- */
 
+/* A popup OVER the list: the dialog itself paints nothing, so the ::backdrop
+   dims the still-rendered list behind and only the card floats on top. */
+.automation-details-dialog {
+  background: transparent;
+}
+
 .automation-details-dialog .source-dialog-shell {
   display: block;
   overflow-y: auto;
@@ -550,11 +556,6 @@
   white-space: pre-wrap;
   overflow: visible;
   text-overflow: clip;
-}
-
-.automation-details-actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* --- the month calendar: plain numbers, filled-disc selection --------------- */
@@ -775,29 +776,41 @@ button.cal-day.cal-today {
   background: var(--surface);
 }
 
+/* One header row per lane: title, health chip, verified-ago stamp, Verify at
+   the right. Never wraps; the stamp is the one part allowed to truncate. */
 .models-lane-head {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .models-lane-head h3 {
   margin-right: auto;
+  white-space: nowrap;
 }
 
 .models-health {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  min-width: 0;
+}
+
+.models-health .status {
+  flex: none;
 }
 
 .models-health-stamp {
   font-size: 0.72rem;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .models-verify {
+  flex: none;
   min-height: 1.9rem;
   padding: 0 0.7rem;
   font-size: 0.72rem;
@@ -840,15 +853,6 @@ button.cal-day.cal-today {
 .models-eye-icon {
   width: 17px;
   height: 17px;
-}
-
-.models-key-hint {
-  margin: 0;
-  font-size: 0.78rem;
-}
-
-.models-key-hint[data-state="set"] {
-  color: #4cc38a;
 }
 
 .models-offline-note {

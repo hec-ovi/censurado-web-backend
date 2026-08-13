@@ -38,16 +38,12 @@ function effective(over = {}) {
   };
 }
 
+// The settings GET is the admin-session secrets read (include_secrets=true):
+// `settings` may carry lanes.openrouter.api_key like the real server would.
 function stub({ settings = {}, eff = effective(), at = new Date().toISOString(),
-                llama = true, remote = "ok", secrets = null } = {}) {
+                llama = true, remote = "ok" } = {}) {
   server.use(
-    http.get(`${ORIGIN}/automation-settings`, ({ request }) => {
-      const url = new URL(request.url);
-      if (url.searchParams.get("include_secrets") === "true" && secrets) {
-        return HttpResponse.json({ settings: secrets });
-      }
-      return HttpResponse.json({ settings });
-    }),
+    http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings })),
     http.get(`${ORIGIN}/automation-status`, () =>
       HttpResponse.json({ settings: eff ? { at, llama_ok: llama, remote_state: remote, effective: eff } : {} })),
   );
@@ -62,9 +58,9 @@ test("shows the EFFECTIVE endpoints and models as real editable values", async (
   assert.equal(document.getElementById("models-local-model").value, "qwen-local");
   assert.equal(document.getElementById("models-openrouter-base").value, "https://openrouter.ai/api/v1");
   assert.equal(document.getElementById("models-openrouter-model").value, "poolside/laguna-s-2.1:free");
-  // The key never round-trips: an empty password field plus the saved-state hint.
+  // No stored key: the masked field opens empty.
   assert.equal(document.getElementById("models-openrouter-key").value, "");
-  await screen.findByText("Key saved. Leave empty to keep it.");
+  assert.equal(document.getElementById("models-openrouter-key").type, "password");
   // The stage rows show the lane each stage ACTUALLY runs on after the merge;
   // a stage picks a lane and nothing else.
   assert.equal(document.getElementById("models-stage-evaluate-lane").value, "openrouter");
@@ -93,37 +89,23 @@ test("the provider preset fills the endpoint for any OpenAI-compatible service",
   assert.equal(document.getElementById("models-openrouter-base").value, "https://api.x.ai/v1");
 });
 
-test("the eye reveals the stored key on a deliberate click, and only then", async () => {
-  let secretReads = 0;
-  stub({ settings: { lanes: { openrouter: { api_key_set: true } } },
-         secrets: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
-  server.use(
-    http.get(`${ORIGIN}/automation-settings`, ({ request }) => {
-      const url = new URL(request.url);
-      if (url.searchParams.get("include_secrets") === "true") {
-        secretReads += 1;
-        return HttpResponse.json({ settings: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
-      }
-      return HttpResponse.json({ settings: { lanes: { openrouter: { api_key_set: true } } } });
-    }),
-  );
+test("the stored key loads into the field masked; the eye toggles visibility", async () => {
+  stub({ settings: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
   const user = userEvent.setup();
   const section = mount();
   await section.reload();
 
   const key = document.getElementById("models-openrouter-key");
-  assert.equal(key.type, "password");
-  assert.equal(key.value, "", "no secret on a routine load");
-  assert.equal(secretReads, 0);
+  assert.equal(key.value, "sk-or-secreta", "the stored key is preloaded on open");
+  assert.equal(key.type, "password", "shown masked as dots");
 
   await user.click(screen.getByRole("button", { name: "Show the key" }));
-  await waitFor(() => assert.equal(key.value, "sk-or-secreta"));
-  assert.equal(key.type, "text");
-  assert.equal(secretReads, 1, "the secret is fetched only on the eye click");
+  assert.equal(key.type, "text", "the eye reveals the real value");
+  assert.equal(key.value, "sk-or-secreta");
 
   await user.click(screen.getByRole("button", { name: "Show the key" }));
   assert.equal(key.type, "password");
-  assert.equal(key.value, "", "masked again means: keep the stored key");
+  assert.equal(key.value, "sk-or-secreta", "masking hides the value, never clears it");
 });
 
 test("saving models stores the lanes (with a typed key) without touching the stages", async () => {
@@ -141,7 +123,6 @@ test("saving models stores the lanes (with a typed key) without touching the sta
   const section = mount();
   await section.reload();
 
-  await screen.findByText("No key yet: paste it here or set OPENROUTER_API_KEY in .env.");
   const model = document.getElementById("models-openrouter-model");
   await user.clear(model);
   await user.type(model, "openai/gpt-5-mini");
@@ -159,9 +140,9 @@ test("saving models stores the lanes (with a typed key) without touching the sta
 
 test("saving stages stores every stage's lane; the key never rides through the browser", async () => {
   let put = null;
-  // The GET serves the key REDACTED (api_key_set); the server preserves the
-  // real key on saves that do not carry one.
-  stub({ settings: { lanes: { openrouter: { api_key_set: true } } } });
+  // The load carries the stored key (it fills the masked field), but an
+  // untouched key stays OUT of every save body; the server preserves it.
+  stub({ settings: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
   server.use(
     http.put(`${ORIGIN}/automation-settings`, async ({ request }) => {
       put = await request.json();
@@ -172,7 +153,7 @@ test("saving stages stores every stage's lane; the key never rides through the b
   const section = mount();
   await section.reload();
 
-  await screen.findByText("Key saved. Leave empty to keep it.");
+  assert.equal(document.getElementById("models-openrouter-key").value, "sk-or-secreta");
   await user.selectOptions(document.getElementById("models-stage-draft-lane"), "openrouter");
   await user.click(screen.getByRole("button", { name: "Save stages" }));
 

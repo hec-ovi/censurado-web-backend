@@ -15,7 +15,8 @@ import { WEEKDAY_SHORT, nextRun, validateSchedule } from "../schedule.js";
 //                   month/day, the fire times as round clock icons, and a link to
 //                   that month's page on the production site. Scrolls in its own
 //                   pane; empty cells stay empty. A row opens the details popup
-//                   (run history as a console); editing is behind its button.
+//                   (run history as a console) over the dimmed list; tasks are
+//                   view or delete, created only through the new-task button.
 //
 // A task is either an article-edition batch (task=batch: mode + optional prompt)
 // or a topic-normalization sweep (task=topics: one fixed job, no mode or prompt).
@@ -55,7 +56,7 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   const statusEl = el("div", { class: "automation-status", role: "status", "aria-label": t("Executor status") });
   const listStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
   const newBtn = el("button", { type: "button", class: "automation-new" }, t("New schedule"));
-  newBtn.addEventListener("click", () => openEditor(null));
+  newBtn.addEventListener("click", () => openEditor());
 
   const schedulesPane = el("div", { class: "automation-schedules" }, [
     el("div", { class: "automation-head" }, [
@@ -289,12 +290,6 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     dialog.addEventListener("cancel", closeDetails);
     dialog.addEventListener("close", () => dialog.remove(), { once: true });
 
-    const edit = el("button", { type: "button" }, t("Edit schedule"));
-    edit.addEventListener("click", () => {
-      closeDetails();
-      openEditor(schedule);
-    });
-
     const runs = schedule.runs || [];
     const okCount = runs.filter((r) => r.status === "ok").length;
     const failedCount = runs.filter((r) => r.status === "failed").length;
@@ -325,7 +320,6 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
           el("span", { class: "status", dataset: { state: "failed" } }, `${failedCount} ${t("failed")}`),
         ]),
         list,
-        el("div", { class: "automation-details-actions" }, [edit]),
       ]),
     ]));
     document.body.append(dialog);
@@ -366,14 +360,14 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     for (const run of all) runsEl.append(consoleLine(run, run.schedule));
   }
 
-  // ---- the calendar editor --------------------------------------------------
+  // ---- the calendar editor (create-only: tasks are view or delete once made) --
 
-  function openEditor(schedule) {
+  function openEditor() {
     let dialog = null;
     const closeEditor = () => {
       if (dialog) closeDialog(dialog);
     };
-    const form = buildEditForm(schedule, closeEditor);
+    const form = buildEditForm(closeEditor);
     const close = el("button", { type: "button", class: "secondary source-dialog-close", "aria-label": t("Close") }, "×");
     dialog = el("dialog", { class: "source-dialog automation-dialog", "aria-label": t("Schedule editor") });
     close.addEventListener("click", closeEditor);
@@ -384,20 +378,15 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     showDialog(dialog);
   }
 
-  function buildEditForm(schedule, onClose) {
-    const isNew = !schedule;
-    const id = isNew ? "new" : schedule.slug;
-    const draft = {
-      times: [...((schedule && schedule.times) || [])],
-      weekdays: new Set((schedule && schedule.weekdays) || []),
-      monthdays: new Set((schedule && schedule.monthdays) || []),
-    };
+  function buildEditForm(onClose) {
+    const id = "new";
+    const draft = { times: [], weekdays: new Set(), monthdays: new Set() };
 
-    const name = el("input", { type: "text", id: `sch-${id}-name`, value: (schedule && schedule.name) || "" });
+    const name = el("input", { type: "text", id: `sch-${id}-name`, value: "" });
 
     // Cadence as visible tabs: Daily | Weekly | Monthly. The chosen tab drives
     // what the calendar's clicks mean.
-    let cadenceValue = (schedule && schedule.cadence) || "daily";
+    let cadenceValue = "daily";
     const cadenceTabs = [["daily", t("Daily")], ["weekly", t("Weekly")], ["monthly", t("Monthly")]]
       .map(([value, label]) => {
         const tab = el("button", {
@@ -420,15 +409,15 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
       el("option", { value: "batch" }, t("Article edition")),
       el("option", { value: "topics" }, t("Topic normalization")),
     ]);
-    task.value = (schedule && schedule.task) || "batch";
+    task.value = "batch";
 
     const mode = el("select", { id: `sch-${id}-mode` }, [
       el("option", { value: "preview" }, t("Preview (hold for approval)")),
       el("option", { value: "auto" }, t("Auto (publish on gate pass)")),
     ]);
-    mode.value = (schedule && schedule.mode) || "preview";
+    mode.value = "preview";
     const enabled = el("input", { type: "checkbox", id: `sch-${id}-enabled` });
-    enabled.checked = isNew ? true : !!schedule.enabled;
+    enabled.checked = true;
 
     // Days: the month calendar; its meaning follows the cadence tab.
     const calendar = MonthCalendar({ weekdays: draft.weekdays, monthdays: draft.monthdays });
@@ -475,7 +464,6 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
       id: `sch-${id}-prompt`, rows: "6",
       placeholder: t("Empty = generic run (whole newsroom). Write an instruction to make it a custom run."),
     });
-    prompt.value = (schedule && schedule.prompt) || "";
 
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
@@ -502,7 +490,7 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const editForm = el("form", { class: "automation-edit" }, [
       el("div", { class: "automation-editor-card" }, [
         el("aside", { class: "automation-editor-side" }, [
-          el("h2", { class: "automation-editor-title" }, isNew ? t("New schedule") : t("Schedule editor")),
+          el("h2", { class: "automation-editor-title" }, t("New schedule")),
           field(t("Name"), name, `sch-${id}-name`),
           field(t("Type"), task, `sch-${id}-task`),
           modeField,
@@ -541,7 +529,6 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         prompt: task.value === "topics" ? "" : prompt.value.trim(),
         enabled: enabled.checked,
       };
-      if (!isNew) body.slug = schedule.slug;
       if (cadenceValue === "weekly") body.weekdays = [...draft.weekdays].sort((a, b) => a - b);
       if (cadenceValue === "monthly") body.monthdays = [...draft.monthdays].sort((a, b) => a - b);
       const problem = validateSchedule(body);

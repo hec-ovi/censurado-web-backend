@@ -288,17 +288,10 @@ test("refuses to save without a time, before any request is sent", async () => {
 });
 
 test("a row click opens the details popup: console run history, task type, read-only prompt", async () => {
-  let posted = null;
   stubLists({
     schedules: [schedule({ prompt: "cubrir la marcha del centro" })],
     authors: [{ handle: "borge", name: "Borge" }],
   });
-  server.use(
-    http.post(`${ORIGIN}/schedules`, async ({ request }) => {
-      posted = await request.json();
-      return HttpResponse.json({ slug: "edicion-manana" });
-    }),
-  );
   const user = userEvent.setup();
   const panel = mountList();
   await panel.reload();
@@ -321,16 +314,8 @@ test("a row click opens the details popup: console run history, task type, read-
   assert.equal(promptBlock.textContent, "cubrir la marcha del centro");
   assert.equal(summary.querySelector("textarea"), null, "the prompt is not editable here");
 
-  // Editing is an explicit step from the summary, and stays a full upsert.
-  await user.click(within(summary).getByRole("button", { name: "Edit schedule" }));
-  const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
-  await user.click(within(dialog).getByLabelText("Active"));
-  await user.click(within(dialog).getByRole("button", { name: "Save" }));
-
-  await waitFor(() => assert.ok(posted, "a POST should have been sent"));
-  assert.equal(posted.slug, "edicion-manana", "the explicit slug pins the row");
-  assert.equal(posted.enabled, false, "the toggle flips enabled");
-  assert.deepEqual(posted.weekdays, [1, 5], "the carried weekdays survive the edit");
+  // View or delete only: the details popup carries no edit path.
+  assert.equal(within(summary).queryByRole("button", { name: "Edit schedule" }), null);
 });
 
 test("two-click delete removes the schedule by slug", async () => {

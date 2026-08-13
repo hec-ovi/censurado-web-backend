@@ -108,9 +108,8 @@ export const api = {
   deleteSchedule: (slug) => del(`/schedules/${enc(slug)}`),
   // The automation-settings singleton (model lanes + per-stage routing), replaced
   // wholesale on save; the executor merges it over the pipeline's file config.
-  getAutomationSettings: () => get("/automation-settings"),
-  // The deliberate secrets read (admin session only): used by the key field's
-  // eye reveal, never on a routine load.
+  // The read includes the stored secrets (admin session only): the key field
+  // opens filled and masked.
   getAutomationSettingsSecrets: () => get("/automation-settings?include_secrets=true"),
   putAutomationSettings: (settings) => put("/automation-settings", { settings }),
   // The executor's heartbeat (read-only from the panel; the executor writes it).
