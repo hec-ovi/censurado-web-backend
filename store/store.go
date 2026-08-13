@@ -507,6 +507,19 @@ type ScheduleStore interface {
 	RecordScheduleRun(ctx context.Context, slug string, run ScheduleRun) (Schedule, error)
 }
 
+// AutomationSettingsStore is the single GLOBAL automation-settings blob: the model
+// lanes and per-stage routing the panel's Automation tab edits and the schedule
+// executor merges over the pipeline's file config before each firing. Like
+// RecomendadoStore it is a singleton, not a keyed registry; the value is an opaque
+// JSON object whose shape the automation boxes own (the backend only persists it).
+type AutomationSettingsStore interface {
+	// GetAutomationSettings returns the stored settings object, or an empty map
+	// when none has been set yet.
+	GetAutomationSettings(ctx context.Context) (map[string]any, error)
+	// SetAutomationSettings replaces the settings object wholesale.
+	SetAutomationSettings(ctx context.Context, settings map[string]any) error
+}
+
 // SourceStore is the managed-source registry. It is a separate concern from the
 // article Repository (like the author, topic, and portada registries) so the article
 // contract stays focused even though one store implements them all. Writes go through

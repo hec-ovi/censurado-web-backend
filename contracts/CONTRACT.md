@@ -84,6 +84,10 @@ whole set is frozen so an internal store change cannot silently break Layer 1's 
   the source AND detaches it from every author (removes its `author_sources` rows) in one transaction.
 - `SubmissionLog`: FindSubmission, RecordSubmission, ListSubmissions (audit/idempotency, not read by
   the generator).
+- `AutomationSettingsStore`: GetAutomationSettings, SetAutomationSettings (a singleton opaque JSON
+  object, like RecomendadoStore: the model lanes and per-stage routing the panel's Automation tab
+  edits and the schedule executor merges over the pipeline's file config; the backend only persists
+  it and the generator never touches it).
 - `ScheduleStore`: UpsertSchedule, ScheduleBySlug, ListSchedules, DeleteSchedule, RecordScheduleRun
   (the operator-owned batch-run schedule registry; the panel and the automation executor consume it
   over Seam B, the generator never touches it). The runs strip (newest first, capped at
@@ -188,6 +192,7 @@ in `/articles:batch` is a literal path byte, no collision.
 | GET | `/topics` | `{topics:[{slug,label,description,metadata,deleted,created_at,updated_at}]}`. |
 | GET | `/portadas` | `{portadas:[{date,entries:[{slug,role}],recomendado,deleted,created_at,updated_at}]}`. |
 | GET | `/sources` | `{sources:[{slug,domain,homepage,description,feed_urls,feed_type,language,ownership_group,lean,enabled,status,last_checked,last_ok,metadata,deleted,created_at,updated_at}]}`. `?include_deleted=true`. |
+| GET | `/automation-settings` | `{settings:{...}}`: the single global automation-settings object ({} when never set). The shape inside is owned by the automation boxes (panel form + executor merge), not by this contract. |
 | GET | `/schedules` | `{schedules:[{slug,name,cadence,times,weekdays,monthdays,mode,authors,enabled,runs,metadata,deleted,created_at,updated_at}]}`. `cadence` is `daily\|weekly\|monthly`; `times` are canonical (deduped, sorted) `HH:MM` wall-clock fire times in the executor's local timezone; `weekdays` (0=Sunday..6) narrow a weekly cadence and `monthdays` (1..31) a monthly one; `mode` is `preview\|auto`; `runs` is the recent-run strip, newest first, capped at 20, each `{run_id,status,detail,started_at,finished_at}` with status `running\|ok\|failed`. `?include_deleted=true`. |
 | GET | `/frontend-text` | `{scope, lang, entries:[{key,lang,value,metadata,deleted,created_at,updated_at}]}`. The reader-facing site string catalog for `?lang` (default `en`); `?include_deleted=true`. |
 | GET | `/panel-text` | Same shape for the operator admin panel string catalog. |
@@ -220,6 +225,7 @@ edit/delete.
 | POST | `/schedules` | `{name*, slug?, cadence?, times*, weekdays?, monthdays?, mode?, authors?, enabled?, metadata?}` (upsert, keyed on slug; `slug` defaults to the slugified name; schema [schedule.schema.json](schedule.schema.json)). `cadence` defaults to `daily` and `mode` to `preview`; `times` must be valid `HH:MM` entries (deduped and sorted into canonical form); a weekly cadence needs at least one weekday (0=Sunday..6), a monthly one at least one monthday (1..31). The upsert never touches the runs strip. | 200 (400 on missing name / bad cadence, mode, time, or day) |
 | DELETE | `/schedules/{slug}` | | 204 (404 on absent slug) |
 | POST | `/schedules/{slug}/runs` | `{run_id*, status*, detail?, started_at?, finished_at?}` with status `running\|ok\|failed`: record one firing on the recent-run strip. A repeated `run_id` replaces its entry in place (the executor posts `running` at fire time and the outcome at finish); the strip keeps the newest 20. | 200 the updated schedule (400 bad status/run_id, 404 absent slug) |
+| PUT | `/automation-settings` | `{settings*: {...}}` (replaced wholesale, 64 KiB cap) | 200 echoes (400 missing settings) |
 | POST | `/frontend-text` | `{key*, lang?, value, metadata?}` (upsert one reader-facing UI string; `lang` defaults to `en`) | 200 (400 on missing key) |
 | POST | `/panel-text` | `{key*, lang?, value, metadata?}` (upsert one operator-panel UI string) | 200 (400 on missing key) |
 | POST | `/editorial-text` | `{key*, lang?, value, metadata?}` (upsert one per-language editorial-config row; `lang` defaults to `en`) | 200 (400 on missing key) |

@@ -203,6 +203,55 @@
   min-height: 0;
 }
 
+/* --- models section ------------------------------------------------------ */
+
+.models-section {
+  margin-top: 1.6rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.models-help {
+  font-size: 0.85rem;
+  max-width: 60rem;
+}
+
+.models-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.9rem;
+}
+
+.models-lane {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.models-lane h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.models-stages td,
+.models-stages th {
+  vertical-align: middle;
+}
+
+.models-stages select,
+.models-stages input {
+  width: 100%;
+  min-width: 9rem;
+}
+
+.models-actions {
+  justify-content: flex-end;
+}
+
 @media (max-width: 46rem) {
   .automation-head {
     flex-wrap: wrap;

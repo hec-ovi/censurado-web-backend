@@ -1,6 +1,7 @@
 import { el, clear, field, help } from "./el.js";
 import { TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
+import { ModelsSection } from "./modelsSection.js";
 import { WEEKDAY_SHORT, nextRun, cadenceDays, formatWhen, validateSchedule } from "../schedule.js";
 
 // The Automation tab: the batch-run schedule manager. A schedule tells the
@@ -30,6 +31,7 @@ const RUN_STATE = { ok: "done", failed: "failed", running: "running" };
 export function AutomationPanel({ api, onChanged } = {}) {
   let schedules = [];
   let authors = [];
+  const models = ModelsSection({ api });
 
   const listEl = el("div", { class: "automation-list article-table-host scroll-pane" });
   const runsEl = el("div", { class: "automation-runs" });
@@ -47,6 +49,7 @@ export function AutomationPanel({ api, onChanged } = {}) {
     listStatus,
     el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
     runsEl,
+    models.element,
   ]));
 
   async function reload() {
@@ -59,6 +62,7 @@ export function AutomationPanel({ api, onChanged } = {}) {
       authors = (authorData && authorData.authors) || [];
       renderTable();
       renderRuns();
+      await models.reload();
     } catch (err) {
       clear(listEl);
       listEl.append(el("p", { class: "error", role: "alert" }, t("Could not load schedules: {msg}", { msg: err.message })));

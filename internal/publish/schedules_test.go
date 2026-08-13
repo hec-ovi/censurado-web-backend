@@ -147,6 +147,43 @@ func TestSchedule_Validation(t *testing.T) {
 	}
 }
 
+func TestAutomationSettings_RoundTripAndScope(t *testing.T) {
+	srv := newOperatorServer(t)
+	op := "ak_op." + opSecret
+	agent := "ak_ada." + adaSecret
+
+	// Never set: an empty object, not a null.
+	var got struct {
+		Settings map[string]any `json:"settings"`
+	}
+	decodeBody(t, getAuth(t, srv, op, "/automation-settings"), &got)
+	if got.Settings == nil || len(got.Settings) != 0 {
+		t.Errorf("unset settings = %v, want {}", got.Settings)
+	}
+
+	// PUT replaces wholesale; the response echoes; GET round-trips.
+	body := `{"settings":{"lanes":{"openrouter":{"model":"deepseek/deepseek-chat"}},"stages":{"evaluate":{"lane":"openrouter"}}}}`
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-settings", body); rec.Code != http.StatusOK {
+		t.Fatalf("PUT settings: %d (%s)", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, getAuth(t, srv, op, "/automation-settings"), &got)
+	lanes, _ := got.Settings["lanes"].(map[string]any)
+	if _, ok := lanes["openrouter"]; !ok {
+		t.Errorf("settings did not round-trip: %v", got.Settings)
+	}
+
+	// A missing settings object is a 400; an agent key cannot write.
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-settings", `{}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("PUT without settings: %d, want 400", rec.Code)
+	}
+	if rec := doReq(t, srv, http.MethodPut, agent, "/automation-settings", body); rec.Code != http.StatusForbidden {
+		t.Errorf("agent PUT settings: %d, want 403", rec.Code)
+	}
+	if rec := getAuth(t, srv, agent, "/automation-settings"); rec.Code != http.StatusOK {
+		t.Errorf("agent GET settings: %d, want 200 (the executor may read on any key)", rec.Code)
+	}
+}
+
 func TestSchedule_AgentKeyCannotMutate(t *testing.T) {
 	srv := newOperatorServer(t)
 	agent := "ak_ada." + adaSecret

@@ -22,6 +22,7 @@ type ReadStore interface {
 	store.RecomendadoStore
 	store.SourceStore
 	store.ScheduleStore
+	store.AutomationSettingsStore
 	store.TextStore
 }
 

@@ -186,6 +186,17 @@ CREATE TABLE IF NOT EXISTS schedules (
   updated_at TEXT NOT NULL
 ) STRICT;
 
+-- automation_settings is the single GLOBAL automation-settings blob: the model lanes
+-- and per-stage routing the panel's Automation tab edits and the schedule executor
+-- merges over the pipeline's file config. A singleton like recomendado (id = 1,
+-- enforced by the CHECK); value is an opaque JSON object owned by the automation
+-- boxes, and updated_at is whole-second RFC3339 TEXT like the other registries.
+CREATE TABLE IF NOT EXISTS automation_settings (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  value      TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT ''
+) STRICT;
+
 -- frontend_text and panel_text are the UI-string catalogs: every human-facing label
 -- the public site (frontend_text) and the operator admin panel (panel_text) render,
 -- stored as (key, lang) pairs so the product is translated by adding rows, not by

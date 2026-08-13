@@ -106,6 +106,10 @@ export const api = {
   listSchedules: () => get("/schedules"),
   upsertSchedule: (body) => post("/schedules", body),
   deleteSchedule: (slug) => del(`/schedules/${enc(slug)}`),
+  // The automation-settings singleton (model lanes + per-stage routing), replaced
+  // wholesale on save; the executor merges it over the pipeline's file config.
+  getAutomationSettings: () => get("/automation-settings"),
+  putAutomationSettings: (settings) => put("/automation-settings", { settings }),
 
   // --- Articles --------------------------------------------------------
   listArticleDays: (params = {}) => get("/articles:days" + query(params)),

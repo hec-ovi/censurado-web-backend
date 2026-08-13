@@ -44,6 +44,7 @@ function stubLists({ schedules = [], authors = [] } = {}) {
   server.use(
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules })),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors })),
+    http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
   );
 }
 
@@ -202,6 +203,7 @@ test("two-click delete removes the schedule by slug", async () => {
   server.use(
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: removed ? [] : [schedule()] })),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
+    http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
     http.delete(`${ORIGIN}/schedules/edicion-manana`, () => {
       deleted = "edicion-manana";
       removed = true;

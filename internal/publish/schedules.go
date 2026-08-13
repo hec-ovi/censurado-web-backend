@@ -98,6 +98,49 @@ func (rh *ReadHandler) ServeSchedules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// automationSettingsResponse wraps the opaque settings object; the shape inside is
+// owned by the automation boxes (the panel form and the executor's config merge).
+type automationSettingsResponse struct {
+	Settings map[string]any `json:"settings"`
+}
+
+// ServeAutomationSettings answers GET /automation-settings with the single global
+// automation-settings object ({} when never set).
+func (rh *ReadHandler) ServeAutomationSettings(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	settings, err := rh.store.GetAutomationSettings(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: coalesceMeta(settings)})
+}
+
+// ServePutAutomationSettings answers PUT /automation-settings: replace the settings
+// object wholesale. The body is `{"settings": {...}}`, capped at 64 KiB so a runaway
+// blob cannot bloat the singleton row.
+func (oh *OperatorHandler) ServePutAutomationSettings(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var in automationSettingsResponse
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	if in.Settings == nil {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "settings object is required"})
+		return
+	}
+	if err := oh.store.SetAutomationSettings(r.Context(), in.Settings); err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: in.Settings})
+}
+
 // scheduleInput is the POST /schedules body. slug is optional: when blank it is
 // derived from the name. enabled is a pointer so an omitted flag defaults to true.
 type scheduleInput struct {

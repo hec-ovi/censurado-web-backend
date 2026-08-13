@@ -281,3 +281,43 @@ func RunScheduleStore(t *testing.T, ss store.ScheduleStore) {
 		}
 	})
 }
+
+// RunAutomationSettingsStore executes the AutomationSettingsStore conformance suite
+// against as, which must back an empty automation_settings table: an unset singleton
+// reads as an empty map, and Set replaces the object wholesale.
+func RunAutomationSettingsStore(t *testing.T, as store.AutomationSettingsStore) {
+	ctx := context.Background()
+
+	t.Run("unset settings read as an empty map", func(t *testing.T) {
+		got, err := as.GetAutomationSettings(ctx)
+		if err != nil {
+			t.Fatalf("GetAutomationSettings: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("got = %v, want empty map", got)
+		}
+	})
+
+	t.Run("Set then Get round-trips, and a second Set replaces wholesale", func(t *testing.T) {
+		first := map[string]any{"lanes": map[string]any{"local": map[string]any{"model": "qwen"}}}
+		if err := as.SetAutomationSettings(ctx, first); err != nil {
+			t.Fatalf("SetAutomationSettings: %v", err)
+		}
+		got, err := as.GetAutomationSettings(ctx)
+		if err != nil {
+			t.Fatalf("GetAutomationSettings: %v", err)
+		}
+		lanes, _ := got["lanes"].(map[string]any)
+		local, _ := lanes["local"].(map[string]any)
+		if local["model"] != "qwen" {
+			t.Errorf("round-trip lost the nested value: %v", got)
+		}
+		if err := as.SetAutomationSettings(ctx, map[string]any{"stages": map[string]any{}}); err != nil {
+			t.Fatalf("SetAutomationSettings replace: %v", err)
+		}
+		got, _ = as.GetAutomationSettings(ctx)
+		if _, still := got["lanes"]; still {
+			t.Errorf("replace kept a stale key: %v", got)
+		}
+	})
+}

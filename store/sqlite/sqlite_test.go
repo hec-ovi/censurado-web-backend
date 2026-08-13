@@ -134,6 +134,17 @@ func TestSQLiteScheduleStore(t *testing.T) {
 	storetest.RunScheduleStore(t, repo)
 }
 
+func TestSQLiteAutomationSettings(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "automation.db")
+	repo, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	storetest.RunAutomationSettingsStore(t, repo)
+}
+
 func TestSQLiteBrainDataMigration(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration.db")
 	repo, err := sqlite.Open(dbPath)

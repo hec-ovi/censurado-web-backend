@@ -30,6 +30,7 @@ function baseHandlers(extra = []) {
     http.get(`${ORIGIN}/portadas`, () => HttpResponse.json({ portadas: [] })),
     http.get(`${ORIGIN}/recomendado`, () => HttpResponse.json({ slugs: [] })),
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: [] })),
+    http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
   ];
 }
 

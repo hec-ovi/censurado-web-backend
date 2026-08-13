@@ -20,6 +20,38 @@ import (
 
 const scheduleCols = "id,slug,name,cadence,times,weekdays,monthdays,mode,authors,enabled,runs,metadata,deleted_at,created_at,updated_at"
 
+// GetAutomationSettings returns the single global automation-settings object, or an
+// empty map when none has been set (the table holds at most the id=1 row).
+func (s *Store) GetAutomationSettings(ctx context.Context) (map[string]any, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM automation_settings WHERE id = 1`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalMeta(raw)
+}
+
+// SetAutomationSettings replaces the single global settings object wholesale (the
+// id=1 row) and stamps updated_at. It is an upsert, so the first call creates the
+// row and later calls overwrite it.
+func (s *Store) SetAutomationSettings(ctx context.Context, settings map[string]any) error {
+	blob, err := marshalMeta(settings)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Truncate(time.Second).Format(timeLayout)
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO automation_settings (id, value, updated_at) VALUES (1, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		blob, now); err != nil {
+		return fmt.Errorf("set automation settings: %w", err)
+	}
+	return nil
+}
+
 // scheduleRunRow is the on-disk JSON shape of a store.ScheduleRun.
 type scheduleRunRow struct {
 	RunID      string `json:"run_id"`

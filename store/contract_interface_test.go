@@ -33,6 +33,8 @@ func TestContract_StoreInterfaces(t *testing.T) {
 			[]string{"DeleteSource", "ListSources", "SourceBySlug", "UpsertSource"}},
 		{"ScheduleStore", reflect.TypeOf((*store.ScheduleStore)(nil)).Elem(),
 			[]string{"DeleteSchedule", "ListSchedules", "RecordScheduleRun", "ScheduleBySlug", "UpsertSchedule"}},
+		{"AutomationSettingsStore", reflect.TypeOf((*store.AutomationSettingsStore)(nil)).Elem(),
+			[]string{"GetAutomationSettings", "SetAutomationSettings"}},
 		{"TextStore", reflect.TypeOf((*store.TextStore)(nil)).Elem(),
 			[]string{"DeleteText", "ListText", "Text", "UpsertText"}},
 	}
