@@ -197,6 +197,16 @@ CREATE TABLE IF NOT EXISTS automation_settings (
   updated_at TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
+-- automation_status is the executor's heartbeat, the settings' sibling singleton:
+-- written by the executor each poll tick (clock, lane health, run in flight, queue)
+-- and read by the panel. Separate row from automation_settings because the two have
+-- different writers (panel vs executor), so neither can clobber the other.
+CREATE TABLE IF NOT EXISTS automation_status (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  value      TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT ''
+) STRICT;
+
 -- frontend_text and panel_text are the UI-string catalogs: every human-facing label
 -- the public site (frontend_text) and the operator admin panel (panel_text) render,
 -- stored as (key, lang) pairs so the product is translated by adding rows, not by

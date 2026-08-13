@@ -23,6 +23,7 @@ type ReadStore interface {
 	store.SourceStore
 	store.ScheduleStore
 	store.AutomationSettingsStore
+	store.AutomationStatusStore
 	store.TextStore
 }
 

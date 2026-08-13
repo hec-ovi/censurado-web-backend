@@ -110,6 +110,8 @@ export const api = {
   // wholesale on save; the executor merges it over the pipeline's file config.
   getAutomationSettings: () => get("/automation-settings"),
   putAutomationSettings: (settings) => put("/automation-settings", { settings }),
+  // The executor's heartbeat (read-only from the panel; the executor writes it).
+  getAutomationStatus: () => get("/automation-status"),
 
   // --- Articles --------------------------------------------------------
   listArticleDays: (params = {}) => get("/articles:days" + query(params)),

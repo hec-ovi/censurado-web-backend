@@ -31,6 +31,7 @@ function baseHandlers(extra = []) {
     http.get(`${ORIGIN}/recomendado`, () => HttpResponse.json({ slugs: [] })),
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: [] })),
     http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
+    http.get(`${ORIGIN}/automation-status`, () => HttpResponse.json({ settings: {} })),
   ];
 }
 

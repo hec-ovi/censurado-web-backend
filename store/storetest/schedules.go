@@ -298,6 +298,27 @@ func RunAutomationSettingsStore(t *testing.T, as store.AutomationSettingsStore) 
 		}
 	})
 
+	t.Run("the status sibling round-trips independently of the settings", func(t *testing.T) {
+		st, ok := as.(store.AutomationStatusStore)
+		if !ok {
+			t.Fatalf("implementation must also carry AutomationStatusStore")
+		}
+		if err := st.SetAutomationStatus(ctx, map[string]any{"llama_ok": true}); err != nil {
+			t.Fatalf("SetAutomationStatus: %v", err)
+		}
+		got, err := st.GetAutomationStatus(ctx)
+		if err != nil {
+			t.Fatalf("GetAutomationStatus: %v", err)
+		}
+		if got["llama_ok"] != true {
+			t.Errorf("status round-trip lost the value: %v", got)
+		}
+		settings, _ := as.GetAutomationSettings(ctx)
+		if len(settings) != 0 {
+			t.Errorf("writing status touched the settings singleton: %v", settings)
+		}
+	})
+
 	t.Run("Set then Get round-trips, and a second Set replaces wholesale", func(t *testing.T) {
 		first := map[string]any{"lanes": map[string]any{"local": map[string]any{"model": "qwen"}}}
 		if err := as.SetAutomationSettings(ctx, first); err != nil {

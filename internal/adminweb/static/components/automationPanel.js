@@ -1,55 +1,77 @@
 import { el, clear, field, help } from "./el.js";
 import { TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
+import { ClockIcon } from "./clockIcon.js";
 import { ModelsSection } from "./modelsSection.js";
-import { WEEKDAY_SHORT, nextRun, cadenceDays, formatWhen, validateSchedule } from "../schedule.js";
+import { MonthCalendar } from "./monthCalendar.js";
+import { TimeGridPicker } from "./timeGridPicker.js";
+import { nextRun, validateSchedule } from "../schedule.js";
 
-// The Automation tab: the batch-run schedule manager. A schedule tells the
-// executor (a compose service that runs whenever Docker runs) when to fire the
-// newsroom's edition batch: a cadence (daily/weekly/monthly), one or more HH:MM
-// wall-clock times per day, the batch mode, and an optional author subset.
+// The Automation tab, split in two halves:
+//   LEFT  - the schedule list: name, status, the next firing's month/day, the
+//           fire times as round clock icons, and a link to that month's page on
+//           the production site. Scrolls inside its own pane; empty cells stay
+//           empty. Clicking a row opens the fullscreen calendar editor.
+//   RIGHT - the operational side: the live status card (RUNNING while a batch
+//           is in flight, the queue behind it, executor + model health from the
+//           executor's heartbeat), the recent-runs strip, and the Models setup.
 //
-// The tab is a list-first TABLE of schedules (name + enabled pill, cadence
-// summary, mode, computed next fire time, last outcome, two-click delete);
-// clicking a row opens the fullscreen editor dialog, and "New schedule" opens it
-// blank. Below the table, a recent-runs strip flattens the newest run records
-// across every schedule. Edits are FULL upserts (explicit slug so a rename of the
-// display name never forks a row) via api.upsertSchedule; the runs strip is
-// server-owned and an upsert never touches it.
+// The editor is calendar-shaped: a month grid to pick days (weekday header
+// toggles for weekly, day toggles for monthly) and an hour grid with a :00/:30
+// step for times. Edits are FULL upserts (explicit slug) via api.upsertSchedule;
+// the runs strip and the status heartbeat are server-owned.
+//
+// Close firings QUEUE on the executor: a schedule due while another batch runs
+// shows "queued" on its strip and fires as soon as the lock frees.
 
 const AUTOMATION_HELP =
   "A schedule fires the newsroom's edition batch on its days at each listed time (the server's local " +
   "wall clock). Preview holds every article for approval; auto publishes as soon as the gate passes. " +
-  "The executor runs while Docker runs: times missed while it is off are skipped, never replayed.";
+  "The executor runs while Docker runs: firings that come due while a batch is in flight queue behind " +
+  "it, and times missed while the executor is off are skipped, never replayed.";
 
 const AUTHORS_HELP =
   "Leave every author unchecked to run the whole newsroom: each author with a beat and linked sources " +
   "pitches candidates. Check authors to restrict the edition to them.";
 
-const RUN_STATE = { ok: "done", failed: "failed", running: "running" };
+// The public production origin the per-row link points at (its /YYYY/MM/ month
+// archive). The panel itself stays localhost-only; this is only an href.
+const PRODUCTION_BASE = "https://elcensuradoweb.com";
 
-export function AutomationPanel({ api, onChanged } = {}) {
+const RUN_STATE = { queued: "ready", running: "running", ok: "done", failed: "failed" };
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   let schedules = [];
   let authors = [];
+  let liveStatus = {};
   const models = ModelsSection({ api });
 
-  const listEl = el("div", { class: "automation-list article-table-host scroll-pane" });
+  const listEl = el("div", { class: "automation-list article-table-host scroll-pane automation-scroll" });
   const runsEl = el("div", { class: "automation-runs" });
+  const statusEl = el("div", { class: "automation-status", role: "status", "aria-label": t("Executor status") });
   const listStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
   const newBtn = el("button", { type: "button", class: "automation-new" }, t("New schedule"));
   newBtn.addEventListener("click", () => openEditor(null));
 
   const element = el("div", { class: "automation workspace-section" }, el("section", { class: "panel panel-fill automation-panel" }, [
-    el("div", { class: "panel-head automation-head" }, [
-      el("h2", {}, t("Schedules")),
-      help(t(AUTOMATION_HELP)),
-      el("div", { class: "automation-head-actions" }, [newBtn]),
+    el("div", { class: "automation-split" }, [
+      el("div", { class: "automation-half automation-schedules" }, [
+        el("div", { class: "panel-head automation-head" }, [
+          el("h2", {}, t("Schedules")),
+          help(t(AUTOMATION_HELP)),
+          el("div", { class: "automation-head-actions" }, [newBtn]),
+        ]),
+        listEl,
+        listStatus,
+      ]),
+      el("div", { class: "automation-half automation-ops" }, [
+        statusEl,
+        el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
+        runsEl,
+        models.element,
+      ]),
     ]),
-    listEl,
-    listStatus,
-    el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
-    runsEl,
-    models.element,
   ]));
 
   async function reload() {
@@ -57,17 +79,81 @@ export function AutomationPanel({ api, onChanged } = {}) {
     listEl.append(el("p", { class: "muted" }, t("Loading schedules...")));
     clearStatus(listStatus);
     try {
-      const [scheduleData, authorData] = await Promise.all([api.listSchedules(), api.listAuthors()]);
+      const [scheduleData, authorData, statusData] = await Promise.all([
+        api.listSchedules(), api.listAuthors(), api.getAutomationStatus(),
+      ]);
       schedules = (scheduleData && scheduleData.schedules) || [];
       authors = (authorData && authorData.authors) || [];
+      liveStatus = (statusData && statusData.settings) || {};
       renderTable();
       renderRuns();
+      renderStatus();
       await models.reload();
     } catch (err) {
       clear(listEl);
       listEl.append(el("p", { class: "error", role: "alert" }, t("Could not load schedules: {msg}", { msg: err.message })));
     }
   }
+
+  // The light refresh the poll timer runs: schedules + heartbeat only, so an
+  // open editor or a half-typed Models form is never touched.
+  async function refresh() {
+    try {
+      const [scheduleData, statusData] = await Promise.all([api.listSchedules(), api.getAutomationStatus()]);
+      schedules = (scheduleData && scheduleData.schedules) || [];
+      liveStatus = (statusData && statusData.settings) || {};
+      renderTable();
+      renderRuns();
+      renderStatus();
+    } catch {
+      /* transient; the next poll retries */
+    }
+  }
+  if (refreshMs > 0) {
+    const timer = setInterval(refresh, refreshMs);
+    // Under Node (jsdom tests) the timer must not hold the event loop open;
+    // browsers return a number and ignore this.
+    if (typeof timer === "object" && typeof timer.unref === "function") timer.unref();
+  }
+
+  // ---- the live status card -------------------------------------------------
+
+  function renderStatus() {
+    clear(statusEl);
+    const running = liveStatus.running
+      || (schedules.some((s) => (s.runs || [])[0]?.status === "running")
+        ? (schedules.find((s) => (s.runs || [])[0]?.status === "running").runs[0].run_id) : null);
+    const queued = liveStatus.queued || [];
+    const beatAt = liveStatus.at ? new Date(liveStatus.at) : null;
+    const executorUp = beatAt !== null && Date.now() - beatAt.getTime() < 180000;
+
+    statusEl.append(el("div", { class: "automation-status-main", dataset: { running: running ? "true" : "false" } },
+      running
+        ? [el("span", { class: "status", dataset: { state: "running" } }, t("RUNNING")),
+           el("span", { class: "automation-status-run" }, running)]
+        : [el("span", { class: "status", dataset: { state: executorUp ? "active" : "offline" } },
+             executorUp ? t("Idle") : t("Executor offline")),
+           queued.length === 0 ? el("span", { class: "muted" }, t("No batch in flight.")) : null]));
+    if (queued.length) {
+      statusEl.append(el("div", { class: "automation-status-queue" }, [
+        el("span", { class: "muted" }, t("Queued:")),
+        ...queued.map((id) => el("span", { class: "badge" }, id)),
+      ]));
+    }
+    statusEl.append(el("div", { class: "automation-status-health" }, [
+      healthDot(t("Executor"), executorUp),
+      healthDot(t("Model (llama.cpp)"), liveStatus.llama_ok === true),
+    ]));
+  }
+
+  function healthDot(label, ok) {
+    return el("span", { class: "automation-health" }, [
+      el("span", { class: "status", dataset: { state: ok ? "online" : "offline" } }, ok ? t("healthy") : t("down")),
+      el("span", { class: "automation-health-label" }, label),
+    ]);
+  }
+
+  // ---- the schedule table ---------------------------------------------------
 
   function renderTable() {
     clear(listEl);
@@ -90,10 +176,11 @@ export function AutomationPanel({ api, onChanged } = {}) {
       el("table", { class: "automation-table article-table" }, [
         el("thead", {}, el("tr", {}, [
           el("th", {}, t("Schedule")),
-          el("th", {}, t("Cadence")),
-          el("th", {}, t("Mode")),
-          el("th", {}, t("Next run")),
-          el("th", {}, t("Last run")),
+          el("th", {}, t("Status")),
+          el("th", {}, t("Month")),
+          el("th", {}, t("Day")),
+          el("th", {}, t("Time")),
+          el("th", {}, t("Prod")),
           el("th", { class: "automation-delete-head" }, t("Delete")),
         ])),
         tbody,
@@ -102,36 +189,44 @@ export function AutomationPanel({ api, onChanged } = {}) {
   }
 
   function row(schedule, index, now) {
-    const enabled = !!schedule.enabled;
     const nameCell = el("td", {}, el("div", { class: "automation-name" }, [
       el("span", { class: "automation-title" }, schedule.name || schedule.slug),
-      el("span", { class: "status", dataset: { state: enabled ? "active" : "offline" } }, enabled ? t("Active") : t("Paused")),
+      el("span", { class: "muted automation-mode-word" }, schedule.mode === "auto" ? t("auto") : t("preview")),
     ]));
 
-    const days = cadenceDays(schedule);
-    const cadenceCell = el("td", {}, el("div", { class: "automation-cadence" }, [
-      el("span", { class: "automation-cadence-word" }, cadenceLabel(schedule.cadence)),
-      days ? el("span", { class: "automation-cadence-days" }, days) : null,
-      el("span", { class: "automation-cadence-times" }, (schedule.times || []).join("  ")),
+    const newest = (schedule.runs || [])[0];
+    let state = schedule.enabled ? "active" : "offline";
+    let stateLabel = schedule.enabled ? t("Active") : t("Paused");
+    if (newest && (newest.status === "running" || newest.status === "queued")) {
+      state = RUN_STATE[newest.status];
+      stateLabel = newest.status === "running" ? t("RUNNING") : t("Queued");
+    }
+    const statusCell = el("td", {}, el("span", { class: "status", dataset: { state } }, stateLabel));
+
+    const next = schedule.enabled ? nextRun(schedule, now) : null;
+    const monthCell = el("td", {}, next ? MONTH_SHORT[next.getMonth()] : "");
+    const dayCell = el("td", {}, next ? String(next.getDate()) : "");
+
+    const times = [...(schedule.times || [])].sort();
+    const shown = times.slice(0, 4);
+    const timeCell = el("td", {}, el("span", { class: "automation-clocks" }, [
+      ...shown.map((time) => ClockIcon(time)),
+      times.length > shown.length ? el("span", { class: "muted" }, `+${times.length - shown.length}`) : null,
     ]));
 
-    const modeCell = el("td", {}, el("span", { class: "badge automation-mode", dataset: { mode: schedule.mode } }, modeLabel(schedule.mode)));
-
-    const next = nextRun(schedule, now);
-    const nextCell = el("td", {}, el("span", { class: "automation-next" },
-      enabled ? (next ? formatWhen(next, now) : t("never")) : t("Paused")));
-
-    const last = (schedule.runs || [])[0];
-    const lastCell = el("td", {}, last
-      ? el("div", { class: "automation-last" }, [
-          el("span", { class: "status", dataset: { state: RUN_STATE[last.status] || "running" } }, runLabel(last.status)),
-          last.detail ? el("span", { class: "automation-last-detail" }, last.detail) : null,
-        ])
-      : el("span", { class: "muted" }, t("never ran")));
+    // The production month page this schedule's next (or last) firing lands on.
+    const linkDate = next || (newest && newest.started_at ? new Date(newest.started_at) : null);
+    const prodCell = el("td", {}, linkDate
+      ? el("a", {
+          class: "automation-prod-link",
+          href: `${PRODUCTION_BASE}/${linkDate.getFullYear()}/${String(linkDate.getMonth() + 1).padStart(2, "0")}/`,
+          target: "_blank", rel: "noopener",
+          onClick: (event) => event.stopPropagation(),
+        }, t("open"))
+      : "");
 
     const cardStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
-    // Two-click delete instead of window.confirm (a no-op under jsdom): the first
-    // click arms the button, the second performs the delete.
+    // Two-click delete instead of window.confirm (a no-op under jsdom).
     let armed = false;
     const deleteBtn = el("button", { type: "button", class: "source-trash", "aria-label": t("Delete") }, TrashIcon("article-trash-icon"));
     deleteBtn.addEventListener("click", (event) => {
@@ -149,7 +244,7 @@ export function AutomationPanel({ api, onChanged } = {}) {
     const actionsCell = el("td", {}, [el("div", { class: "source-actions source-actions--stack" }, [deleteBtn]), cardStatus]);
 
     const tableRow = el("tr", { class: "automation-row article-row", tabindex: "0", dataset: { id: schedule.slug, parity: index % 2 === 0 ? "even" : "odd" } }, [
-      nameCell, cadenceCell, modeCell, nextCell, lastCell, actionsCell,
+      nameCell, statusCell, monthCell, dayCell, timeCell, prodCell, actionsCell,
     ]);
     tableRow.addEventListener("click", () => openEditor(schedule));
     tableRow.addEventListener("keydown", (event) => {
@@ -160,8 +255,7 @@ export function AutomationPanel({ api, onChanged } = {}) {
     return tableRow;
   }
 
-  // The recent-runs strip: the newest run records across every schedule, newest
-  // first (started_at is RFC3339, so the string compare orders correctly).
+  // The recent-runs strip: the newest run records across every schedule.
   function renderRuns() {
     clear(runsEl);
     const all = [];
@@ -170,7 +264,7 @@ export function AutomationPanel({ api, onChanged } = {}) {
         all.push({ schedule: schedule.name || schedule.slug, ...run });
       }
     }
-    all.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
+    all.sort((a, b) => String(b.started_at || b.run_id).localeCompare(String(a.started_at || a.run_id)));
     const latest = all.slice(0, 8);
     if (!latest.length) {
       runsEl.append(el("p", { class: "muted empty-state" }, t("No runs recorded yet.")));
@@ -185,6 +279,8 @@ export function AutomationPanel({ api, onChanged } = {}) {
       ]));
     }
   }
+
+  // ---- the calendar editor --------------------------------------------------
 
   function openEditor(schedule) {
     let dialog = null;
@@ -227,12 +323,14 @@ export function AutomationPanel({ api, onChanged } = {}) {
     const enabled = el("input", { type: "checkbox", id: `sch-${id}-enabled` });
     enabled.checked = isNew ? true : !!schedule.enabled;
 
-    // --- times: a time input + Add button feeding a chip list -----------------
-    const timeInput = el("input", { type: "time", id: `sch-${id}-time` });
-    const addTime = el("button", { type: "button", class: "secondary automation-add-time" }, t("Add time"));
+    // Days: the month calendar; its meaning follows the cadence.
+    const calendar = MonthCalendar({ weekdays: draft.weekdays, monthdays: draft.monthdays });
+    calendar.setMode(cadence.value);
+    cadence.addEventListener("change", () => calendar.setMode(cadence.value));
+
+    // Times: the hour grid (30-minute step) feeding the chip list.
     const chips = el("div", { class: "time-chips", role: "list", "aria-label": t("Times") });
     const editStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
-
     function renderChips() {
       clear(chips);
       if (!draft.times.length) {
@@ -245,49 +343,22 @@ export function AutomationPanel({ api, onChanged } = {}) {
           draft.times = draft.times.filter((x) => x !== time);
           renderChips();
         });
-        chips.append(el("span", { class: "time-chip", role: "listitem" }, [time, remove]));
+        chips.append(el("span", { class: "time-chip", role: "listitem" }, [ClockIcon(time, { size: 14 }), time, remove]));
       }
     }
-    function addTimeValue() {
-      const value = timeInput.value;
-      if (!value) return;
-      const hhmm = value.slice(0, 5);
-      if (draft.times.includes(hhmm)) {
-        setStatus(editStatus, "error", t("The time {time} is already on the list.", { time: hhmm }));
-        return;
-      }
-      draft.times.push(hhmm);
-      timeInput.value = "";
-      clearStatus(editStatus);
-      renderChips();
-    }
-    addTime.addEventListener("click", addTimeValue);
-    timeInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      addTimeValue();
+    const picker = TimeGridPicker({
+      onAdd: (hhmm) => {
+        if (draft.times.includes(hhmm)) {
+          setStatus(editStatus, "error", t("The time {time} is already on the list.", { time: hhmm }));
+          return;
+        }
+        draft.times.push(hhmm);
+        clearStatus(editStatus);
+        renderChips();
+      },
     });
     renderChips();
 
-    // --- cadence day pickers: one grid per cadence, only the relevant one shown --
-    const weekdayGrid = el("div", { class: "day-grid day-grid-week", role: "group", "aria-label": t("Weekdays") },
-      WEEKDAY_SHORT.map((label, day) => dayToggle(label, day, draft.weekdays)));
-    const monthdayGrid = el("div", { class: "day-grid day-grid-month", role: "group", "aria-label": t("Days of the month") },
-      Array.from({ length: 31 }, (_, i) => dayToggle(String(i + 1), i + 1, draft.monthdays)));
-    const weekdayField = el("div", { class: "field automation-days-field" }, [
-      el("label", {}, t("On weekdays")), weekdayGrid,
-    ]);
-    const monthdayField = el("div", { class: "field automation-days-field" }, [
-      el("label", {}, t("On days of the month")), monthdayGrid,
-    ]);
-    function syncCadence() {
-      weekdayField.hidden = cadence.value !== "weekly";
-      monthdayField.hidden = cadence.value !== "monthly";
-    }
-    cadence.addEventListener("change", syncCadence);
-    syncCadence();
-
-    // --- authors: checkbox per author; none checked = the whole newsroom ---------
     const authorBoxes = authors.map((author) => {
       const box = el("input", { type: "checkbox", id: `sch-${id}-author-${author.handle}` });
       box.checked = draft.authors.has(author.handle);
@@ -305,23 +376,22 @@ export function AutomationPanel({ api, onChanged } = {}) {
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
 
     const editForm = el("form", { class: "source-edit source-edit-full automation-edit" }, [
-      el("div", { class: "source-edit-grid automation-edit-grid" }, [
-        field(t("Name"), name, `sch-${id}-name`),
-        field(t("Cadence"), cadence, `sch-${id}-cadence`),
-        el("div", { class: "field" }, [
-          el("label", { for: `sch-${id}-time` }, t("Times (several per day allowed)")),
-          el("div", { class: "automation-time-entry" }, [timeInput, addTime]),
-          chips,
+      el("div", { class: "automation-edit-grid" }, [
+        el("div", { class: "automation-edit-left" }, [
+          field(t("Name"), name, `sch-${id}-name`),
+          field(t("Cadence"), cadence, `sch-${id}-cadence`),
+          field(t("Mode"), mode, `sch-${id}-mode`),
+          el("div", { class: "field automation-authors-field" }, [
+            el("span", { class: "field-label" }, [el("label", {}, t("Authors")), help(t(AUTHORS_HELP))]),
+            el("div", { class: "automation-author-choices" },
+              authorBoxes.length ? authorBoxes : [el("span", { class: "muted" }, t("No authors registered yet."))]),
+          ]),
+          checkField(t("Enabled"), enabled, `sch-${id}-enabled`),
         ]),
-        weekdayField,
-        monthdayField,
-        field(t("Mode"), mode, `sch-${id}-mode`),
-        el("div", { class: "field automation-authors-field" }, [
-          el("span", { class: "field-label" }, [el("label", {}, t("Authors")), help(t(AUTHORS_HELP))]),
-          el("div", { class: "automation-author-choices" },
-            authorBoxes.length ? authorBoxes : [el("span", { class: "muted" }, t("No authors registered yet."))]),
+        el("div", { class: "automation-edit-right" }, [
+          el("div", { class: "field" }, [el("label", {}, t("Days")), calendar.element]),
+          el("div", { class: "field" }, [el("label", {}, t("Times (several per day allowed)")), picker.element, chips]),
         ]),
-        checkField(t("Enabled"), enabled, `sch-${id}-enabled`),
       ]),
       el("div", { class: "source-actions source-actions--editor" }, [cancel, save]),
       editStatus,
@@ -362,9 +432,6 @@ export function AutomationPanel({ api, onChanged } = {}) {
     return editForm;
   }
 
-  // Run a row action, then reload the table. On success the row is replaced by
-  // the fresh render; on failure the button re-enables and the row surfaces the
-  // backend's error.
   async function act(button, run, statusNode) {
     button.disabled = true;
     try {
@@ -380,35 +447,10 @@ export function AutomationPanel({ api, onChanged } = {}) {
   return { element, reload };
 }
 
-// One day-of-week / day-of-month toggle button. aria-pressed carries the state;
-// the Set is the single source of truth the submit reads.
-function dayToggle(label, value, set) {
-  const button = el("button", {
-    type: "button",
-    class: "day-toggle",
-    "aria-pressed": set.has(value) ? "true" : "false",
-  }, label);
-  button.addEventListener("click", () => {
-    if (set.has(value)) set.delete(value);
-    else set.add(value);
-    button.setAttribute("aria-pressed", set.has(value) ? "true" : "false");
-  });
-  return button;
-}
-
-function cadenceLabel(cadence) {
-  if (cadence === "weekly") return t("Weekly");
-  if (cadence === "monthly") return t("Monthly");
-  return t("Daily");
-}
-
-function modeLabel(mode) {
-  return mode === "auto" ? t("Auto") : t("Preview");
-}
-
 function runLabel(status) {
   if (status === "ok") return t("ok");
   if (status === "failed") return t("failed");
+  if (status === "queued") return t("queued");
   return t("running");
 }
 

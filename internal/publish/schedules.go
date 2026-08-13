@@ -19,7 +19,7 @@ import (
 var (
 	validCadences       = map[string]bool{"daily": true, "weekly": true, "monthly": true}
 	validScheduleModes  = map[string]bool{"preview": true, "auto": true}
-	validRunStatuses    = map[string]bool{"running": true, "ok": true, "failed": true}
+	validRunStatuses    = map[string]bool{"queued": true, "running": true, "ok": true, "failed": true}
 	scheduleTimePattern = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
 
@@ -135,6 +135,42 @@ func (oh *OperatorHandler) ServePutAutomationSettings(w http.ResponseWriter, r *
 		return
 	}
 	if err := oh.store.SetAutomationSettings(r.Context(), in.Settings); err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: in.Settings})
+}
+
+// ServeAutomationStatus answers GET /automation-status with the executor's last
+// heartbeat ({} when it never reported).
+func (rh *ReadHandler) ServeAutomationStatus(w http.ResponseWriter, r *http.Request) {
+	if !rh.authn(w, r) {
+		return
+	}
+	status, err := rh.store.GetAutomationStatus(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: coalesceMeta(status)})
+}
+
+// ServePutAutomationStatus answers PUT /automation-status: the executor's heartbeat,
+// replaced wholesale each tick. Same shape discipline as the settings.
+func (oh *OperatorHandler) ServePutAutomationStatus(w http.ResponseWriter, r *http.Request) {
+	if !oh.authz(w, r) {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var in automationSettingsResponse
+	if !decodeStrict(w, r, &in) {
+		return
+	}
+	if in.Settings == nil {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "settings object is required"})
+		return
+	}
+	if err := oh.store.SetAutomationStatus(r.Context(), in.Settings); err != nil {
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}

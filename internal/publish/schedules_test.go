@@ -77,7 +77,12 @@ func TestSchedule_Lifecycle(t *testing.T) {
 		t.Errorf("weekdays = %v, want deduped and sorted [1 5]", s.Weekdays)
 	}
 
-	// Run strip: "running" then the outcome under the same run id replaces in place.
+	// Run strip: "queued" then "running" then the outcome under the same run id
+	// replace in place (the executor's queue -> fire -> outcome protocol).
+	if rec := doReq(t, srv, http.MethodPost, op, "/schedules/edicion-de-la-manana/runs",
+		`{"run_id":"lote-1","status":"queued"}`); rec.Code != http.StatusOK {
+		t.Fatalf("record queued: %d (%s)", rec.Code, rec.Body.String())
+	}
 	if rec := doReq(t, srv, http.MethodPost, op, "/schedules/edicion-de-la-manana/runs",
 		`{"run_id":"lote-1","status":"running","started_at":"2026-08-13T07:30:00Z"}`); rec.Code != http.StatusOK {
 		t.Fatalf("record running: %d (%s)", rec.Code, rec.Body.String())
@@ -181,6 +186,21 @@ func TestAutomationSettings_RoundTripAndScope(t *testing.T) {
 	}
 	if rec := getAuth(t, srv, agent, "/automation-settings"); rec.Code != http.StatusOK {
 		t.Errorf("agent GET settings: %d, want 200 (the executor may read on any key)", rec.Code)
+	}
+
+	// The status sibling (the executor's heartbeat) round-trips independently,
+	// so the panel's settings and the executor's status never clobber each other.
+	hb := `{"settings":{"at":"2026-08-13T16:00:00-03:00","llama_ok":true,"running":null,"queued":[]}}`
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-status", hb); rec.Code != http.StatusOK {
+		t.Fatalf("PUT status: %d (%s)", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, getAuth(t, srv, op, "/automation-status"), &got)
+	if got.Settings["llama_ok"] != true {
+		t.Errorf("status did not round-trip: %v", got.Settings)
+	}
+	decodeBody(t, getAuth(t, srv, op, "/automation-settings"), &got)
+	if _, ok := got.Settings["lanes"]; !ok {
+		t.Errorf("writing status clobbered the settings singleton: %v", got.Settings)
 	}
 }
 

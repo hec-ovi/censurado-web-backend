@@ -520,6 +520,19 @@ type AutomationSettingsStore interface {
 	SetAutomationSettings(ctx context.Context, settings map[string]any) error
 }
 
+// AutomationStatusStore is the single GLOBAL automation-status blob: the executor's
+// heartbeat (its clock, the model lane's health, the run in flight, the queue),
+// written each poll tick and read by the panel's Automation tab. Same singleton
+// shape as the settings; the two are separate rows because they have different
+// writers (the panel writes settings, the executor writes status).
+type AutomationStatusStore interface {
+	// GetAutomationStatus returns the stored status object, or an empty map when
+	// the executor never reported.
+	GetAutomationStatus(ctx context.Context) (map[string]any, error)
+	// SetAutomationStatus replaces the status object wholesale.
+	SetAutomationStatus(ctx context.Context, status map[string]any) error
+}
+
 // SourceStore is the managed-source registry. It is a separate concern from the
 // article Repository (like the author, topic, and portada registries) so the article
 // contract stays focused even though one store implements them all. Writes go through

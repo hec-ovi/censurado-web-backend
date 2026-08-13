@@ -102,6 +102,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{"/sources", []string{`"sources"`}},
 		{"/schedules", []string{`"schedules"`}},
 		{"/automation-settings", []string{`"settings"`}},
+		{"/automation-status", []string{`"settings"`}},
 		{"/frontend-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/panel-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/editorial-text", []string{`"scope"`, `"lang"`, `"entries"`}},
@@ -156,6 +157,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{http.MethodPost, "/sources/contract-example/restore", "", http.StatusOK},
 
 		{http.MethodPut, "/automation-settings", `{"settings":{"lanes":{}}}`, http.StatusOK},
+		{http.MethodPut, "/automation-status", `{"settings":{"at":"x"}}`, http.StatusOK},
 
 		{http.MethodPost, "/schedules", `{"name":"Contract Edition","times":["07:30"]}`, http.StatusOK},
 		{http.MethodPost, "/schedules/contract-edition/runs", `{"run_id":"contract-run-1","status":"ok"}`, http.StatusOK},

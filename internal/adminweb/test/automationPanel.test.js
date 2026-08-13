@@ -40,11 +40,12 @@ function schedule(over = {}) {
   };
 }
 
-function stubLists({ schedules = [], authors = [] } = {}) {
+function stubLists({ schedules = [], authors = [], status = {} } = {}) {
   server.use(
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules })),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors })),
     http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
+    http.get(`${ORIGIN}/automation-status`, () => HttpResponse.json({ settings: status })),
   );
 }
 
@@ -55,7 +56,7 @@ async function rowFor(slug) {
   return document.querySelector(`tr.automation-row[data-id="${slug}"]`);
 }
 
-test("lists schedules with cadence summary, mode, last outcome, and the runs strip", async () => {
+test("lists schedules with status, next month/day, clock icons, and a production link", async () => {
   stubLists({ schedules: [schedule()] });
   const panel = mount();
   await panel.reload();
@@ -63,40 +64,78 @@ test("lists schedules with cadence summary, mode, last outcome, and the runs str
   const row = await rowFor("edicion-manana");
   assert.ok(within(row).getByText("Edición mañana"));
   assert.ok(within(row).getByText("Active"));
-  assert.ok(within(row).getByText("Weekly"));
-  assert.ok(within(row).getByText("Mon, Fri"), "weekday summary");
-  assert.match(row.querySelector(".automation-cadence-times").textContent, /07:30/, "times shown");
-  assert.ok(within(row).getByText("Auto"));
-  assert.ok(within(row).getByText("ok"), "last outcome chip");
-  assert.ok(within(row).getByText("5/8 published"), "last outcome detail");
+  assert.ok(within(row).getByText("auto"), "the mode rides under the name");
 
-  // The strip flattens runs newest first: lote-2 (ok) above lote-1 (failed).
+  const cells = row.querySelectorAll("td");
+  // An enabled weekly schedule always has a next firing within a week, so the
+  // Month and Day cells carry real values (exact ones depend on today's date).
+  assert.match(cells[2].textContent, /^[A-Z][a-z]{2}$/, "month short name");
+  assert.match(cells[3].textContent, /^\d{1,2}$/, "day of month");
+
+  // The fire times render as round clocks, one per time, named by the time.
+  const clocks = row.querySelectorAll("svg.clock-icon");
+  assert.equal(clocks.length, 2);
+  assert.equal(clocks[0].getAttribute("aria-label"), "07:30");
+
+  // The production link points at the month archive of the next firing.
+  const link = within(row).getByRole("link", { name: "open" });
+  assert.match(link.href, /^https:\/\/elcensuradoweb\.com\/\d{4}\/\d{2}\/$/);
+
+  // The runs strip flattens runs newest first, on the right half.
   const strip = document.querySelectorAll(".automation-run-row");
   assert.equal(strip.length, 2);
   assert.equal(strip[0].dataset.runId, "lote-2");
-  assert.equal(strip[1].dataset.runId, "lote-1");
-  assert.ok(within(strip[1]).getByText("adapter down"));
 });
 
-test("a paused schedule shows Paused instead of a next-run forecast", async () => {
+test("a paused schedule keeps clean empty gaps: no forecast, no month/day", async () => {
   stubLists({ schedules: [schedule({ enabled: false, runs: [] })] });
   const panel = mount();
   await panel.reload();
 
   const row = await rowFor("edicion-manana");
-  const paused = within(row).getAllByText("Paused");
-  assert.ok(paused.length >= 2, "the pill and the next-run cell both read Paused");
-  await screen.findByText("No runs recorded yet.");
+  assert.ok(within(row).getByText("Paused"));
+  const cells = row.querySelectorAll("td");
+  assert.equal(cells[2].textContent, "", "month stays an empty gap");
+  assert.equal(cells[3].textContent, "", "day stays an empty gap");
+  assert.equal(within(row).queryByRole("link"), null, "no production link without a firing");
 });
 
-test("renders a clean zero-state for an empty registry", async () => {
-  stubLists();
+test("a queued firing shows Queued on its row until the worker picks it up", async () => {
+  stubLists({ schedules: [schedule({ runs: [{ run_id: "lote-3", status: "queued", detail: "", started_at: "", finished_at: "" }] })] });
   const panel = mount();
   await panel.reload();
-  await screen.findByText("No schedules yet. Create one to put the newsroom on a clock.");
+
+  const row = await rowFor("edicion-manana");
+  assert.ok(within(row).getByText("Queued"));
 });
 
-test("creates a weekly schedule from the editor: chips, day grid, authors, full body", async () => {
+test("the status card shows RUNNING with the queue while a batch is in flight", async () => {
+  stubLists({
+    schedules: [schedule()],
+    status: { at: new Date().toISOString(), llama_ok: true, running: "edicion-20260813-1830", queued: ["noche-20260813-1830"] },
+  });
+  const panel = mount();
+  await panel.reload();
+
+  const card = document.querySelector(".automation-status");
+  assert.ok(within(card).getByText("RUNNING"));
+  assert.ok(within(card).getByText("edicion-20260813-1830"));
+  assert.ok(within(card).getByText("noche-20260813-1830"), "the queue is visible");
+  const healthy = within(card).getAllByText("healthy");
+  assert.equal(healthy.length, 2, "executor and model both healthy");
+});
+
+test("the status card reports the executor offline on a stale heartbeat", async () => {
+  stubLists({ schedules: [], status: { at: "2026-08-13T00:00:00Z", llama_ok: false, running: null, queued: [] } });
+  const panel = mount();
+  await panel.reload();
+
+  const card = document.querySelector(".automation-status");
+  assert.ok(within(card).getByText("Executor offline"));
+  assert.equal(within(card).getAllByText("down").length, 2);
+});
+
+test("creates a weekly schedule from the calendar editor: hour grid, weekday header, chips", async () => {
   let posted = null;
   stubLists({ authors: [{ handle: "borge", name: "Borge" }, { handle: "giuliano", name: "Giuliano" }] });
   server.use(
@@ -113,27 +152,20 @@ test("creates a weekly schedule from the editor: chips, day grid, authors, full 
   const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
   await user.type(within(dialog).getByLabelText("Name"), "Edición tarde");
 
-  // Two times via the chip entry; adding a duplicate is refused inline.
-  const timeInput = within(dialog).getByLabelText("Times (several per day allowed)");
+  // Times through the hour grid: 07 + :30, Add; adding it again is refused.
+  await user.click(within(dialog).getByRole("button", { name: "07" }));
+  await user.click(within(dialog).getByRole("button", { name: ":30" }));
   const add = within(dialog).getByRole("button", { name: "Add time" });
-  timeInput.value = "07:30";
   await user.click(add);
-  timeInput.value = "18:00";
   await user.click(add);
-  timeInput.value = "18:00";
-  await user.click(add);
-  await within(dialog).findByText("The time 18:00 is already on the list.");
-  assert.equal(within(dialog).getAllByRole("listitem").length, 2, "two chips, no duplicate");
+  await within(dialog).findByText("The time 07:30 is already on the list.");
+  assert.equal(within(dialog).getAllByRole("listitem").length, 1, "one chip, no duplicate");
+  assert.ok(dialog.querySelector(".time-chip svg.clock-icon"), "the chip carries its round clock");
 
-  // Weekly cadence reveals the weekday grid (and only that grid); pick Mon + Fri.
+  // Weekly cadence turns the calendar's weekday header into toggles.
   await user.selectOptions(within(dialog).getByLabelText("Cadence"), "weekly");
-  const weekdays = within(dialog).getByRole("group", { name: "Weekdays" });
-  assert.equal(weekdays.closest(".field").hidden, false);
-  // The monthday grid stays hidden for a weekly cadence (hidden elements carry
-  // no accessible role, so reach it through the DOM).
-  assert.ok(dialog.querySelector(".day-grid-month").closest(".field").hidden);
-  await user.click(within(weekdays).getByRole("button", { name: "Mon" }));
-  await user.click(within(weekdays).getByRole("button", { name: "Fri" }));
+  await user.click(within(dialog).getByRole("button", { name: "Mon" }));
+  await user.click(within(dialog).getByRole("button", { name: "Fri" }));
 
   await user.selectOptions(within(dialog).getByLabelText("Mode"), "auto");
   await user.click(within(dialog).getByLabelText("Giuliano"));
@@ -142,13 +174,44 @@ test("creates a weekly schedule from the editor: chips, day grid, authors, full 
   await waitFor(() => assert.ok(posted, "a POST should have been sent"));
   assert.equal(posted.name, "Edición tarde");
   assert.equal(posted.cadence, "weekly");
-  assert.deepEqual(posted.times, ["07:30", "18:00"]);
+  assert.deepEqual(posted.times, ["07:30"]);
   assert.deepEqual(posted.weekdays, [1, 5]);
   assert.equal(posted.monthdays, undefined, "monthdays are not sent for a weekly cadence");
   assert.equal(posted.mode, "auto");
   assert.deepEqual(posted.authors, ["giuliano"]);
-  assert.equal(posted.enabled, true);
   assert.equal(posted.slug, undefined, "a create carries no slug; the server derives it");
+});
+
+test("a monthly schedule picks its days on the month grid", async () => {
+  let posted = null;
+  stubLists();
+  server.use(
+    http.post(`${ORIGIN}/schedules`, async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json({ slug: "mensual" });
+    }),
+  );
+  const user = userEvent.setup();
+  const panel = mount();
+  await panel.reload();
+
+  await user.click(screen.getByRole("button", { name: "New schedule" }));
+  const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
+  await user.type(within(dialog).getByLabelText("Name"), "Mensual");
+  await user.click(within(dialog).getByRole("button", { name: "09" }));
+  await user.click(within(dialog).getByRole("button", { name: "Add time" }));
+
+  await user.selectOptions(within(dialog).getByLabelText("Cadence"), "monthly");
+  const calendar = dialog.querySelector(".month-calendar");
+  assert.equal(calendar.dataset.mode, "monthly");
+  await user.click(within(calendar).getByRole("button", { name: "1" }));
+  await user.click(within(calendar).getByRole("button", { name: "15" }));
+  await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+  await waitFor(() => assert.ok(posted, "a POST should have been sent"));
+  assert.equal(posted.cadence, "monthly");
+  assert.deepEqual(posted.monthdays, [1, 15]);
+  assert.deepEqual(posted.times, ["09:00"]);
 });
 
 test("refuses to save without a time, before any request is sent", async () => {
@@ -204,6 +267,7 @@ test("two-click delete removes the schedule by slug", async () => {
     http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: removed ? [] : [schedule()] })),
     http.get(`${ORIGIN}/authors`, () => HttpResponse.json({ authors: [] })),
     http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings: {} })),
+    http.get(`${ORIGIN}/automation-status`, () => HttpResponse.json({ settings: {} })),
     http.delete(`${ORIGIN}/schedules/edicion-manana`, () => {
       deleted = "edicion-manana";
       removed = true;

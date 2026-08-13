@@ -38,16 +38,41 @@ func (s *Store) GetAutomationSettings(ctx context.Context) (map[string]any, erro
 // id=1 row) and stamps updated_at. It is an upsert, so the first call creates the
 // row and later calls overwrite it.
 func (s *Store) SetAutomationSettings(ctx context.Context, settings map[string]any) error {
-	blob, err := marshalMeta(settings)
+	return s.setSingleton(ctx, "automation_settings", settings)
+}
+
+// GetAutomationStatus returns the single global executor-heartbeat object, or an
+// empty map when the executor never reported.
+func (s *Store) GetAutomationStatus(ctx context.Context) (map[string]any, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM automation_status WHERE id = 1`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalMeta(raw)
+}
+
+// SetAutomationStatus replaces the single global status object wholesale.
+func (s *Store) SetAutomationStatus(ctx context.Context, status map[string]any) error {
+	return s.setSingleton(ctx, "automation_status", status)
+}
+
+// setSingleton upserts the id=1 row of one of the automation singleton tables. The
+// table name is one of two compile-time constants, never caller input.
+func (s *Store) setSingleton(ctx context.Context, table string, value map[string]any) error {
+	blob, err := marshalMeta(value)
 	if err != nil {
 		return err
 	}
 	now := time.Now().UTC().Truncate(time.Second).Format(timeLayout)
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO automation_settings (id, value, updated_at) VALUES (1, ?, ?)
+		`INSERT INTO `+table+` (id, value, updated_at) VALUES (1, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		blob, now); err != nil {
-		return fmt.Errorf("set automation settings: %w", err)
+		return fmt.Errorf("set %s: %w", table, err)
 	}
 	return nil
 }

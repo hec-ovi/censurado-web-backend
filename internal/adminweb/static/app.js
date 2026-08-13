@@ -97,7 +97,9 @@ export function mountApp(root, deps = {}) {
   const temas = TemasPanel({ api });
   const sources = SourcesPanel({ api });
   const recomendado = RecomendadoPanel({ api });
-  const automation = AutomationPanel({ api });
+  // The Automation tab keeps its RUNNING/queue/health view live with a light
+  // poll (schedules + heartbeat only); tests construct the panel without it.
+  const automation = AutomationPanel({ api, refreshMs: 15000 });
 
   const tabs = [
     { id: "articles", label: t("Articles"), content: [articles.element] },
