@@ -435,6 +435,78 @@ type Source struct {
 	UpdatedAt      time.Time
 }
 
+// ScheduleRun is one recorded firing of a schedule: the batch run id, its status
+// ("running" while in flight, then "ok" or "failed"), a short human detail (e.g.
+// "5/8 published"), and the start/finish timestamps as RFC3339 strings. The executor
+// records one at fire time and replaces it (same RunID) when the batch finishes.
+type ScheduleRun struct {
+	RunID      string
+	Status     string
+	Detail     string
+	StartedAt  string
+	FinishedAt string
+}
+
+// ScheduleRunsCap is how many recent runs a schedule keeps: RecordScheduleRun
+// prepends newest-first and trims the tail past this cap.
+const ScheduleRunsCap = 20
+
+// Schedule is an operator-owned batch-run schedule: when the executor fires the
+// newsroom's daily-edition batch. Slug is the stable key (the name slugified), like
+// Author.Handle and Source.Slug. Cadence is "daily"|"weekly"|"monthly"; Times is the
+// list of "HH:MM" wall-clock fire times (several per day allowed), interpreted in the
+// executor's local timezone; Weekdays (0=Sunday..6, weekly only) and Monthdays
+// (1..31, monthly only) narrow which days fire. Mode is the batch mode
+// ("preview"|"auto") and Authors an optional author-handle filter (empty = every
+// author with a beat). Enabled is the operator's toggle; Runs is the recent-run
+// strip, newest first, capped at ScheduleRunsCap and written only by
+// RecordScheduleRun (UpsertSchedule never touches it). Deleted is the tombstone.
+type Schedule struct {
+	ID        string
+	Slug      string
+	Name      string
+	Cadence   string
+	Times     []string
+	Weekdays  []int
+	Monthdays []int
+	Mode      string
+	Authors   []string
+	Enabled   bool
+	Runs      []ScheduleRun
+	Metadata  map[string]any
+	Deleted   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// ScheduleStore is the operator-owned schedule registry. It is a separate concern
+// from the article Repository (like the other registries) so the article contract
+// stays focused even though one store implements them all. It is NOT part of the
+// Seam A generator surface: only the HTTP layer (panel + executor) consumes it.
+type ScheduleStore interface {
+	// UpsertSchedule creates or updates a schedule keyed on Slug. On create it sets
+	// CreatedAt and UpdatedAt from the supplied values (defaulting to now when zero)
+	// and an empty run strip; on an existing slug it updates the mutable fields,
+	// advances UpdatedAt, preserves the stored CreatedAt AND the stored Runs, and
+	// clears any tombstone. It returns the stored row.
+	UpsertSchedule(ctx context.Context, s Schedule) (Schedule, error)
+	// ScheduleBySlug returns the schedule for the slug, or found=false. A
+	// soft-deleted schedule is still returned (found=true, Deleted=true).
+	ScheduleBySlug(ctx context.Context, slug string) (Schedule, bool, error)
+	// ListSchedules returns schedules ordered by slug ascending in byte order.
+	// Tombstoned schedules are excluded unless includeDeleted.
+	ListSchedules(ctx context.Context, includeDeleted bool) ([]Schedule, error)
+	// DeleteSchedule soft-deletes the schedule by setting a tombstone. Deleting an
+	// absent slug returns ErrNotFound.
+	DeleteSchedule(ctx context.Context, slug string) error
+	// RecordScheduleRun writes one run record onto the schedule's strip: an existing
+	// entry with the same RunID is replaced in place (the executor records "running"
+	// at fire time and overwrites it with the outcome), otherwise the record is
+	// prepended; the strip is trimmed to ScheduleRunsCap. Returns the updated
+	// schedule, or ErrNotFound on an absent slug.
+	RecordScheduleRun(ctx context.Context, slug string, run ScheduleRun) (Schedule, error)
+}
+
 // SourceStore is the managed-source registry. It is a separate concern from the
 // article Repository (like the author, topic, and portada registries) so the article
 // contract stays focused even though one store implements them all. Writes go through

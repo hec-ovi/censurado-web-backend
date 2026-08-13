@@ -159,6 +159,33 @@ CREATE TABLE IF NOT EXISTS recomendado (
   updated_at TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
+-- schedules is the operator-owned batch-run schedule registry: when the executor
+-- fires the newsroom's daily-edition batch. slug is the stable key (the name
+-- slugified, like sources.slug). times / weekdays / monthdays / authors / runs are
+-- JSON arrays (defaulting to '[]'), the same self-contained encoding the other
+-- registries use; runs is the recent-run strip (newest first, capped in code) and is
+-- written only by RecordScheduleRun, never by the upsert. enabled (1/0) is the
+-- operator's toggle, distinct from deleted_at, the tombstone. cadence and mode are
+-- validated in the HTTP layer (ALTER-friendly, like articles.section). The
+-- timestamps are whole-second RFC3339 TEXT, as elsewhere.
+CREATE TABLE IF NOT EXISTS schedules (
+  id         INTEGER PRIMARY KEY,
+  slug       TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL,
+  cadence    TEXT NOT NULL DEFAULT 'daily',
+  times      TEXT NOT NULL DEFAULT '[]',
+  weekdays   TEXT NOT NULL DEFAULT '[]',
+  monthdays  TEXT NOT NULL DEFAULT '[]',
+  mode       TEXT NOT NULL DEFAULT 'preview',
+  authors    TEXT NOT NULL DEFAULT '[]',
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  runs       TEXT NOT NULL DEFAULT '[]',
+  metadata   TEXT NOT NULL DEFAULT '{}',
+  deleted_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+
 -- frontend_text and panel_text are the UI-string catalogs: every human-facing label
 -- the public site (frontend_text) and the operator admin panel (panel_text) render,
 -- stored as (key, lang) pairs so the product is translated by adding rows, not by

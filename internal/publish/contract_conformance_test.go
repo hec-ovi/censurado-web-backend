@@ -100,6 +100,7 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{"/topics", []string{`"topics"`}},
 		{"/portadas", []string{`"portadas"`}},
 		{"/sources", []string{`"sources"`}},
+		{"/schedules", []string{`"schedules"`}},
 		{"/frontend-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/panel-text", []string{`"scope"`, `"lang"`, `"entries"`}},
 		{"/editorial-text", []string{`"scope"`, `"lang"`, `"entries"`}},
@@ -152,6 +153,10 @@ func TestContract_FrozenHTTPSurface(t *testing.T) {
 		{http.MethodGet, "/authors/contract-a/sources", "", http.StatusOK},
 		{http.MethodDelete, "/sources/contract-example", "", http.StatusNoContent},
 		{http.MethodPost, "/sources/contract-example/restore", "", http.StatusOK},
+
+		{http.MethodPost, "/schedules", `{"name":"Contract Edition","times":["07:30"]}`, http.StatusOK},
+		{http.MethodPost, "/schedules/contract-edition/runs", `{"run_id":"contract-run-1","status":"ok"}`, http.StatusOK},
+		{http.MethodDelete, "/schedules/contract-edition", "", http.StatusNoContent},
 
 		{http.MethodPost, "/frontend-text", `{"key":"nav.about","value":"About"}`, http.StatusOK},
 		{http.MethodPost, "/panel-text", `{"key":"nav.articles","value":"Articles"}`, http.StatusOK},

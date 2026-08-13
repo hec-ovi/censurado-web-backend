@@ -123,6 +123,17 @@ func TestSQLiteSourceStore(t *testing.T) {
 	storetest.RunSourceStore(t, repo)
 }
 
+func TestSQLiteScheduleStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "schedules.db")
+	repo, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	storetest.RunScheduleStore(t, repo)
+}
+
 func TestSQLiteBrainDataMigration(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration.db")
 	repo, err := sqlite.Open(dbPath)

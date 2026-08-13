@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hec-ovi/censurado-web-backend/media"
 	"github.com/hec-ovi/censurado-web-backend/internal/publish"
+	"github.com/hec-ovi/censurado-web-backend/media"
 )
 
 var pngBytes = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")

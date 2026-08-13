@@ -21,6 +21,7 @@ type ReadStore interface {
 	store.PortadaStore
 	store.RecomendadoStore
 	store.SourceStore
+	store.ScheduleStore
 	store.TextStore
 }
 

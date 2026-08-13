@@ -31,6 +31,8 @@ func TestContract_StoreInterfaces(t *testing.T) {
 			[]string{"DeletePortada", "ListPortadas", "PortadaByDate", "UpsertPortada"}},
 		{"SourceStore", reflect.TypeOf((*store.SourceStore)(nil)).Elem(),
 			[]string{"DeleteSource", "ListSources", "SourceBySlug", "UpsertSource"}},
+		{"ScheduleStore", reflect.TypeOf((*store.ScheduleStore)(nil)).Elem(),
+			[]string{"DeleteSchedule", "ListSchedules", "RecordScheduleRun", "ScheduleBySlug", "UpsertSchedule"}},
 		{"TextStore", reflect.TypeOf((*store.TextStore)(nil)).Elem(),
 			[]string{"DeleteText", "ListText", "Text", "UpsertText"}},
 	}
@@ -62,6 +64,10 @@ func TestContract_OverlayShapes(t *testing.T) {
 		[]string{"Slug", "Role"})
 	assertFields(t, "store.Source", reflect.TypeOf(store.Source{}),
 		[]string{"ID", "Slug", "Domain", "Homepage", "Description", "FeedURLs", "FeedType", "Language", "OwnershipGroup", "Lean", "Enabled", "Status", "LastChecked", "LastOK", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
+	assertFields(t, "store.Schedule", reflect.TypeOf(store.Schedule{}),
+		[]string{"ID", "Slug", "Name", "Cadence", "Times", "Weekdays", "Monthdays", "Mode", "Authors", "Enabled", "Runs", "Metadata", "Deleted", "CreatedAt", "UpdatedAt"})
+	assertFields(t, "store.ScheduleRun", reflect.TypeOf(store.ScheduleRun{}),
+		[]string{"RunID", "Status", "Detail", "StartedAt", "FinishedAt"})
 }
 
 func methodSet(t reflect.Type) []string {
