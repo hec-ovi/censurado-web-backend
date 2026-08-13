@@ -315,6 +315,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Unspecified", "Unspecified", ""},
 	{"Up to {n} articles.", "Up to {n} articles.", "Hasta {n} artículos."},
 	{"Verify", "Verify", "Verificar"},
+	{"Verifying...", "Verifying...", "Verificando..."},
 	{"Wed", "Wed", "Mié"},
 	{"Weekdays", "Weekdays", "Días de la semana"},
 	{"Weekly", "Weekly", "Semanal"},

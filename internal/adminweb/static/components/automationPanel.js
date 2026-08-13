@@ -302,8 +302,8 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         : [el("p", { class: "automation-console-line automation-console-empty" }, t("No runs recorded yet."))]);
 
     dialog.append(el("div", { class: "source-dialog-shell" }, [
-      close,
       el("div", { class: "automation-details" }, [
+        close,
         el("div", { class: "automation-details-head" }, [
           el("h2", {}, schedule.name || schedule.slug),
           el("span", { class: "badge automation-details-task" }, taskLabel(schedule.task)),

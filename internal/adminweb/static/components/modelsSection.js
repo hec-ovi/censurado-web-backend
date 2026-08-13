@@ -54,6 +54,10 @@ const PROVIDERS = [
 // A heartbeat older than this is a dead executor's snapshot, not the truth.
 const HEARTBEAT_FRESH_MS = 180000;
 
+// Verify waits for the executor's next heartbeat, which lands on its minute
+// tick: cover a full tick plus margin before settling for the stored state.
+const VERIFY_WAIT_MS = 75000;
+
 export function ModelsSection({ api } = {}) {
   let stored = {};        // the settings singleton as last loaded/saved (authoritative once set)
   let storedKey = "";     // the remote lane's stored key, kept OUT of `stored` so saves never round-trip it
@@ -95,7 +99,20 @@ export function ModelsSection({ api } = {}) {
     const button = el("button", { type: "button", class: "secondary models-verify" }, t("Verify"));
     button.addEventListener("click", async () => {
       button.disabled = true;
-      await fetchHealth();
+      const before = health.at || "";
+      for (const row of Object.values(healthRows)) {
+        row.replaceChildren(el("span", { class: "muted models-health-stamp" }, t("Verifying...")));
+      }
+      // The executor probes both lanes on every heartbeat: wait for the next
+      // one, so the verdict (and its reset stamp) is a fresh probe, never the
+      // previous snapshot aging on screen.
+      const deadline = Date.now() + VERIFY_WAIT_MS;
+      do {
+        await fetchHealth({ render: false });
+        if (health.at && health.at !== before) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } while (Date.now() < deadline);
+      renderHealth();
       button.disabled = false;
     });
     return button;
@@ -125,12 +142,12 @@ export function ModelsSection({ api } = {}) {
     );
   }
 
-  async function fetchHealth() {
+  async function fetchHealth({ render = true } = {}) {
     try {
       const statusData = await api.getAutomationStatus();
       const live = (statusData && statusData.settings) || {};
       health = { at: live.at, llama_ok: live.llama_ok, remote_state: live.remote_state };
-      renderHealth();
+      if (render) renderHealth();
     } catch {
       /* the rows keep their last state */
     }

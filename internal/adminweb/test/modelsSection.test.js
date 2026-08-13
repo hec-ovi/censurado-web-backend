@@ -205,3 +205,19 @@ test("surfaces a save failure without losing the form", async () => {
   assert.match(alert.textContent, /insufficient_scope/);
   assert.equal(screen.getByRole("button", { name: "Save models" }).disabled, false);
 });
+
+test("Verify waits for the executor's NEXT heartbeat and the stamp restarts", async () => {
+  const t0 = new Date(Date.now() - 30000).toISOString();
+  stub({ at: t0 });
+  const user = userEvent.setup();
+  const section = mount();
+  await section.reload();
+  assert.match(document.querySelector(".models-health").textContent, /checked 30s ago/);
+
+  // A fresh heartbeat lands; clicking Verify must show that probe, age zero.
+  stub({ at: new Date().toISOString() });
+  await user.click(screen.getAllByRole("button", { name: "Verify" })[0]);
+  await waitFor(() => {
+    assert.match(document.querySelector(".models-health").textContent, /checked 0s ago/);
+  });
+});

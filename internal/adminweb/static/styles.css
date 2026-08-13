@@ -583,14 +583,12 @@ input[type="radio"] {
   color: #ffffff;
 }
 
-/* The help text opens as a viewport-centered popup, so no container boundary
-   can ever crop it (it also rides the top layer inside modal dialogs). */
+/* The help text opens as a popup beside its (?) marker; help() sets fixed
+   coordinates clamped to the viewport, so no container boundary can crop it
+   (it also rides the top layer inside modal dialogs). */
 .help-popover {
   position: fixed;
   z-index: 80;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   width: min(420px, calc(100vw - 36px));
   padding: 11px 12px;
   border: 1px solid var(--line-strong);
