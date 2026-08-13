@@ -72,10 +72,6 @@
 
 /* --- recent-runs strip -------------------------------------------------- */
 
-.automation-runs-head {
-  margin-top: 1.4rem;
-}
-
 .automation-runs {
   display: grid;
   gap: 0.4rem;
@@ -203,13 +199,14 @@
   min-height: 0;
 }
 
-/* --- the 50/50 split ------------------------------------------------------ */
+/* --- the 50/50 split: two stacked rows ------------------------------------ */
+/* Top row: the schedule list, scrolling inside roughly half the viewport.
+   Bottom row: the status card + recent runs + models setup. */
 
 .automation-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.4rem;
-  align-items: start;
+  grid-template-rows: auto auto;
+  gap: 1.6rem;
 }
 
 .automation-half {
@@ -220,8 +217,20 @@
 }
 
 .automation-scroll {
-  max-height: 72vh;
+  max-height: 46vh;
   overflow-y: auto;
+}
+
+/* The ops row spreads its blocks side by side when there is room; each block
+   still stacks cleanly on a narrow window. */
+.automation-ops {
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: 1.2rem;
+}
+
+.automation-ops .models-section {
+  grid-column: 1 / -1;
+  margin-top: 0.4rem;
 }
 
 /* --- the live status card ------------------------------------------------- */
@@ -505,8 +514,11 @@ button.cal-day[aria-pressed="true"] {
   align-content: start;
 }
 
+.automation-runs-head {
+  margin-top: 0;
+}
+
 @media (max-width: 70rem) {
-  .automation-split,
   .automation-edit-grid {
     grid-template-columns: 1fr;
   }

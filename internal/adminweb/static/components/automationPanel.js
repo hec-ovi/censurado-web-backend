@@ -67,8 +67,10 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
       ]),
       el("div", { class: "automation-half automation-ops" }, [
         statusEl,
-        el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
-        runsEl,
+        el("div", { class: "automation-runs-block" }, [
+          el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
+          runsEl,
+        ]),
         models.element,
       ]),
     ]),
