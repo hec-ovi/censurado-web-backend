@@ -5,23 +5,47 @@
    numbers, selection as a filled disc, no boxes. Everything else keeps the
    panel's square corners. */
 
-/* --- the 50/50 split: two stacked rows ------------------------------------ */
+/* --- the two subtabs: Cronogramas | Configuración -------------------------- */
 
-.automation-split {
-  display: grid;
-  grid-template-rows: auto auto;
-  gap: 1.6rem;
+.autotabs-list {
+  display: flex;
+  gap: 1.4rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.1rem;
 }
 
-.automation-half {
-  min-width: 0;
+.autotabs-tab {
+  min-height: 2.4rem;
+  padding: 0 0.2rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.autotabs-tab:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.autotabs-tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--admin-red);
+}
+
+.automation-schedules {
   display: grid;
   gap: 0.8rem;
   align-content: start;
 }
 
 .automation-scroll {
-  max-height: 46vh;
+  max-height: 68vh;
   overflow-y: auto;
 }
 
@@ -35,13 +59,15 @@
   margin-left: auto;
 }
 
-/* The ops row spreads its blocks side by side when there is room. */
-.automation-ops {
+/* The settings view: status and recent runs side by side, models below. */
+.automation-config {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
   gap: 1.2rem;
+  align-items: start;
 }
 
-.automation-ops .models-section {
+.automation-config .models-section {
   grid-column: 1 / -1;
   margin-top: 0.4rem;
 }
@@ -105,17 +131,27 @@
   table-layout: fixed;
 }
 
-.automation-table th:nth-child(1) { width: 26%; }
-.automation-table th:nth-child(2) { width: 11%; }
-.automation-table th:nth-child(3) { width: 8%; }
-.automation-table th:nth-child(4) { width: 17%; }
-.automation-table th:nth-child(5) { width: 21%; }
-.automation-table th:nth-child(6) { width: 8%; }
-.automation-table th:nth-child(7) { width: 9%; }
+/* The base table renders thead tr and each tbody tr as INDEPENDENT fixed
+   tables, so the column widths must be set on the header AND the body cells
+   for the columns to line up. */
+.automation-table th:nth-child(1), .automation-table td:nth-child(1) { width: 26%; }
+.automation-table th:nth-child(2), .automation-table td:nth-child(2) { width: 11%; }
+.automation-table th:nth-child(3), .automation-table td:nth-child(3) { width: 8%; }
+.automation-table th:nth-child(4), .automation-table td:nth-child(4) { width: 17%; }
+.automation-table th:nth-child(5), .automation-table td:nth-child(5) { width: 21%; }
+.automation-table th:nth-child(6), .automation-table td:nth-child(6) { width: 8%; }
+.automation-table th:nth-child(7), .automation-table td:nth-child(7) { width: 9%; }
+
+.automation-table th:nth-child(1),
+.automation-table td:nth-child(1) {
+  text-align: left;
+  padding-left: 14px;
+}
 
 .automation-table tbody tr.automation-row > td {
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
+  height: 54px;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
   vertical-align: middle;
 }
 
@@ -247,23 +283,23 @@
   white-space: nowrap;
 }
 
-/* --- the editor dialog: a centered card ------------------------------------ */
+/* --- the editor dialog: a true fullscreen view ------------------------------ */
 
 .automation-dialog .source-dialog-shell {
   display: block;
-  overflow-y: auto;
-  padding: 2.5rem 1.5rem;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
 }
 
-.automation-edit {
-  max-width: 78rem;
-  margin: 0 auto;
+.automation-edit,
+.automation-editor-card {
+  height: 100%;
 }
 
 .automation-editor-card {
   display: grid;
-  grid-template-columns: 21rem minmax(0, 1fr);
-  border: 1px solid var(--line);
+  grid-template-columns: 23rem minmax(0, 1fr);
   background: var(--surface);
 }
 
@@ -271,9 +307,10 @@
   display: grid;
   gap: 0.9rem;
   align-content: start;
-  padding: 1.5rem;
+  padding: 2rem 1.8rem;
   border-right: 1px solid var(--line);
   background: var(--surface-2);
+  overflow-y: auto;
 }
 
 .automation-editor-title {
@@ -290,9 +327,55 @@
 
 .automation-editor-main {
   display: grid;
-  gap: 1.6rem;
+  gap: 1.8rem;
   align-content: start;
-  padding: 1.5rem 1.8rem;
+  padding: 2rem 2.4rem;
+  overflow-y: auto;
+}
+
+/* The cadence tabs: Daily | Weekly | Monthly as a segmented control. */
+.cadence-tabs {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  width: fit-content;
+}
+
+.cadence-tab {
+  min-height: 2.4rem;
+  min-width: 7rem;
+  padding: 0 1.1rem;
+  border: 0;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.cadence-tab + .cadence-tab {
+  border-left: 1px solid var(--line);
+}
+
+.cadence-tab:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.cadence-tab[aria-pressed="true"] {
+  background: var(--admin-red);
+  color: #fff;
+}
+
+/* The time entry: one plain select plus Add. */
+.time-entry {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.time-entry select {
+  width: 8.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .automation-editor-block {
@@ -462,101 +545,7 @@ button.cal-day.cal-today {
   font-size: 0.8rem;
 }
 
-/* --- the time picker: big hours, hairline grid, minute step ---------------- */
-
-.time-grid {
-  display: grid;
-  gap: 0.8rem;
-  max-width: 30rem;
-}
-
-.time-block {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.time-block-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 1rem;
-}
-
-.time-block-hours {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-}
-
-.time-hour {
-  min-height: 2.6rem;
-  padding: 0;
-  border: 0;
-  background: var(--surface);
-  box-shadow: none;
-  font-size: 1rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.time-hour:hover {
-  background: var(--surface-2);
-}
-
-.time-hour[aria-pressed="true"] {
-  background: var(--admin-red);
-  color: #fff;
-  font-weight: 800;
-}
-
-.time-minute-row {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.time-minutes {
-  min-height: 2.4rem;
-  min-width: 3.6rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--muted);
-  font-size: 0.95rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-minutes:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.time-minutes[aria-pressed="true"] {
-  background: var(--admin-red);
-  color: #fff;
-}
-
-.time-preview {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: auto;
-  font-size: 1.05rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-add {
-  flex: none;
-}
+/* --- the time chips --------------------------------------------------------- */
 
 .time-chips {
   display: flex;

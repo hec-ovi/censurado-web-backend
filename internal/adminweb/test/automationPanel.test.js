@@ -136,7 +136,7 @@ test("the status card reports the executor offline on a stale heartbeat", async 
   assert.equal(within(card).getAllByText("down").length, 2);
 });
 
-test("creates a weekly schedule from the calendar editor: hour grid, weekday header, chips", async () => {
+test("creates a weekly schedule from the calendar editor: time select, weekday header, chips", async () => {
   let posted = null;
   stubLists({ authors: [{ handle: "borge", name: "Borge" }, { handle: "giuliano", name: "Giuliano" }] });
   server.use(
@@ -153,9 +153,8 @@ test("creates a weekly schedule from the calendar editor: hour grid, weekday hea
   const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
   await user.type(within(dialog).getByLabelText("Name"), "Edición tarde");
 
-  // Times through the hour grid: 07 + :30, Add; adding it again is refused.
-  await user.click(within(dialog).getByRole("button", { name: "07" }));
-  await user.click(within(dialog).getByRole("button", { name: ":30" }));
+  // One plain time select (30-minute steps) + Add; adding it again is refused.
+  await user.selectOptions(within(dialog).getByRole("combobox", { name: "Time" }), "07:30");
   const add = within(dialog).getByRole("button", { name: "Add time" });
   await user.click(add);
   await user.click(add);
@@ -163,8 +162,8 @@ test("creates a weekly schedule from the calendar editor: hour grid, weekday hea
   assert.equal(within(dialog).getAllByRole("listitem").length, 1, "one chip, no duplicate");
   assert.ok(dialog.querySelector(".time-chip svg.clock-icon"), "the chip carries its round clock");
 
-  // Weekly cadence turns the calendar's weekday header into toggles.
-  await user.selectOptions(within(dialog).getByLabelText("Cadence"), "weekly");
+  // The Weekly cadence TAB turns the calendar's weekday header into toggles.
+  await user.click(within(dialog).getByRole("button", { name: "Weekly" }));
   await user.click(within(dialog).getByRole("button", { name: "Mon" }));
   await user.click(within(dialog).getByRole("button", { name: "Fri" }));
 
@@ -199,10 +198,10 @@ test("a monthly schedule picks its days on the month grid", async () => {
   await user.click(screen.getByRole("button", { name: "New schedule" }));
   const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
   await user.type(within(dialog).getByLabelText("Name"), "Mensual");
-  await user.click(within(dialog).getByRole("button", { name: "09" }));
+  await user.selectOptions(within(dialog).getByRole("combobox", { name: "Time" }), "09:00");
   await user.click(within(dialog).getByRole("button", { name: "Add time" }));
 
-  await user.selectOptions(within(dialog).getByLabelText("Cadence"), "monthly");
+  await user.click(within(dialog).getByRole("button", { name: "Monthly" }));
   const calendar = dialog.querySelector(".month-calendar");
   assert.equal(calendar.dataset.mode, "monthly");
   await user.click(within(calendar).getByRole("button", { name: "1" }));
@@ -252,7 +251,7 @@ test("editing an existing schedule sends a full upsert with the explicit slug", 
 
   await user.click(await rowFor("edicion-manana"));
   const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
-  await user.click(within(dialog).getByLabelText("Enabled"));
+  await user.click(within(dialog).getByLabelText("Active"));
   await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
   await waitFor(() => assert.ok(posted, "a POST should have been sent"));

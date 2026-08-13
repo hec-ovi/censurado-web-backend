@@ -18,7 +18,7 @@ type PanelTextSeedEntry struct {
 	Es  string
 }
 
-// PanelTextSeed returns the live panel UI-string catalog: 292 keys.
+// PanelTextSeed returns the live panel UI-string catalog: 295 keys.
 func PanelTextSeed() []PanelTextSeedEntry {
 	return panelTextSeed
 }
@@ -36,6 +36,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Acta (research read)", "Acta (research read)", "Acta (lectura de investigación)"},
 	{"Action failed ({code}): {msg}", "Action failed ({code}): {msg}", "La acción falló ({code}): {msg}"},
 	{"Active", "Active", "Activo"},
+	{"Active fires on schedule; switched off it stays listed but never fires (paused).", "Active fires on schedule; switched off it stays listed but never fires (paused).", "Activo dispara según el cronograma; apagado queda en la lista pero nunca dispara (pausado)."},
 	{"Active on this author", "Active on this author", ""},
 	{"Add", "Add", "Agregar"},
 	{"Add at least one time.", "Add at least one time.", "Agregue al menos una hora."},
@@ -65,6 +66,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Auto", "Auto", "Auto"},
 	{"Auto (publish on gate pass)", "Auto (publish on gate pass)", "Auto (publica al pasar la mesa)"},
 	{"Automation", "Automation", "Automatización"},
+	{"Automation sections", "Automation sections", "Secciones de automatización"},
 	{"Avatar path", "Avatar path", "Ruta del avatar"},
 	{"Avatar preview", "Avatar preview", "Vista previa del avatar"},
 	{"Back", "Back", "Volver"},
@@ -271,6 +273,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Select a beat", "Select a beat", "Elija una sección"},
 	{"Sep", "Sep", "Sep"},
 	{"September", "September", "Septiembre"},
+	{"Settings", "Settings", "Configuración"},
 	{"Show", "Show", "Mostrar"},
 	{"Single card", "Single card", "Tarjeta simple"},
 	{"Source", "Source", "Fuente"},

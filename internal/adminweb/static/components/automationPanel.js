@@ -1,20 +1,20 @@
-import { el, clear, field, help } from "./el.js";
+import { el, clear, field, help, subTabs } from "./el.js";
 import { TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
 import { ClockIcon } from "./clockIcon.js";
 import { ModelsSection } from "./modelsSection.js";
 import { MonthCalendar } from "./monthCalendar.js";
-import { TimeGridPicker } from "./timeGridPicker.js";
 import { WEEKDAY_SHORT, nextRun, validateSchedule } from "../schedule.js";
 
-// The Automation tab, split in two halves:
-//   LEFT  - the schedule list: name, status, the next firing's month/day, the
-//           fire times as round clock icons, and a link to that month's page on
-//           the production site. Scrolls inside its own pane; empty cells stay
-//           empty. Clicking a row opens the fullscreen calendar editor.
-//   RIGHT - the operational side: the live status card (RUNNING while a batch
-//           is in flight, the queue behind it, executor + model health from the
-//           executor's heartbeat), the recent-runs strip, and the Models setup.
+// The Automation tab, two subtabs so each view does one thing:
+//   Cronogramas   - the schedule list, directly: name, status, the next firing's
+//                   month/day, the fire times as round clock icons, and a link to
+//                   that month's page on the production site. Scrolls in its own
+//                   pane; empty cells stay empty. A row opens the calendar editor.
+//   Configuración - the operational side: the live status card (RUNNING while a
+//                   batch is in flight, the queue behind it, executor + model
+//                   health from the executor's heartbeat), the recent-runs strip,
+//                   and the Models setup.
 //
 // The editor is calendar-shaped: a month grid to pick days (weekday header
 // toggles for weekly, day toggles for monthly) and an hour grid with a :00/:30
@@ -54,27 +54,29 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   const newBtn = el("button", { type: "button", class: "automation-new" }, t("New schedule"));
   newBtn.addEventListener("click", () => openEditor(null));
 
-  const element = el("div", { class: "automation workspace-section" }, el("section", { class: "panel panel-fill automation-panel" }, [
-    el("div", { class: "automation-split" }, [
-      el("div", { class: "automation-half automation-schedules" }, [
-        el("div", { class: "panel-head automation-head" }, [
-          el("h2", {}, t("Schedules")),
-          help(t(AUTOMATION_HELP)),
-          el("div", { class: "automation-head-actions" }, [newBtn]),
-        ]),
-        listEl,
-        listStatus,
-      ]),
-      el("div", { class: "automation-half automation-ops" }, [
-        statusEl,
-        el("div", { class: "automation-runs-block" }, [
-          el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
-          runsEl,
-        ]),
-        models.element,
-      ]),
+  const schedulesPane = el("div", { class: "automation-schedules" }, [
+    el("div", { class: "automation-head" }, [
+      help(t(AUTOMATION_HELP)),
+      el("div", { class: "automation-head-actions" }, [newBtn]),
     ]),
-  ]));
+    listEl,
+    listStatus,
+  ]);
+  const configPane = el("div", { class: "automation-config" }, [
+    statusEl,
+    el("div", { class: "automation-runs-block" }, [
+      el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
+      runsEl,
+    ]),
+    models.element,
+  ]);
+  const views = subTabs([
+    { id: "cronogramas", label: t("Schedules"), content: [schedulesPane] },
+    { id: "configuracion", label: t("Settings"), content: [configPane] },
+  ], { className: "autotabs", label: t("Automation sections") });
+
+  const element = el("div", { class: "automation workspace-section" },
+    el("section", { class: "panel panel-fill automation-panel" }, [views.element]));
 
   async function reload() {
     clear(listEl);
@@ -321,12 +323,26 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     };
 
     const name = el("input", { type: "text", id: `sch-${id}-name`, value: (schedule && schedule.name) || "" });
-    const cadence = el("select", { id: `sch-${id}-cadence` }, [
-      el("option", { value: "daily" }, t("Daily")),
-      el("option", { value: "weekly" }, t("Weekly")),
-      el("option", { value: "monthly" }, t("Monthly")),
-    ]);
-    cadence.value = (schedule && schedule.cadence) || "daily";
+
+    // Cadence as visible tabs: Daily | Weekly | Monthly. The chosen tab drives
+    // what the calendar's clicks mean.
+    let cadenceValue = (schedule && schedule.cadence) || "daily";
+    const cadenceTabs = [["daily", t("Daily")], ["weekly", t("Weekly")], ["monthly", t("Monthly")]]
+      .map(([value, label]) => {
+        const tab = el("button", {
+          type: "button", class: "cadence-tab", dataset: { cadence: value },
+          "aria-pressed": cadenceValue === value ? "true" : "false",
+        }, label);
+        tab.addEventListener("click", () => {
+          cadenceValue = value;
+          cadenceBar.querySelectorAll(".cadence-tab").forEach((b) =>
+            b.setAttribute("aria-pressed", b === tab ? "true" : "false"));
+          calendar.setMode(value);
+        });
+        return tab;
+      });
+    const cadenceBar = el("div", { class: "cadence-tabs", role: "group", "aria-label": t("Cadence") }, cadenceTabs);
+
     const mode = el("select", { id: `sch-${id}-mode` }, [
       el("option", { value: "preview" }, t("Preview (hold for approval)")),
       el("option", { value: "auto" }, t("Auto (publish on gate pass)")),
@@ -335,12 +351,17 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const enabled = el("input", { type: "checkbox", id: `sch-${id}-enabled` });
     enabled.checked = isNew ? true : !!schedule.enabled;
 
-    // Days: the month calendar; its meaning follows the cadence.
+    // Days: the month calendar; its meaning follows the cadence tab.
     const calendar = MonthCalendar({ weekdays: draft.weekdays, monthdays: draft.monthdays });
-    calendar.setMode(cadence.value);
-    cadence.addEventListener("change", () => calendar.setMode(cadence.value));
+    calendar.setMode(cadenceValue);
 
-    // Times: the hour grid (30-minute step) feeding the chip list.
+    // Times: one plain select (30-minute steps) feeding the chip list.
+    const timeSelect = el("select", { id: `sch-${id}-time`, "aria-label": t("Time") },
+      Array.from({ length: 48 }, (_, i) => {
+        const hhmm = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
+        return el("option", { value: hhmm }, hhmm);
+      }));
+    const addTime = el("button", { type: "button", class: "time-add" }, t("Add time"));
     const chips = el("div", { class: "time-chips", role: "list", "aria-label": t("Times") });
     const editStatus = el("p", { class: "form-status", role: "status", "aria-live": "polite" });
     function renderChips() {
@@ -358,16 +379,15 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         chips.append(el("span", { class: "time-chip", role: "listitem" }, [ClockIcon(time, { size: 14 }), time, remove]));
       }
     }
-    const picker = TimeGridPicker({
-      onAdd: (hhmm) => {
-        if (draft.times.includes(hhmm)) {
-          setStatus(editStatus, "error", t("The time {time} is already on the list.", { time: hhmm }));
-          return;
-        }
-        draft.times.push(hhmm);
-        clearStatus(editStatus);
-        renderChips();
-      },
+    addTime.addEventListener("click", () => {
+      const hhmm = timeSelect.value;
+      if (draft.times.includes(hhmm)) {
+        setStatus(editStatus, "error", t("The time {time} is already on the list.", { time: hhmm }));
+        return;
+      }
+      draft.times.push(hhmm);
+      clearStatus(editStatus);
+      renderChips();
     });
     renderChips();
 
@@ -395,25 +415,29 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         el("aside", { class: "automation-editor-side" }, [
           el("h2", { class: "automation-editor-title" }, isNew ? t("New schedule") : t("Schedule editor")),
           field(t("Name"), name, `sch-${id}-name`),
-          field(t("Cadence"), cadence, `sch-${id}-cadence`),
           field(t("Mode"), mode, `sch-${id}-mode`),
           el("div", { class: "field automation-authors-field" }, [
             el("span", { class: "field-label" }, [el("label", {}, t("Authors")), help(t(AUTHORS_HELP))]),
             el("div", { class: "automation-author-choices" },
               authorBoxes.length ? authorBoxes : [el("span", { class: "muted" }, t("No authors registered yet."))]),
           ]),
-          checkField(t("Enabled"), enabled, `sch-${id}-enabled`),
+          el("div", { class: "field field-check" }, [
+            enabled,
+            el("label", { for: `sch-${id}-enabled` }, t("Active")),
+            help(t("Active fires on schedule; switched off it stays listed but never fires (paused).")),
+          ]),
           el("div", { class: "automation-editor-actions" }, [cancel, save]),
           editStatus,
         ]),
         el("div", { class: "automation-editor-main" }, [
           el("section", { class: "automation-editor-block" }, [
             el("h3", {}, t("Days")),
+            cadenceBar,
             calendar.element,
           ]),
           el("section", { class: "automation-editor-block" }, [
             el("h3", {}, t("Times (several per day allowed)")),
-            picker.element,
+            el("div", { class: "time-entry" }, [timeSelect, addTime]),
             chips,
           ]),
         ]),
@@ -424,15 +448,15 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
       event.preventDefault();
       const body = {
         name: name.value.trim(),
-        cadence: cadence.value,
+        cadence: cadenceValue,
         times: [...draft.times].sort(),
         mode: mode.value,
         authors: [...draft.authors].sort(),
         enabled: enabled.checked,
       };
       if (!isNew) body.slug = schedule.slug;
-      if (cadence.value === "weekly") body.weekdays = [...draft.weekdays].sort((a, b) => a - b);
-      if (cadence.value === "monthly") body.monthdays = [...draft.monthdays].sort((a, b) => a - b);
+      if (cadenceValue === "weekly") body.weekdays = [...draft.weekdays].sort((a, b) => a - b);
+      if (cadenceValue === "monthly") body.monthdays = [...draft.monthdays].sort((a, b) => a - b);
       const problem = validateSchedule(body);
       if (problem) {
         setStatus(editStatus, "error", t(problem));
