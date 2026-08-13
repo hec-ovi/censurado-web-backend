@@ -5,9 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -211,6 +214,34 @@ func TestLoginSetsSessionThenServesSPA(t *testing.T) {
 		t.Fatalf("SPA shell not served:\n%s", page.Body.String())
 	}
 	assertStrictCSP(t, page.Header().Get("Content-Security-Policy"))
+}
+
+// Every asset index.html links, and every module the SPA imports transitively,
+// must resolve behind a session: the asset routes in ui.go are enumerated by
+// hand, so a new file that is not registered 404s silently in the browser.
+func TestSessionServesEveryStaticAsset(t *testing.T) {
+	h, _ := newAdminServer(t)
+	index, err := fs.ReadFile(os.DirFS("static"), "index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	assets := regexp.MustCompile(`\./([a-z]+(?:\.css|\.js))`).FindAllStringSubmatch(string(index), -1)
+	if len(assets) < 5 {
+		t.Fatalf("suspiciously few assets referenced by index.html: %v", assets)
+	}
+	paths := []string{"/schedule.js", "/slugify.js", "/components/api.js"}
+	for _, m := range assets {
+		paths = append(paths, "/"+m[1])
+	}
+	for _, p := range paths {
+		if p == "/components/api.js" {
+			p = "/components/el.js" // one representative of the wildcarded dir
+		}
+		rec := do(t, h, "GET", p, "", withSession())
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s with session = %d want 200 (register it in ui.go)", p, rec.Code)
+		}
+	}
 }
 
 func TestLoginRejectsWrongToken(t *testing.T) {

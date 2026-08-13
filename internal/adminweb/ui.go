@@ -66,7 +66,9 @@ func Handler(cfg Config, api http.Handler) (http.Handler, bool) {
 	mux.Handle("GET /login.css", assets)
 	mux.Handle("GET /login.js", assets)
 	mux.Handle("GET /styles.css", assets)
+	mux.Handle("GET /automation.css", assets)
 	mux.Handle("GET /slugify.js", assets)
+	mux.Handle("GET /schedule.js", assets)
 	mux.Handle("GET /components/", assets)
 
 	// Everything else is the JSON API + liveness + media.
