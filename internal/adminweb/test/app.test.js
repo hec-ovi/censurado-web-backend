@@ -29,6 +29,7 @@ function baseHandlers(extra = []) {
     http.get(`${ORIGIN}/articles`, () => HttpResponse.json({ articles: [], total: 0 })),
     http.get(`${ORIGIN}/portadas`, () => HttpResponse.json({ portadas: [] })),
     http.get(`${ORIGIN}/recomendado`, () => HttpResponse.json({ slugs: [] })),
+    http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: [] })),
   ];
 }
 
@@ -38,16 +39,16 @@ function mount() {
   return mountApp(root);
 }
 
-test("mounts exactly six tabs in order, with no Editorial, Agentic, or Status tab", async () => {
+test("mounts exactly seven tabs in order, with no Editorial, Agentic, or Status tab", async () => {
   server.use(...baseHandlers());
   mount();
 
   const consoleTablist = screen.getByRole("tablist", { name: "Console sections" });
   const tabs = within(consoleTablist).getAllByRole("tab");
-  assert.equal(tabs.length, 6, "six operator tabs");
+  assert.equal(tabs.length, 7, "seven operator tabs");
   assert.deepEqual(
     tabs.map((tab) => tab.textContent),
-    ["Articles", "Authors", "Sources", "Portada", "Recomendado", "Topics"],
+    ["Articles", "Authors", "Sources", "Portada", "Recomendado", "Topics", "Automation"],
   );
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /editorial/i }), null, "no Editorial tab");
   assert.equal(within(consoleTablist).queryByRole("tab", { name: /agentic/i }), null, "no Agentic workflow tab");
@@ -64,6 +65,7 @@ test("renders a clean zero-state on every surviving tab (backend only, brain dow
   await screen.findByText("No topics yet.");
   await screen.findByText("No authors yet. Create one to get started.");
   await screen.findByText("No sources yet.");
+  await screen.findByText("No schedules yet. Create one to put the newsroom on a clock.");
 });
 
 test("the Temas tab renders derived topic rows with stable slugs", async () => {

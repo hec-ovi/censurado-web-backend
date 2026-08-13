@@ -99,6 +99,14 @@ export const api = {
   deleteSource: (slug) => del(`/sources/${enc(slug)}`),
   restoreSource: (slug) => post(`/sources/${enc(slug)}/restore`),
 
+  // --- Schedules (the batch-run automation registry) --------------------
+  // Backend schedules are keyed by slug (derived from the name). Edit is a full
+  // upsert with an explicit slug so a rename never forks a row; the recent-run
+  // strip is server-owned and an upsert never touches it.
+  listSchedules: () => get("/schedules"),
+  upsertSchedule: (body) => post("/schedules", body),
+  deleteSchedule: (slug) => del(`/schedules/${enc(slug)}`),
+
   // --- Articles --------------------------------------------------------
   listArticleDays: (params = {}) => get("/articles:days" + query(params)),
   listArticleFacets: () => get("/articles:facets"),

@@ -28,6 +28,7 @@ function baseHandlers(extra = []) {
     http.get(`${ORIGIN}/articles`, () => HttpResponse.json({ articles: [], total: 0 })),
     http.get(`${ORIGIN}/portadas`, () => HttpResponse.json({ portadas: [] })),
     http.get(`${ORIGIN}/recomendado`, () => HttpResponse.json({ slugs: [] })),
+    http.get(`${ORIGIN}/schedules`, () => HttpResponse.json({ schedules: [] })),
   ];
 }
 
@@ -54,5 +55,5 @@ test("a malformed #panel-i18n block does not throw; the panel renders English", 
   await boot("}{ not json", "malformed");
   const tablist = await screen.findByRole("tablist", { name: "Console sections" });
   const labels = within(tablist).getAllByRole("tab").map((tab) => tab.textContent);
-  assert.deepEqual(labels, ["Articles", "Authors", "Sources", "Portada", "Recomendado", "Topics"]);
+  assert.deepEqual(labels, ["Articles", "Authors", "Sources", "Portada", "Recomendado", "Topics", "Automation"]);
 });

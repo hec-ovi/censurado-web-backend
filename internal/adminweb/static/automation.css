@@ -1,0 +1,214 @@
+/* The Automation tab: schedule table, editor dialog widgets (time chips, day
+   grids, author choices), and the recent-runs strip. The table itself rides the
+   shared article-table styles; everything here is schedule-specific chrome.
+   Square corners throughout, like the rest of the panel. */
+
+.automation-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.automation-head-actions {
+  margin-left: auto;
+}
+
+.automation-name {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.automation-title {
+  font-weight: 750;
+}
+
+.automation-cadence {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.automation-cadence-word {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.automation-cadence-days {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.automation-cadence-times {
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.automation-mode[data-mode="auto"] {
+  border-color: var(--admin-red);
+  color: var(--admin-red);
+}
+
+.automation-next {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.automation-last {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.automation-last-detail {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* --- recent-runs strip -------------------------------------------------- */
+
+.automation-runs-head {
+  margin-top: 1.4rem;
+}
+
+.automation-runs {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.automation-run-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  flex-wrap: wrap;
+}
+
+.automation-run-schedule {
+  font-weight: 700;
+}
+
+.automation-run-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.automation-run-when {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- editor dialog widgets ---------------------------------------------- */
+
+.automation-time-entry {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.automation-time-entry input[type="time"] {
+  flex: 0 1 11rem;
+}
+
+.time-chips {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  min-height: 1.9rem;
+  align-items: center;
+}
+
+.time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.3rem 0.22rem 0.6rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-chip-remove {
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.time-chip-remove:hover {
+  color: var(--admin-red);
+  background: transparent;
+}
+
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(2.4rem, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  max-width: 24rem;
+}
+
+.day-toggle {
+  min-height: 2.1rem;
+  padding: 0.2rem 0;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  box-shadow: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.day-toggle[aria-pressed="true"] {
+  border-color: var(--admin-red);
+  background: var(--admin-red);
+  color: #fff;
+}
+
+.automation-days-field[hidden] {
+  display: none;
+}
+
+.automation-author-choices {
+  display: flex;
+  gap: 0.4rem 1.1rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+}
+
+.automation-author-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.automation-author-choice input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+}
+
+@media (max-width: 46rem) {
+  .automation-head {
+    flex-wrap: wrap;
+  }
+
+  .day-grid {
+    max-width: none;
+  }
+}

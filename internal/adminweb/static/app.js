@@ -7,6 +7,7 @@ import { PersonaList } from "./components/personaList.js";
 import { TemasPanel } from "./components/temasPanel.js";
 import { SourcesPanel } from "./components/sourcesPanel.js";
 import { RecomendadoPanel } from "./components/recomendadoPanel.js";
+import { AutomationPanel } from "./components/automationPanel.js";
 
 const THEME_KEY = "panel-theme";
 
@@ -96,6 +97,7 @@ export function mountApp(root, deps = {}) {
   const temas = TemasPanel({ api });
   const sources = SourcesPanel({ api });
   const recomendado = RecomendadoPanel({ api });
+  const automation = AutomationPanel({ api });
 
   const tabs = [
     { id: "articles", label: t("Articles"), content: [articles.element] },
@@ -104,6 +106,7 @@ export function mountApp(root, deps = {}) {
     { id: "portada", label: t("Portada"), content: [portada.element] },
     { id: "recomendado", label: t("Recomendado"), content: [recomendado.element] },
     { id: "temas", label: t("Topics"), content: [temas.element] },
+    { id: "automation", label: t("Automation"), content: [automation.element] },
   ];
 
   const tabButtons = [];
@@ -196,8 +199,9 @@ export function mountApp(root, deps = {}) {
   temas.reload();
   sources.reload();
   recomendado.reload();
+  automation.reload();
 
-  return { articles, portada, list, temas, sources, recomendado, tabs: tabButtons, panels, select };
+  return { articles, portada, list, temas, sources, recomendado, automation, tabs: tabButtons, panels, select };
 }
 
 // Browser entry point. index.html loads this module under a strict CSP (no inline
