@@ -85,10 +85,12 @@ test("lists schedules with status, next month/day, clock icons, and a production
   const link = within(row).getByRole("link", { name: "open" });
   assert.match(link.href, /^https:\/\/elcensuradoweb\.com\/\d{4}\/\d{2}\/$/);
 
-  // The runs strip flattens runs newest first, on the right half.
-  const strip = document.querySelectorAll(".automation-run-row");
-  assert.equal(strip.length, 2);
-  assert.equal(strip[0].dataset.runId, "lote-2");
+  // The run console lists every firing newest first, docker-log style.
+  const lines = document.querySelectorAll(".automation-console-line");
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].dataset.runId, "lote-2");
+  assert.equal(lines[0].querySelector(".console-status").dataset.state, "ok");
+  assert.equal(lines[1].querySelector(".console-status").dataset.state, "failed");
 });
 
 test("a paused schedule keeps a clean empty month gap but still shows its pattern", async () => {

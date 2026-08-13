@@ -38,6 +38,15 @@
   border-bottom-color: var(--admin-red);
 }
 
+/* The app shell never scrolls (overflow hidden up the tree), so each subtab
+   pane owns its scroll; without this the settings pane's lower half — including
+   its save buttons — is unreachable. */
+.autotabs-panel {
+  max-height: calc(100vh - 215px);
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
 .automation-schedules {
   display: grid;
   gap: 0.8rem;
@@ -59,13 +68,15 @@
   margin-left: auto;
 }
 
-/* The settings view, one clear page: the status bar across the top, the model
-   setup on the left, the recent runs on the right. */
+/* The settings view, a fixed two-column grid: the status bar across the top,
+   the two configuration cards (Modelos, Etapas) stacked on the left, and the
+   run console filling the right column top to bottom (no dead space). */
 .automation-config {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1.4rem 2rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .automation-config .automation-status {
@@ -85,6 +96,7 @@
 .automation-config .automation-runs-block {
   grid-column: 2;
   grid-row: 2;
+  min-height: 0;
 }
 
 /* --- the live status card ------------------------------------------------- */
@@ -271,23 +283,72 @@
   padding: 0;
 }
 
-/* --- the recent runs strip -------------------------------------------------- */
+/* --- the run console: a docker-log view -------------------------------------- */
 
 .automation-runs-block {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.6rem;
-  align-content: start;
 }
 
 .automation-runs-head {
   margin-top: 0;
 }
 
+/* The console is a terminal in both themes: black, monospace, scrolling. */
 .automation-runs {
-  display: grid;
-  gap: 0.4rem;
+  background: #0b0d0e;
+  border: 1px solid #1e2427;
+  padding: 0.8rem 0.9rem;
+  overflow-y: auto;
+  min-height: 22rem;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: #d7dadc;
 }
 
+.automation-console-line {
+  display: flex;
+  gap: 0.75rem;
+  white-space: nowrap;
+}
+
+.automation-console-empty {
+  color: #6f7a80;
+  margin: 0;
+}
+
+.console-when {
+  color: #6f7a80;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-status {
+  flex: none;
+  white-space: pre;
+  font-weight: 700;
+}
+
+.console-status[data-state="ok"] { color: #4cc38a; }
+.console-status[data-state="failed"] { color: #ff6369; }
+.console-status[data-state="running"] { color: #f0c000; }
+.console-status[data-state="queued"] { color: #6cb6ff; }
+
+.console-schedule {
+  color: #f1f3f4;
+  font-weight: 700;
+  flex: none;
+}
+
+.console-detail {
+  color: #b7bec2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card-style run rows (the row-click summary dialog keeps these). */
 .automation-run-row {
   display: flex;
   align-items: center;
@@ -296,10 +357,6 @@
   border: 1px solid var(--line);
   background: var(--surface-2);
   flex-wrap: wrap;
-}
-
-.automation-run-schedule {
-  font-weight: 700;
 }
 
 .automation-run-detail {
@@ -688,7 +745,38 @@ button.cal-day.cal-today {
 
 .models-section {
   display: grid;
+  gap: 1.4rem;
+  align-content: start;
+}
+
+.models-card {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 1.1rem 1.2rem;
+  display: grid;
   gap: 0.9rem;
+}
+
+.models-card .models-lane {
+  background: var(--surface);
+}
+
+.models-key-hint {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.models-key-hint[data-state="set"] {
+  color: #4cc38a;
+}
+
+.models-offline-note {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.models-offline-note[hidden] {
+  display: none;
 }
 
 /* The Models heading and its explainer stack, never floating side by side. */

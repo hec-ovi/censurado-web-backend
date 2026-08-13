@@ -64,11 +64,11 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   ]);
   const configPane = el("div", { class: "automation-config" }, [
     statusEl,
+    models.element,
     el("div", { class: "automation-runs-block" }, [
       el("div", { class: "panel-head automation-runs-head" }, [el("h2", {}, t("Recent runs"))]),
       runsEl,
     ]),
-    models.element,
   ]);
   const views = subTabs([
     { id: "cronogramas", label: t("Schedules"), content: [schedulesPane] },
@@ -328,7 +328,8 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     showDialog(dialog);
   }
 
-  // The recent-runs strip: the newest run records across every schedule.
+  // The recent runs as a CONSOLE: every recorded firing across every schedule,
+  // newest first, one monospace line each, scrolling like a docker log.
   function renderRuns() {
     clear(runsEl);
     const all = [];
@@ -337,18 +338,23 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         all.push({ schedule: schedule.name || schedule.slug, ...run });
       }
     }
-    all.sort((a, b) => String(b.started_at || b.run_id).localeCompare(String(a.started_at || a.run_id)));
-    const latest = all.slice(0, 8);
-    if (!latest.length) {
-      runsEl.append(el("p", { class: "muted empty-state" }, t("No runs recorded yet.")));
+    // Sort by start time, newest first; a record with no start yet (just
+    // queued) sinks to the bottom instead of pinning to the top forever.
+    const sortKey = (r) => r.started_at || "0000";
+    all.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+    if (!all.length) {
+      runsEl.append(el("p", { class: "automation-console-line automation-console-empty" },
+        t("No runs recorded yet.")));
       return;
     }
-    for (const run of latest) {
-      runsEl.append(el("div", { class: "automation-run-row", dataset: { runId: run.run_id } }, [
-        el("span", { class: "status", dataset: { state: RUN_STATE[run.status] || "running" } }, runLabel(run.status)),
-        el("span", { class: "automation-run-schedule" }, run.schedule),
-        el("span", { class: "automation-run-detail" }, run.detail || run.run_id),
-        el("span", { class: "automation-run-when muted" }, (run.started_at || "").replace("T", " ").slice(0, 16)),
+    for (const run of all) {
+      const when = (run.started_at || "").replace("T", " ").slice(0, 16);
+      runsEl.append(el("div", { class: "automation-console-line", dataset: { runId: run.run_id } }, [
+        el("span", { class: "console-when" }, when || "---------- --:--"),
+        el("span", { class: "console-status", dataset: { state: run.status } },
+          runLabel(run.status).padEnd(9, " ")),
+        el("span", { class: "console-schedule" }, run.schedule),
+        el("span", { class: "console-detail" }, run.detail ? `· ${run.detail}` : `· ${run.run_id}`),
       ]));
     }
   }

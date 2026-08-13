@@ -18,13 +18,12 @@ type PanelTextSeedEntry struct {
 	Es  string
 }
 
-// PanelTextSeed returns the live panel UI-string catalog: 301 keys.
+// PanelTextSeed returns the live panel UI-string catalog: 306 keys.
 func PanelTextSeed() []PanelTextSeedEntry {
 	return panelTextSeed
 }
 
 var panelTextSeed = []PanelTextSeedEntry{
-	{"(file default)", "(file default)", "(valor del archivo)"},
 	{"(lane default)", "(lane default)", "(valor del carril)"},
 	{"(unset)", "(unset)", "(sin definir)"},
 	{"A monthly schedule needs at least one day of the month.", "A monthly schedule needs at least one day of the month.", "Un cronograma mensual necesita al menos un día del mes."},
@@ -32,6 +31,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"A schedule fires the newsroom's edition batch on its days at each listed time (the server's local wall clock). Preview holds every article for approval; auto publishes as soon as the gate passes. The executor runs while Docker runs: firings that come due while a batch is in flight queue behind it, and times missed while the executor is off are skipped, never replayed.", "A schedule fires the newsroom's edition batch on its days at each listed time (the server's local wall clock). Preview holds every article for approval; auto publishes as soon as the gate passes. The executor runs while Docker runs: firings that come due while a batch is in flight queue behind it, and times missed while the executor is off are skipped, never replayed.", "Un cronograma dispara el lote de edición en sus días, a cada hora listada (reloj local del servidor). Preview retiene para aprobación; auto publica al pasar la mesa. El ejecutor corre mientras Docker corre: los disparos que vencen con un lote en marcha se encolan detrás; las horas perdidas con el ejecutor apagado se saltean, nunca se repiten."},
 	{"A schedule needs a name.", "A schedule needs a name.", "Un cronograma necesita un nombre."},
 	{"A weekly schedule needs at least one weekday.", "A weekly schedule needs at least one weekday.", "Un cronograma semanal necesita al menos un día de la semana."},
+	{"API key", "API key", "Clave de API"},
 	{"About", "About", "Acerca de"},
 	{"Acta (research read)", "Acta (research read)", "Acta (lectura de investigación)"},
 	{"Action failed ({code}): {msg}", "Action failed ({code}): {msg}", "La acción falló ({code}): {msg}"},
@@ -124,6 +124,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Double card", "Double card", "Tarjeta doble"},
 	{"Draft", "Draft", "Borrador"},
 	{"Drag to reorder", "Drag to reorder", "Arrastrar para reordenar"},
+	{"Each pipeline stage runs on the lane you pick; the model override replaces that lane's default model for the stage only.", "Each pipeline stage runs on the lane you pick; the model override replaces that lane's default model for the stage only.", "Cada etapa del pipeline corre en el carril que elijas; el modelo específico reemplaza el modelo del carril solo para esa etapa."},
 	{"Edit article", "Edit article", "Editar artículo"},
 	{"Edit schedule", "Edit schedule", "Editar cronograma"},
 	{"Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Vacío = corrida genérica (toda la redacción). Escribí una instrucción para hacerla personalizada."},
@@ -133,13 +134,13 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Every day", "Every day", "Todos los días"},
 	{"Executor", "Executor", "Ejecutor"},
 	{"Executor offline", "Executor offline", "Ejecutor apagado"},
+	{"Executor offline: showing the last saved values.", "Executor offline: showing the last saved values.", "Ejecutor apagado: se muestra lo último guardado."},
 	{"Executor status", "Executor status", "Estado del ejecutor"},
 	{"Feb", "Feb", "Feb"},
 	{"February", "February", "Febrero"},
 	{"Feed URLs (comma separated)", "Feed URLs (comma separated)", "URLs de feeds (separadas por comas)"},
 	{"Feed type", "Feed type", "Tipo de feed"},
 	{"Female", "Female", ""},
-	{"File default", "File default", "Valor del archivo"},
 	{"Filter by active on this author", "Filter by active on this author", ""},
 	{"Filter by author", "Filter by author", "Filtrar por autor"},
 	{"Filter by day", "Filter by day", "Filtrar por día"},
@@ -161,6 +162,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"July", "July", "Julio"},
 	{"Jun", "Jun", "Jun"},
 	{"June", "June", "Junio"},
+	{"Key saved. Leave empty to keep it.", "Key saved. Leave empty to keep it.", "Clave guardada. Dejá vacío para conservarla."},
 	{"Lane", "Lane", "Carril"},
 	{"Language", "Language", "Idioma"},
 	{"Last run", "Last run", "Última corrida"},
@@ -188,7 +190,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Model (llama.cpp)", "Model (llama.cpp)", "Modelo (llama.cpp)"},
 	{"Model override", "Model override", "Modelo específico"},
 	{"Models", "Models", "Modelos"},
-	{"Models saved. The next firing uses them.", "Models saved. The next firing uses them.", "Modelos guardados. La próxima corrida los usa."},
 	{"Mon", "Mon", "Lun"},
 	{"Month", "Month", "Mes"},
 	{"Monthly", "Monthly", "Mensual"},
@@ -210,6 +211,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"No batch in flight.", "No batch in flight.", "Ningún lote en marcha."},
 	{"No days", "No days", "Sin días"},
 	{"No days match.", "No days match.", "Ningún día coincide."},
+	{"No key yet: paste it here or set OPENROUTER_API_KEY in .env.", "No key yet: paste it here or set OPENROUTER_API_KEY in .env.", "Sin clave: pegala acá o definí OPENROUTER_API_KEY en .env."},
 	{"No recommended articles selected.", "No recommended articles selected.", "No hay artículos recomendados seleccionados."},
 	{"No runs recorded yet.", "No runs recorded yet.", "Todavía no hay corridas registradas."},
 	{"No schedules yet. Create one to put the newsroom on a clock.", "No schedules yet. Create one to put the newsroom on a clock.", "Todavía no hay cronogramas. Cree uno para poner la redacción en horario."},
@@ -262,7 +264,9 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Save article", "Save article", "Guardar artículo"},
 	{"Save models", "Save models", "Guardar modelos"},
 	{"Save portada", "Save portada", ""},
+	{"Save stages", "Save stages", "Guardar etapas"},
 	{"Saved.", "Saved.", "Guardado."},
+	{"Saved. The next firing uses this.", "Saved. The next firing uses this.", "Guardado. La próxima corrida usa esto."},
 	{"Saving...", "Saving...", "Guardando..."},
 	{"Schedule", "Schedule", "Cronograma"},
 	{"Schedule editor", "Schedule editor", "Editor de cronograma"},
@@ -285,6 +289,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Source editor", "Source editor", "Editor de fuente"},
 	{"Sources", "Sources", "Fuentes"},
 	{"Stage", "Stage", "Etapa"},
+	{"Stages", "Stages", "Etapas"},
 	{"Status", "Status", "Estado"},
 	{"Style", "Style", "Estilo"},
 	{"Subtitle", "Subtitle", "Subtítulo"},
@@ -294,7 +299,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Text", "Text", "Texto"},
 	{"The time {time} is already on the list.", "The time {time} is already on the list.", "La hora {time} ya está en la lista."},
 	{"Theme", "Theme", "Tema"},
-	{"These settings steer the scheduled batches: each stage of the pipeline runs on the lane you pick, with an optional model override. A blank field keeps the pipeline file's default. The OpenRouter key is read from the stack's .env (OPENROUTER_API_KEY), never stored here.", "These settings steer the scheduled batches: each stage of the pipeline runs on the lane you pick, with an optional model override. A blank field keeps the pipeline file's default. The OpenRouter key is read from the stack's .env (OPENROUTER_API_KEY), never stored here.", "Esta configuración gobierna los lotes programados: cada etapa del pipeline corre en el carril elegido, con un modelo específico opcional. Un campo vacío conserva el valor del archivo del pipeline. La clave de OpenRouter se lee del .env del stack (OPENROUTER_API_KEY), nunca se guarda acá."},
+	{"These are the endpoints and models the scheduled batches actually run on, live from the executor. Edit and save: the next firing uses what you see here.", "These are the endpoints and models the scheduled batches actually run on, live from the executor. Edit and save: the next firing uses what you see here.", "Estos son los endpoints y modelos con los que corren los lotes programados, en vivo desde el ejecutor. Editá y guardá: la próxima corrida usa lo que ves acá."},
 	{"This article will be removed from this list. There is no recovery from this screen.", "This article will be removed from this list. There is no recovery from this screen.", "El artículo se quitará de esta lista. No hay recuperación desde esta pantalla."},
 	{"Thu", "Thu", "Jue"},
 	{"Time", "Time", "Hora"},

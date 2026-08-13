@@ -105,16 +105,90 @@ type automationSettingsResponse struct {
 	Settings map[string]any `json:"settings"`
 }
 
+// redactLaneKeys strips every lanes.*.api_key from a copy of the settings,
+// leaving `api_key_set: true` in its place, so lesser tokens (and the browser)
+// learn only THAT a key exists, never the key.
+func redactLaneKeys(settings map[string]any) map[string]any {
+	lanes, ok := settings["lanes"].(map[string]any)
+	if !ok {
+		return settings
+	}
+	outLanes := make(map[string]any, len(lanes))
+	for name, v := range lanes {
+		lane, ok := v.(map[string]any)
+		if !ok {
+			outLanes[name] = v
+			continue
+		}
+		if _, has := lane["api_key"]; !has {
+			outLanes[name] = lane
+			continue
+		}
+		cp := make(map[string]any, len(lane))
+		for k, lv := range lane {
+			if k != "api_key" {
+				cp[k] = lv
+			}
+		}
+		cp["api_key_set"] = true
+		outLanes[name] = cp
+	}
+	out := make(map[string]any, len(settings))
+	for k, v := range settings {
+		out[k] = v
+	}
+	out["lanes"] = outLanes
+	return out
+}
+
+// preserveLaneKeys restores stored lanes.*.api_key values into an incoming
+// settings object whose lane omits the key (the panel never holds it), so a save
+// without a freshly typed key keeps the stored one. An explicit empty string
+// clears it; a non-empty incoming key (a rotation) wins. The read-only
+// `api_key_set` decoration never persists.
+func preserveLaneKeys(next, stored map[string]any) {
+	nextLanes, _ := next["lanes"].(map[string]any)
+	storedLanes, _ := stored["lanes"].(map[string]any)
+	for name, v := range nextLanes {
+		lane, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(lane, "api_key_set")
+		switch key, has := lane["api_key"]; {
+		case has && key == "":
+			delete(lane, "api_key") // explicit clear
+		case has:
+			// a typed key: keep it
+		default:
+			if sl, ok := storedLanes[name].(map[string]any); ok {
+				if key, ok := sl["api_key"]; ok {
+					lane["api_key"] = key
+				}
+			}
+		}
+	}
+}
+
 // ServeAutomationSettings answers GET /automation-settings with the single global
-// automation-settings object ({} when never set).
+// automation-settings object ({} when never set). Stored lane API keys are always
+// redacted to `api_key_set` — the panel never needs them back — except for an
+// explicit `?include_secrets=true` from an admin:write holder, the executor's lane
+// for building the derived pipeline config. Agent publish keys can never reach a
+// raw key either way.
 func (rh *ReadHandler) ServeAutomationSettings(w http.ResponseWriter, r *http.Request) {
-	if !rh.authn(w, r) {
+	id, ok := resolveIdentity(rh.auth, w, r)
+	if !ok {
 		return
 	}
 	settings, err := rh.store.GetAutomationSettings(r.Context())
 	if err != nil {
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
+	}
+	includeSecrets := r.URL.Query().Get("include_secrets") == "true" && id.HasScope(ScopeAdminWrite)
+	if !includeSecrets {
+		settings = redactLaneKeys(settings)
 	}
 	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: coalesceMeta(settings)})
 }
@@ -135,11 +209,17 @@ func (oh *OperatorHandler) ServePutAutomationSettings(w http.ResponseWriter, r *
 		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "settings object is required"})
 		return
 	}
+	stored, err := oh.store.GetAutomationSettings(r.Context())
+	if err != nil {
+		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
+		return
+	}
+	preserveLaneKeys(in.Settings, stored)
 	if err := oh.store.SetAutomationSettings(r.Context(), in.Settings); err != nil {
 		writeProblem(w, problem{Status: http.StatusInternalServerError, Code: "store_error"})
 		return
 	}
-	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: in.Settings})
+	writeJSON(w, http.StatusOK, automationSettingsResponse{Settings: redactLaneKeys(in.Settings)})
 }
 
 // ServeAutomationStatus answers GET /automation-status with the executor's last

@@ -2,6 +2,7 @@ package publish_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -186,6 +187,53 @@ func TestAutomationSettings_RoundTripAndScope(t *testing.T) {
 	}
 	if rec := getAuth(t, srv, agent, "/automation-settings"); rec.Code != http.StatusOK {
 		t.Errorf("agent GET settings: %d, want 200 (the executor may read on any key)", rec.Code)
+	}
+
+	// Lane API keys are secret-aware: stored on PUT, redacted to api_key_set on
+	// every read unless an admin:write holder explicitly asks for secrets (the
+	// executor's lane), preserved server-side when a later save omits them, and
+	// cleared by an explicit empty string.
+	withKey := `{"settings":{"lanes":{"openrouter":{"model":"laguna","api_key":"sk-or-123"}}}}`
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-settings", withKey); rec.Code != http.StatusOK {
+		t.Fatalf("PUT settings with key: %d (%s)", rec.Code, rec.Body.String())
+	}
+	keyOf := func(rec *httptest.ResponseRecorder) (string, bool, bool) {
+		var out struct {
+			Settings struct {
+				Lanes struct {
+					Openrouter map[string]any `json:"openrouter"`
+				} `json:"lanes"`
+			} `json:"settings"`
+		}
+		decodeBody(t, rec, &out)
+		key, hasKey := out.Settings.Lanes.Openrouter["api_key"].(string)
+		_, hasFlag := out.Settings.Lanes.Openrouter["api_key_set"]
+		return key, hasKey, hasFlag
+	}
+	if key, hasKey, hasFlag := keyOf(getAuth(t, srv, op, "/automation-settings")); hasKey || !hasFlag {
+		t.Errorf("plain GET must redact: key=%q hasKey=%v flag=%v", key, hasKey, hasFlag)
+	}
+	if key, hasKey, _ := keyOf(getAuth(t, srv, op, "/automation-settings?include_secrets=true")); !hasKey || key != "sk-or-123" {
+		t.Errorf("admin include_secrets GET must serve the raw key, got %q (has=%v)", key, hasKey)
+	}
+	if key, hasKey, hasFlag := keyOf(getAuth(t, srv, agent, "/automation-settings?include_secrets=true")); hasKey || !hasFlag {
+		t.Errorf("an agent key never sees the secret even asking: key=%q flag=%v", key, hasFlag)
+	}
+	// A save that carries the redacted flag but no key keeps the stored key.
+	noKey := `{"settings":{"lanes":{"openrouter":{"model":"laguna-2","api_key_set":true}},"stages":{"draft":{"lane":"local"}}}}`
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-settings", noKey); rec.Code != http.StatusOK {
+		t.Fatalf("PUT settings without key: %d", rec.Code)
+	}
+	if key, hasKey, _ := keyOf(getAuth(t, srv, op, "/automation-settings?include_secrets=true")); !hasKey || key != "sk-or-123" {
+		t.Errorf("the stored key must survive a keyless save, got %q (has=%v)", key, hasKey)
+	}
+	// An explicit empty string clears it.
+	clearKey := `{"settings":{"lanes":{"openrouter":{"model":"laguna-2","api_key":""}}}}`
+	if rec := doReq(t, srv, http.MethodPut, op, "/automation-settings", clearKey); rec.Code != http.StatusOK {
+		t.Fatalf("PUT settings clearing key: %d", rec.Code)
+	}
+	if key, hasKey, _ := keyOf(getAuth(t, srv, op, "/automation-settings?include_secrets=true")); hasKey {
+		t.Errorf("an explicit empty api_key must clear the stored one, still %q", key)
 	}
 
 	// The status sibling (the executor's heartbeat) round-trips independently,
