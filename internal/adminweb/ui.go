@@ -19,9 +19,9 @@ var staticFS embed.FS
 // CSP: same-origin scripts/styles only, images may be same-origin, data:, or https:.
 const contentSecurityPolicy = "default-src 'self'; img-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 
-// panelLang is the single language the operator panel renders. English is the base
-// every panel_text key is authored in; the panel has no language switch.
-const panelLang = "en"
+// defaultPanelLang is the fallback language when Config.Lang is empty: English,
+// the base every panel_text key is authored in.
+const defaultPanelLang = "en"
 
 // panelI18NMarker is the literal in index.html that spaIndex replaces with the injected
 // catalog JSON. Left in place (e.g. index.html served without substitution) it is
@@ -105,12 +105,12 @@ func (h *handler) panelI18N(ctx context.Context) []byte {
 		Sections map[string]string `json:"sections"`
 	}{Strings: map[string]string{}, Sections: map[string]string{}}
 	if h.cfg.PanelText != nil {
-		if m, err := h.cfg.PanelText(ctx, panelLang); err == nil && m != nil {
+		if m, err := h.cfg.PanelText(ctx, h.cfg.lang()); err == nil && m != nil {
 			payload.Strings = m
 		}
 	}
 	if h.cfg.SectionLabels != nil {
-		if m, err := h.cfg.SectionLabels(ctx, panelLang); err == nil && m != nil {
+		if m, err := h.cfg.SectionLabels(ctx, h.cfg.lang()); err == nil && m != nil {
 			payload.Sections = m
 		}
 	}

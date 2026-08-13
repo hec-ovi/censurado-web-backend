@@ -80,6 +80,7 @@ type cliFlags struct {
 	panelLoginHash  *string
 	panelLoginToken *string
 	panelSecure     *bool
+	panelLang       *string
 }
 
 // newFlagSet builds the flag set with env-derived defaults. It is factored out so a
@@ -106,6 +107,7 @@ func newFlagSet(getenv func(string) string, stderr io.Writer) (*flag.FlagSet, *c
 		panelLoginHash:  fs.String("panel-login-token-hash", envOr(getenv, "PANEL_LOGIN_TOKEN_HASH", ""), "hex SHA-256 of the admin panel login token (or PANEL_LOGIN_TOKEN_HASH); with -panel-session-key, enables the panel"),
 		panelLoginToken: fs.String("panel-login-token", envOr(getenv, "PANEL_LOGIN_TOKEN", ""), "cleartext login token for local-box form prefill only (or PANEL_LOGIN_TOKEN); leave empty on any shared deployment"),
 		panelSecure:     fs.Bool("panel-secure-cookies", envBool(getenv, "PANEL_SECURE_COOKIES", false), "set the Secure attribute on the panel cookies (or PANEL_SECURE_COOKIES); enable behind TLS"),
+		panelLang:       fs.String("panel-lang", envOr(getenv, "PANEL_LANG", ""), "language of the panel_text rows injected into the panel (or PANEL_LANG); empty = en, keys without a row fall back to English"),
 	}
 	fs.Var(&scopes, "scope", "scope to grant the minted key; repeatable (default articles:write)")
 	f.scopes = &scopes
@@ -235,6 +237,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		LoginTokenHash: *f.panelLoginHash,
 		LoginToken:     *f.panelLoginToken,
 		SecureCookies:  *f.panelSecure,
+		Lang:           *f.panelLang,
 		// The panel reads its own chrome strings from panel_text and its section labels
 		// from the shared frontend_text rows, both injected into the SPA shell.
 		PanelText: func(ctx context.Context, lang string) (map[string]string, error) {

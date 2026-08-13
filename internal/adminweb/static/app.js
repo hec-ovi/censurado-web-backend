@@ -191,8 +191,8 @@ export function mountApp(root, deps = {}) {
     ]),
   );
 
-  // The panel is English-only.
-  document.documentElement.lang = "en";
+  // The rendered language follows the injected catalog (PANEL_LANG server-side);
+  // keys without a translated row fall back to their English identity.
   document.title = t("Admin Panel");
 
   articles.reload();

@@ -5,7 +5,7 @@
 // panel's forecast and the actual firing cannot drift apart silently.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextRun, cadenceDays, formatWhen, validateSchedule } from "../static/schedule.js";
+import { nextRun, validateSchedule } from "../static/schedule.js";
 
 // Wednesday, 2026-08-12 10:00 local.
 const NOW = new Date(2026, 7, 12, 10, 0);
@@ -33,18 +33,6 @@ test("nextRun monthly: a day absent from this month rolls to the next month that
 test("nextRun is null when the schedule is disabled or has no times", () => {
   assert.equal(nextRun({ ...daily, enabled: false }, NOW), null);
   assert.equal(nextRun({ cadence: "daily", times: [], enabled: true }, NOW), null);
-});
-
-test("cadenceDays renders weekday names and monthdays, and nothing for daily", () => {
-  assert.equal(cadenceDays({ cadence: "weekly", weekdays: [1, 3, 5] }), "Mon, Wed, Fri");
-  assert.equal(cadenceDays({ cadence: "monthly", monthdays: [1, 15] }), "day 1, 15");
-  assert.equal(cadenceDays(daily), "");
-});
-
-test("formatWhen: today, tomorrow, then weekday + date", () => {
-  assert.equal(formatWhen(new Date(2026, 7, 12, 18, 0), NOW), "today 18:00");
-  assert.equal(formatWhen(new Date(2026, 7, 13, 7, 30), NOW), "tomorrow 07:30");
-  assert.equal(formatWhen(new Date(2026, 7, 17, 7, 30), NOW), "Mon 17 Aug, 07:30");
 });
 
 test("validateSchedule reports the first problem, and passes a sound draft", () => {

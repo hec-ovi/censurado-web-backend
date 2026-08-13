@@ -33,31 +33,6 @@ export function nextRun(schedule, now = new Date()) {
   return null;
 }
 
-// cadenceDays renders the cadence's day part for a list row: "" for daily,
-// "Mon, Wed, Fri" for weekly, "day 1, 15" for monthly.
-export function cadenceDays(schedule) {
-  if (schedule.cadence === "weekly") {
-    return (schedule.weekdays || []).map((d) => WEEKDAY_SHORT[d] || String(d)).join(", ");
-  }
-  if (schedule.cadence === "monthly") {
-    return "day " + (schedule.monthdays || []).join(", ");
-  }
-  return "";
-}
-
-// formatWhen renders a fire Date compactly relative to `now`: "today 18:00",
-// "tomorrow 07:30", or "Mon 17 Aug, 07:30".
-export function formatWhen(date, now = new Date()) {
-  if (!date) return "";
-  const hhmm = String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
-  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const dayDiff = Math.round((startOf(date) - startOf(now)) / 86400000);
-  if (dayDiff === 0) return `today ${hhmm}`;
-  if (dayDiff === 1) return `tomorrow ${hhmm}`;
-  const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${WEEKDAY_SHORT[date.getDay()]} ${date.getDate()} ${MONTH_SHORT[date.getMonth()]}, ${hhmm}`;
-}
-
 // validateSchedule checks a draft before it is sent: returns the first problem as
 // a plain-English message, or "" when the draft is valid. The server enforces the
 // same rules; this exists so the operator gets the message inline, pre-flight.

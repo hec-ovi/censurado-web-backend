@@ -28,9 +28,11 @@ export function MonthCalendar({ weekdays, monthdays } = {}) {
   next.addEventListener("click", () => { shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1); render(); });
 
   const grid = el("div", { class: "cal-grid", role: "grid" });
+  const caption = el("p", { class: "cal-caption muted" });
   const element = el("div", { class: "month-calendar", dataset: { mode } }, [
     el("div", { class: "cal-head" }, [prev, title, next]),
     grid,
+    caption,
   ]);
 
   function render() {
@@ -59,12 +61,15 @@ export function MonthCalendar({ weekdays, monthdays } = {}) {
 
     const daysInMonth = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
     const lead = new Date(shown.getFullYear(), shown.getMonth(), 1).getDay();
+    const today = new Date();
+    const isThisMonth = today.getFullYear() === shown.getFullYear() && today.getMonth() === shown.getMonth();
     for (let i = 0; i < lead; i++) grid.append(el("span", { class: "cal-cell cal-cell-empty" }));
     for (let day = 1; day <= daysInMonth; day++) {
       const weekday = (lead + day - 1) % 7;
+      const todayCls = isThisMonth && today.getDate() === day ? " cal-today" : "";
       if (mode === "monthly") {
         const btn = el("button", {
-          type: "button", class: "cal-cell cal-day",
+          type: "button", class: "cal-cell cal-day" + todayCls,
           "aria-pressed": monthdays.has(day) ? "true" : "false",
         }, String(day));
         btn.addEventListener("click", () => {
@@ -74,12 +79,17 @@ export function MonthCalendar({ weekdays, monthdays } = {}) {
         });
         grid.append(btn);
       } else {
-        const on = mode === "daily" || (mode === "weekly" && weekdays.has(weekday));
+        // A quiet, calendar-looking cell: plain numbers; in weekly mode a small
+        // marker under the numbers of the chosen weekday columns.
+        const on = mode === "weekly" && weekdays.has(weekday);
         grid.append(el("span", {
-          class: "cal-cell cal-day cal-day-static", dataset: on ? { on: "true" } : {},
+          class: "cal-cell cal-day cal-day-static" + todayCls, dataset: on ? { on: "true" } : {},
         }, String(day)));
       }
     }
+    if (mode === "daily") caption.textContent = t("Fires every day at the listed times.");
+    else if (mode === "weekly") caption.textContent = t("Pick weekdays on the header row.");
+    else caption.textContent = t("Pick the days of the month.");
   }
 
   function setMode(next) {

@@ -33,6 +33,11 @@ type Config struct {
 	SessionTTL time.Duration
 	// Now is an injectable clock for tests; nil means time.Now.
 	Now func() time.Time
+	// Lang is the language the panel renders: the panel_text rows injected into the
+	// SPA shell. Keys without a row in this language fall back to their English
+	// identity, so a partly-translated catalog degrades word by word, never blank.
+	// Empty means English.
+	Lang string
 	// PanelText returns the panel_text catalog for a language as a key->value map,
 	// which the server injects into the SPA shell so t() renders from the DB. Nil (or
 	// an error) leaves the panel on its compiled English identity fallback.
@@ -61,6 +66,13 @@ func (c Config) now() time.Time {
 		return c.Now()
 	}
 	return time.Now()
+}
+
+func (c Config) lang() string {
+	if c.Lang != "" {
+		return c.Lang
+	}
+	return defaultPanelLang
 }
 
 // operatorIdentity is the in-process identity a valid browser session maps to. It

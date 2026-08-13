@@ -68,14 +68,15 @@ test("lists schedules with status, next month/day, clock icons, and a production
 
   const cells = row.querySelectorAll("td");
   // An enabled weekly schedule always has a next firing within a week, so the
-  // Month and Day cells carry real values (exact ones depend on today's date).
+  // Month cell carries a real value; the Day cell shows the schedule's pattern.
   assert.match(cells[2].textContent, /^[A-Z][a-z]{2}$/, "month short name");
-  assert.match(cells[3].textContent, /^\d{1,2}$/, "day of month");
+  assert.equal(cells[3].textContent, "Mon, Fri", "the day pattern");
 
-  // The fire times render as round clocks, one per time, named by the time.
+  // The fire times render as round clocks with their HH:MM beside them.
   const clocks = row.querySelectorAll("svg.clock-icon");
   assert.equal(clocks.length, 2);
   assert.equal(clocks[0].getAttribute("aria-label"), "07:30");
+  assert.match(cells[4].textContent, /07:30/);
 
   // The production link points at the month archive of the next firing.
   const link = within(row).getByRole("link", { name: "open" });
@@ -87,7 +88,7 @@ test("lists schedules with status, next month/day, clock icons, and a production
   assert.equal(strip[0].dataset.runId, "lote-2");
 });
 
-test("a paused schedule keeps clean empty gaps: no forecast, no month/day", async () => {
+test("a paused schedule keeps a clean empty month gap but still shows its pattern", async () => {
   stubLists({ schedules: [schedule({ enabled: false, runs: [] })] });
   const panel = mount();
   await panel.reload();
@@ -95,8 +96,8 @@ test("a paused schedule keeps clean empty gaps: no forecast, no month/day", asyn
   const row = await rowFor("edicion-manana");
   assert.ok(within(row).getByText("Paused"));
   const cells = row.querySelectorAll("td");
-  assert.equal(cells[2].textContent, "", "month stays an empty gap");
-  assert.equal(cells[3].textContent, "", "day stays an empty gap");
+  assert.equal(cells[2].textContent, "", "month stays an empty gap (no next firing)");
+  assert.equal(cells[3].textContent, "Mon, Fri", "the day pattern stays readable");
   assert.equal(within(row).queryByRole("link"), null, "no production link without a firing");
 });
 

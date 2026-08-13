@@ -5,7 +5,7 @@ import { ClockIcon } from "./clockIcon.js";
 import { ModelsSection } from "./modelsSection.js";
 import { MonthCalendar } from "./monthCalendar.js";
 import { TimeGridPicker } from "./timeGridPicker.js";
-import { nextRun, validateSchedule } from "../schedule.js";
+import { WEEKDAY_SHORT, nextRun, validateSchedule } from "../schedule.js";
 
 // The Automation tab, split in two halves:
 //   LEFT  - the schedule list: name, status, the next firing's month/day, the
@@ -190,8 +190,18 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     );
   }
 
+  // The Day column shows the schedule's PATTERN (readable at a glance even when
+  // paused); the Month column shows the next firing's month, only when one exists.
+  function dayPattern(schedule) {
+    if (schedule.cadence === "weekly") {
+      return (schedule.weekdays || []).map((d) => t(WEEKDAY_SHORT[d])).join(", ");
+    }
+    if (schedule.cadence === "monthly") return (schedule.monthdays || []).join(", ");
+    return t("Every day");
+  }
+
   function row(schedule, index, now) {
-    const nameCell = el("td", {}, el("div", { class: "automation-name" }, [
+    const nameCell = el("td", { class: "automation-name-cell" }, el("div", { class: "automation-name" }, [
       el("span", { class: "automation-title" }, schedule.name || schedule.slug),
       el("span", { class: "muted automation-mode-word" }, schedule.mode === "auto" ? t("auto") : t("preview")),
     ]));
@@ -206,13 +216,13 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const statusCell = el("td", {}, el("span", { class: "status", dataset: { state } }, stateLabel));
 
     const next = schedule.enabled ? nextRun(schedule, now) : null;
-    const monthCell = el("td", {}, next ? MONTH_SHORT[next.getMonth()] : "");
-    const dayCell = el("td", {}, next ? String(next.getDate()) : "");
+    const monthCell = el("td", {}, next ? t(MONTH_SHORT[next.getMonth()]) : "");
+    const dayCell = el("td", { class: "automation-day-cell" }, dayPattern(schedule));
 
     const times = [...(schedule.times || [])].sort();
-    const shown = times.slice(0, 4);
+    const shown = times.slice(0, 2);
     const timeCell = el("td", {}, el("span", { class: "automation-clocks" }, [
-      ...shown.map((time) => ClockIcon(time)),
+      ...shown.map((time) => el("span", { class: "automation-clock-time" }, [ClockIcon(time, { size: 20 }), time])),
       times.length > shown.length ? el("span", { class: "muted" }, `+${times.length - shown.length}`) : null,
     ]));
 
@@ -377,9 +387,13 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
 
-    const editForm = el("form", { class: "source-edit source-edit-full automation-edit" }, [
-      el("div", { class: "automation-edit-grid" }, [
-        el("div", { class: "automation-edit-left" }, [
+    // The editor card: a form SIDEBAR (name, cadence, mode, authors, enabled,
+    // actions) beside the MAIN area (the month calendar and the time picker),
+    // the shape of a calendar app's event editor.
+    const editForm = el("form", { class: "automation-edit" }, [
+      el("div", { class: "automation-editor-card" }, [
+        el("aside", { class: "automation-editor-side" }, [
+          el("h2", { class: "automation-editor-title" }, isNew ? t("New schedule") : t("Schedule editor")),
           field(t("Name"), name, `sch-${id}-name`),
           field(t("Cadence"), cadence, `sch-${id}-cadence`),
           field(t("Mode"), mode, `sch-${id}-mode`),
@@ -389,14 +403,21 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
               authorBoxes.length ? authorBoxes : [el("span", { class: "muted" }, t("No authors registered yet."))]),
           ]),
           checkField(t("Enabled"), enabled, `sch-${id}-enabled`),
+          el("div", { class: "automation-editor-actions" }, [cancel, save]),
+          editStatus,
         ]),
-        el("div", { class: "automation-edit-right" }, [
-          el("div", { class: "field" }, [el("label", {}, t("Days")), calendar.element]),
-          el("div", { class: "field" }, [el("label", {}, t("Times (several per day allowed)")), picker.element, chips]),
+        el("div", { class: "automation-editor-main" }, [
+          el("section", { class: "automation-editor-block" }, [
+            el("h3", {}, t("Days")),
+            calendar.element,
+          ]),
+          el("section", { class: "automation-editor-block" }, [
+            el("h3", {}, t("Times (several per day allowed)")),
+            picker.element,
+            chips,
+          ]),
         ]),
       ]),
-      el("div", { class: "source-actions source-actions--editor" }, [cancel, save]),
-      editStatus,
     ]);
     cancel.addEventListener("click", () => onClose());
     editForm.addEventListener("submit", async (event) => {

@@ -1,207 +1,11 @@
-/* The Automation tab: schedule table, editor dialog widgets (time chips, day
-   grids, author choices), and the recent-runs strip. The table itself rides the
-   shared article-table styles; everything here is schedule-specific chrome.
-   Square corners throughout, like the rest of the panel. */
-
-.automation-head {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.automation-head-actions {
-  margin-left: auto;
-}
-
-.automation-name {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-}
-
-.automation-title {
-  font-weight: 750;
-}
-
-.automation-cadence {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.automation-cadence-word {
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-}
-
-.automation-cadence-days {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.automation-cadence-times {
-  font-variant-numeric: tabular-nums;
-  white-space: pre;
-}
-
-.automation-mode[data-mode="auto"] {
-  border-color: var(--admin-red);
-  color: var(--admin-red);
-}
-
-.automation-next {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.automation-last {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.automation-last-detail {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-/* --- recent-runs strip -------------------------------------------------- */
-
-.automation-runs {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.automation-run-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  flex-wrap: wrap;
-}
-
-.automation-run-schedule {
-  font-weight: 700;
-}
-
-.automation-run-detail {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.automation-run-when {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* --- editor dialog widgets ---------------------------------------------- */
-
-.automation-time-entry {
-  display: flex;
-  gap: 0.5rem;
-  align-items: stretch;
-}
-
-.automation-time-entry input[type="time"] {
-  flex: 0 1 11rem;
-}
-
-.time-chips {
-  display: flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  margin-top: 0.55rem;
-  min-height: 1.9rem;
-  align-items: center;
-}
-
-.time-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.22rem 0.3rem 0.22rem 0.6rem;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-chip-remove {
-  min-width: 1.4rem;
-  min-height: 1.4rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.time-chip-remove:hover {
-  color: var(--admin-red);
-  background: transparent;
-}
-
-.day-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(2.4rem, 1fr));
-  gap: 0.35rem;
-  margin-top: 0.45rem;
-  max-width: 24rem;
-}
-
-.day-toggle {
-  min-height: 2.1rem;
-  padding: 0.2rem 0;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  box-shadow: none;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.day-toggle[aria-pressed="true"] {
-  border-color: var(--admin-red);
-  background: var(--admin-red);
-  color: #fff;
-}
-
-.automation-days-field[hidden] {
-  display: none;
-}
-
-.automation-author-choices {
-  display: flex;
-  gap: 0.4rem 1.1rem;
-  flex-wrap: wrap;
-  margin-top: 0.45rem;
-}
-
-.automation-author-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.automation-author-choice input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  min-height: 0;
-}
+/* The Automation tab: schedule list, live status card, models setup, and the
+   calendar-shaped editor dialog (month grid + hour grid). The list rides the
+   shared article-table styles; everything here is automation-specific chrome.
+   The calendar follows the calendar-app idiom the operator asked for: plain
+   numbers, selection as a filled disc, no boxes. Everything else keeps the
+   panel's square corners. */
 
 /* --- the 50/50 split: two stacked rows ------------------------------------ */
-/* Top row: the schedule list, scrolling inside roughly half the viewport.
-   Bottom row: the status card + recent runs + models setup. */
 
 .automation-split {
   display: grid;
@@ -221,8 +25,17 @@
   overflow-y: auto;
 }
 
-/* The ops row spreads its blocks side by side when there is room; each block
-   still stacks cleanly on a narrow window. */
+.automation-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.automation-head-actions {
+  margin-left: auto;
+}
+
+/* The ops row spreads its blocks side by side when there is room. */
 .automation-ops {
   grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
   gap: 1.2rem;
@@ -241,6 +54,7 @@
   padding: 0.9rem;
   display: grid;
   gap: 0.6rem;
+  align-content: start;
 }
 
 .automation-status-main {
@@ -285,18 +99,67 @@
   color: var(--muted);
 }
 
-/* --- list details --------------------------------------------------------- */
+/* --- the schedule list ----------------------------------------------------- */
+
+.automation-table {
+  table-layout: fixed;
+}
+
+.automation-table th:nth-child(1) { width: 26%; }
+.automation-table th:nth-child(2) { width: 11%; }
+.automation-table th:nth-child(3) { width: 8%; }
+.automation-table th:nth-child(4) { width: 17%; }
+.automation-table th:nth-child(5) { width: 21%; }
+.automation-table th:nth-child(6) { width: 8%; }
+.automation-table th:nth-child(7) { width: 9%; }
+
+.automation-table tbody tr.automation-row > td {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  vertical-align: middle;
+}
+
+.automation-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.automation-title {
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
 
 .automation-mode-word {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  flex: none;
+}
+
+.automation-day-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .automation-clocks {
   display: inline-flex;
   align-items: center;
+  gap: 0.7rem;
+}
+
+.automation-clock-time {
+  display: inline-flex;
+  align-items: center;
   gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .clock-icon .clock-face {
@@ -321,7 +184,7 @@
 }
 
 .automation-prod-link {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -334,20 +197,146 @@
   text-decoration: underline;
 }
 
-/* --- the month calendar --------------------------------------------------- */
+.automation-table .source-trash {
+  width: 2.2rem;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  min-height: 2.2rem;
+  padding: 0;
+}
 
-.month-calendar {
+/* --- the recent runs strip -------------------------------------------------- */
+
+.automation-runs-block {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.automation-runs-head {
+  margin-top: 0;
+}
+
+.automation-runs {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.automation-run-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.7rem;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  padding: 0.7rem;
-  max-width: 22rem;
+  flex-wrap: wrap;
+}
+
+.automation-run-schedule {
+  font-weight: 700;
+}
+
+.automation-run-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.automation-run-when {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- the editor dialog: a centered card ------------------------------------ */
+
+.automation-dialog .source-dialog-shell {
+  display: block;
+  overflow-y: auto;
+  padding: 2.5rem 1.5rem;
+}
+
+.automation-edit {
+  max-width: 78rem;
+  margin: 0 auto;
+}
+
+.automation-editor-card {
+  display: grid;
+  grid-template-columns: 21rem minmax(0, 1fr);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.automation-editor-side {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  padding: 1.5rem;
+  border-right: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.automation-editor-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+}
+
+.automation-editor-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  margin-top: 0.6rem;
+}
+
+.automation-editor-main {
+  display: grid;
+  gap: 1.6rem;
+  align-content: start;
+  padding: 1.5rem 1.8rem;
+}
+
+.automation-editor-block {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.automation-editor-block > h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.automation-author-choices {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.automation-author-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.automation-author-choice input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+}
+
+/* --- the month calendar: plain numbers, filled-disc selection --------------- */
+
+.month-calendar {
+  max-width: 24rem;
 }
 
 .cal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.7rem;
 }
 
 .cal-title {
@@ -358,91 +347,134 @@
   min-width: 2rem;
   min-height: 2rem;
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 0;
+  background: transparent;
   box-shadow: none;
-  font-size: 1rem;
+  color: var(--muted);
+  font-size: 1.1rem;
   line-height: 1;
+}
+
+.cal-nav:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.2rem;
+  grid-template-columns: repeat(7, 2.6rem);
+  gap: 0.15rem;
+  justify-content: start;
 }
 
-.cal-weekday {
-  text-align: center;
-  font-size: 0.68rem;
+.cal-weekday,
+.cal-weekday-toggle {
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.66rem;
   font-weight: 800;
   text-transform: uppercase;
   color: var(--muted);
-  padding: 0.25rem 0;
+  padding: 0;
 }
 
 .cal-weekday-toggle {
-  min-height: 1.8rem;
-  padding: 0;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 0;
+  background: transparent;
   box-shadow: none;
-  color: var(--muted);
+  border-radius: 50%;
+  width: 2.2rem;
+  margin: 0 auto;
+}
+
+.cal-weekday-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .cal-weekday-toggle[aria-pressed="true"] {
-  border-color: var(--admin-red);
   background: var(--admin-red);
   color: #fff;
 }
 
 .cal-cell {
-  min-height: 2.1rem;
+  height: 2.6rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
-}
-
-.cal-day {
-  border: 1px solid transparent;
   color: var(--text);
+  position: relative;
 }
 
 button.cal-day {
-  border-color: var(--line);
-  background: var(--surface);
+  border: 0;
+  background: transparent;
   box-shadow: none;
+  border-radius: 50%;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin: auto;
   padding: 0;
-  min-height: 2.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+button.cal-day:hover {
+  background: var(--surface-2);
 }
 
 button.cal-day[aria-pressed="true"] {
-  border-color: var(--admin-red);
   background: var(--admin-red);
   color: #fff;
   font-weight: 800;
 }
 
-.cal-day-static[data-on="true"] {
-  background: color-mix(in srgb, var(--admin-red) 16%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--admin-red) 30%, var(--line));
-  font-weight: 700;
+.cal-day-static {
+  font-weight: 500;
 }
 
-/* --- the hour grid time picker -------------------------------------------- */
+/* Weekly: a small marker under the numbers of the chosen weekday columns. */
+.cal-day-static[data-on="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 0.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  background: var(--admin-red);
+}
+
+.cal-today,
+button.cal-day.cal-today {
+  outline: 1px solid var(--muted);
+  outline-offset: -4px;
+  border-radius: 50%;
+}
+
+.cal-caption {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
+/* --- the time picker: big hours, hairline grid, minute step ---------------- */
 
 .time-grid {
   display: grid;
-  gap: 0.35rem;
-  max-width: 26rem;
+  gap: 0.8rem;
+  max-width: 30rem;
 }
 
-.time-hours {
+.time-block {
   display: grid;
-  grid-template-columns: 1.4rem repeat(12, 1fr);
-  gap: 0.2rem;
-  align-items: stretch;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: center;
 }
 
 .time-block-mark {
@@ -450,22 +482,34 @@ button.cal-day[aria-pressed="true"] {
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 1rem;
+}
+
+.time-block-hours {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
 }
 
 .time-hour {
-  min-height: 1.9rem;
+  min-height: 2.6rem;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 0;
   background: var(--surface);
   box-shadow: none;
-  font-size: 0.74rem;
+  font-size: 1rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
+.time-hour:hover {
+  background: var(--surface-2);
+}
+
 .time-hour[aria-pressed="true"] {
-  border-color: var(--admin-red);
   background: var(--admin-red);
   color: #fff;
   font-weight: 800;
@@ -473,55 +517,81 @@ button.cal-day[aria-pressed="true"] {
 
 .time-minute-row {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.6rem;
   align-items: center;
 }
 
 .time-minutes {
-  min-height: 1.9rem;
-  min-width: 3.4rem;
+  min-height: 2.4rem;
+  min-width: 3.6rem;
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 0;
+  background: transparent;
   box-shadow: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
+.time-minutes:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .time-minutes[aria-pressed="true"] {
-  border-color: var(--admin-red);
   background: var(--admin-red);
   color: #fff;
+}
+
+.time-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 1.05rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .time-add {
-  margin-left: auto;
+  flex: none;
 }
 
-/* --- the calendar editor layout ------------------------------------------- */
-
-.automation-edit-grid {
-  display: grid;
-  grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.4fr);
-  gap: 1.4rem;
-  align-items: start;
+.time-chips {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-height: 1.9rem;
+  align-items: center;
 }
 
-.automation-edit-left,
-.automation-edit-right {
-  display: grid;
-  gap: 0.9rem;
-  align-content: start;
+.time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.3rem 0.25rem 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.automation-runs-head {
-  margin-top: 0;
+.time-chip-remove {
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
 }
 
-@media (max-width: 70rem) {
-  .automation-edit-grid {
-    grid-template-columns: 1fr;
-  }
+.time-chip-remove:hover {
+  color: var(--admin-red);
+  background: transparent;
 }
 
 /* --- models section ------------------------------------------------------ */
@@ -573,12 +643,13 @@ button.cal-day[aria-pressed="true"] {
   justify-content: flex-end;
 }
 
-@media (max-width: 46rem) {
-  .automation-head {
-    flex-wrap: wrap;
+@media (max-width: 70rem) {
+  .automation-editor-card {
+    grid-template-columns: 1fr;
   }
 
-  .day-grid {
-    max-width: none;
+  .automation-editor-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 }
