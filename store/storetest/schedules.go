@@ -25,6 +25,7 @@ func SampleSchedule(slug string) store.Schedule {
 		Times:    []string{"07:30", "18:00"},
 		Weekdays: []int{1, 3, 5},
 		Mode:     "preview",
+		Task:     "batch",
 		Prompt:   "Editorial sobre energia con foco en tarifas.",
 		Authors:  []string{"borge", "giuliano"},
 		Enabled:  true,
@@ -76,6 +77,9 @@ func assertScheduleEqual(t *testing.T, got, want store.Schedule) {
 	}
 	if got.Mode != want.Mode {
 		t.Errorf("Mode = %q, want %q", got.Mode, want.Mode)
+	}
+	if got.Task != want.Task {
+		t.Errorf("Task = %q, want %q", got.Task, want.Task)
 	}
 	if got.Prompt != want.Prompt {
 		t.Errorf("Prompt = %q, want %q", got.Prompt, want.Prompt)

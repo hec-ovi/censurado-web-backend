@@ -46,6 +46,14 @@ export function PenIcon(className = "icon") {
   ]);
 }
 
+// Reveal/hide a secret field.
+export function EyeIcon(className = "icon") {
+  return svgIcon(className, [
+    svgNode("path", { d: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" }),
+    svgNode("circle", { cx: "12", cy: "12", r: "3" }),
+  ]);
+}
+
 export function TrashIcon(className = "icon") {
   return svgIcon(className, [
     svgNode("path", { d: "M3 6h18" }),

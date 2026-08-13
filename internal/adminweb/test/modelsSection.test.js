@@ -38,11 +38,18 @@ function effective(over = {}) {
   };
 }
 
-function stub({ settings = {}, eff = effective(), at = new Date().toISOString() } = {}) {
+function stub({ settings = {}, eff = effective(), at = new Date().toISOString(),
+                llama = true, remote = "ok", secrets = null } = {}) {
   server.use(
-    http.get(`${ORIGIN}/automation-settings`, () => HttpResponse.json({ settings })),
+    http.get(`${ORIGIN}/automation-settings`, ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get("include_secrets") === "true" && secrets) {
+        return HttpResponse.json({ settings: secrets });
+      }
+      return HttpResponse.json({ settings });
+    }),
     http.get(`${ORIGIN}/automation-status`, () =>
-      HttpResponse.json({ settings: eff ? { at, effective: eff } : {} })),
+      HttpResponse.json({ settings: eff ? { at, llama_ok: llama, remote_state: remote, effective: eff } : {} })),
   );
 }
 
@@ -58,10 +65,65 @@ test("shows the EFFECTIVE endpoints and models as real editable values", async (
   // The key never round-trips: an empty password field plus the saved-state hint.
   assert.equal(document.getElementById("models-openrouter-key").value, "");
   await screen.findByText("Key saved. Leave empty to keep it.");
-  // The stage rows show the lane each stage ACTUALLY runs on after the merge.
+  // The stage rows show the lane each stage ACTUALLY runs on after the merge;
+  // a stage picks a lane and nothing else.
   assert.equal(document.getElementById("models-stage-evaluate-lane").value, "openrouter");
   assert.equal(document.getElementById("models-stage-draft-lane").value, "local");
-  assert.equal(document.getElementById("models-stage-draft-model").placeholder, "qwen-local");
+  assert.equal(document.getElementById("models-stage-draft-model"), null, "no per-stage model field");
+
+  // Each lane card shows its live health from the heartbeat probes.
+  const rows = document.querySelectorAll(".models-health");
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /healthy/);
+  assert.match(rows[1].textContent, /healthy/);
+
+  // The provider preset mirrors the endpoint (openrouter.ai -> OpenRouter).
+  assert.equal(document.getElementById("models-provider").value, "https://openrouter.ai/api/v1");
+});
+
+test("the provider preset fills the endpoint for any OpenAI-compatible service", async () => {
+  stub();
+  const user = userEvent.setup();
+  const section = mount();
+  await section.reload();
+
+  await user.selectOptions(document.getElementById("models-provider"), "https://api.groq.com/openai/v1");
+  assert.equal(document.getElementById("models-openrouter-base").value, "https://api.groq.com/openai/v1");
+  await user.selectOptions(document.getElementById("models-provider"), "https://api.x.ai/v1");
+  assert.equal(document.getElementById("models-openrouter-base").value, "https://api.x.ai/v1");
+});
+
+test("the eye reveals the stored key on a deliberate click, and only then", async () => {
+  let secretReads = 0;
+  stub({ settings: { lanes: { openrouter: { api_key_set: true } } },
+         secrets: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
+  server.use(
+    http.get(`${ORIGIN}/automation-settings`, ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get("include_secrets") === "true") {
+        secretReads += 1;
+        return HttpResponse.json({ settings: { lanes: { openrouter: { api_key: "sk-or-secreta" } } } });
+      }
+      return HttpResponse.json({ settings: { lanes: { openrouter: { api_key_set: true } } } });
+    }),
+  );
+  const user = userEvent.setup();
+  const section = mount();
+  await section.reload();
+
+  const key = document.getElementById("models-openrouter-key");
+  assert.equal(key.type, "password");
+  assert.equal(key.value, "", "no secret on a routine load");
+  assert.equal(secretReads, 0);
+
+  await user.click(screen.getByRole("button", { name: "Show the key" }));
+  await waitFor(() => assert.equal(key.value, "sk-or-secreta"));
+  assert.equal(key.type, "text");
+  assert.equal(secretReads, 1, "the secret is fetched only on the eye click");
+
+  await user.click(screen.getByRole("button", { name: "Show the key" }));
+  assert.equal(key.type, "password");
+  assert.equal(key.value, "", "masked again means: keep the stored key");
 });
 
 test("saving models stores the lanes (with a typed key) without touching the stages", async () => {
@@ -112,12 +174,11 @@ test("saving stages stores every stage's lane; the key never rides through the b
 
   await screen.findByText("Key saved. Leave empty to keep it.");
   await user.selectOptions(document.getElementById("models-stage-draft-lane"), "openrouter");
-  await user.type(document.getElementById("models-stage-draft-model"), "deepseek/deepseek-chat");
   await user.click(screen.getByRole("button", { name: "Save stages" }));
 
   await waitFor(() => assert.ok(put, "a PUT should have been sent"));
   assert.equal(put.settings.stages.draft.lane, "openrouter");
-  assert.equal(put.settings.stages.draft.model, "deepseek/deepseek-chat");
+  assert.equal(put.settings.stages.draft.model, undefined, "a stage picks only its lane");
   assert.equal(put.settings.stages.evaluate.lane, "openrouter", "the effective lanes persist explicitly");
   assert.equal(put.settings.stages.queries.lane, "local");
   assert.equal(put.settings.lanes.openrouter.api_key, undefined,

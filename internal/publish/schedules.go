@@ -19,6 +19,7 @@ import (
 var (
 	validCadences       = map[string]bool{"daily": true, "weekly": true, "monthly": true}
 	validScheduleModes  = map[string]bool{"preview": true, "auto": true}
+	validScheduleTasks  = map[string]bool{"batch": true, "topics": true}
 	validRunStatuses    = map[string]bool{"queued": true, "running": true, "ok": true, "failed": true}
 	scheduleTimePattern = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
@@ -43,6 +44,7 @@ type scheduleJSON struct {
 	Weekdays  []int             `json:"weekdays"`
 	Monthdays []int             `json:"monthdays"`
 	Mode      string            `json:"mode"`
+	Task      string            `json:"task"`
 	Prompt    string            `json:"prompt"`
 	Authors   []string          `json:"authors"`
 	Enabled   bool              `json:"enabled"`
@@ -74,7 +76,7 @@ func toScheduleJSON(s store.Schedule) scheduleJSON {
 	}
 	return scheduleJSON{
 		Slug: s.Slug, Name: s.Name, Cadence: s.Cadence, Times: coalesceTopics(s.Times),
-		Weekdays: weekdays, Monthdays: monthdays, Mode: s.Mode, Prompt: s.Prompt,
+		Weekdays: weekdays, Monthdays: monthdays, Mode: s.Mode, Task: s.Task, Prompt: s.Prompt,
 		Authors: coalesceTopics(s.Authors), Enabled: s.Enabled, Runs: runs,
 		Metadata: coalesceMeta(s.Metadata), Deleted: s.Deleted,
 		CreatedAt: rfc3339(s.CreatedAt), UpdatedAt: rfc3339(s.UpdatedAt),
@@ -268,6 +270,7 @@ type scheduleInput struct {
 	Weekdays  []int          `json:"weekdays,omitempty"`
 	Monthdays []int          `json:"monthdays,omitempty"`
 	Mode      string         `json:"mode"`
+	Task      string         `json:"task"`
 	Prompt    string         `json:"prompt"`
 	Authors   []string       `json:"authors,omitempty"`
 	Enabled   *bool          `json:"enabled,omitempty"`
@@ -361,6 +364,14 @@ func (oh *OperatorHandler) ServeUpsertSchedule(w http.ResponseWriter, r *http.Re
 		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "mode must be one of preview, auto"})
 		return
 	}
+	task := in.Task
+	if task == "" {
+		task = "batch"
+	}
+	if !validScheduleTasks[task] {
+		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "task must be one of batch, topics"})
+		return
+	}
 	times, msg := normalizeTimes(in.Times)
 	if msg != "" {
 		writeProblem(w, problem{Status: http.StatusBadRequest, Code: "invalid_request", Detail: msg})
@@ -395,7 +406,7 @@ func (oh *OperatorHandler) ServeUpsertSchedule(w http.ResponseWriter, r *http.Re
 	}
 	sch, err := oh.store.UpsertSchedule(r.Context(), store.Schedule{
 		Slug: slug, Name: name, Cadence: cadence, Times: times,
-		Weekdays: weekdays, Monthdays: monthdays, Mode: mode,
+		Weekdays: weekdays, Monthdays: monthdays, Mode: mode, Task: task,
 		Prompt: strings.TrimSpace(in.Prompt), Authors: authors,
 		Enabled: enabled, Metadata: in.Metadata,
 	})

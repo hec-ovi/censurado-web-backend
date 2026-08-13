@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   weekdays   TEXT NOT NULL DEFAULT '[]',
   monthdays  TEXT NOT NULL DEFAULT '[]',
   mode       TEXT NOT NULL DEFAULT 'preview',
+  task       TEXT NOT NULL DEFAULT 'batch',
   prompt     TEXT NOT NULL DEFAULT '',
   authors    TEXT NOT NULL DEFAULT '[]',
   enabled    INTEGER NOT NULL DEFAULT 1,

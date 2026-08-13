@@ -18,13 +18,12 @@ type PanelTextSeedEntry struct {
 	Es  string
 }
 
-// PanelTextSeed returns the live panel UI-string catalog: 306 keys.
+// PanelTextSeed returns the live panel UI-string catalog: 314 keys.
 func PanelTextSeed() []PanelTextSeedEntry {
 	return panelTextSeed
 }
 
 var panelTextSeed = []PanelTextSeedEntry{
-	{"(lane default)", "(lane default)", "(valor del carril)"},
 	{"(unset)", "(unset)", "(sin definir)"},
 	{"A monthly schedule needs at least one day of the month.", "A monthly schedule needs at least one day of the month.", "Un cronograma mensual necesita al menos un día del mes."},
 	{"A portada is one day's front-page plan. Pick a day, then order its articles (the first row is the day's lead), and mark any as important. Saving writes just that day; the articles themselves are untouched.", "A portada is one day's front-page plan. Pick a day, then order its articles (the first row is the day's lead), and mark any as important. Saving writes just that day; the articles themselves are untouched.", "Una portada es el plan de tapa de un día. Elija un día, luego ordene sus artículos (la primera fila es la nota de tapa del día) y marque los que sean importantes. Guardar escribe solo ese día; los artículos en sí no se tocan."},
@@ -49,6 +48,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"All sections", "All sections", "Todas las secciones"},
 	{"Alphabetical", "Alphabetical", "Alfabético"},
 	{"An author only researches the sources linked here. Cross-source corroboration across them is what drives relevance: a claim that several linked outlets carry independently rises, an unsourced one does not. Link a few trusted, independent outlets per author.", "An author only researches the sources linked here. Cross-source corroboration across them is what drives relevance: a claim that several linked outlets carry independently rises, an unsourced one does not. Link a few trusted, independent outlets per author.", "Un autor solo investiga las fuentes vinculadas aquí. La corroboración entre fuentes es lo que impulsa la relevancia: una afirmación que varios medios vinculados sostienen de forma independiente sube, una sin fuente no. Vincule unos pocos medios confiables e independientes por autor."},
+	{"Any OpenAI-compatible inference API with a Bearer key works here.", "Any OpenAI-compatible inference API with a Bearer key works here.", "Acá sirve cualquier API de inferencia compatible con OpenAI con clave Bearer."},
 	{"Apr", "Apr", "Abr"},
 	{"April", "April", "Abril"},
 	{"Article", "Article", "Artículo"},
@@ -124,7 +124,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Double card", "Double card", "Tarjeta doble"},
 	{"Draft", "Draft", "Borrador"},
 	{"Drag to reorder", "Drag to reorder", "Arrastrar para reordenar"},
-	{"Each pipeline stage runs on the lane you pick; the model override replaces that lane's default model for the stage only.", "Each pipeline stage runs on the lane you pick; the model override replaces that lane's default model for the stage only.", "Cada etapa del pipeline corre en el carril que elijas; el modelo específico reemplaza el modelo del carril solo para esa etapa."},
+	{"Each pipeline stage runs on the lane you pick: the local model or the remote API.", "Each pipeline stage runs on the lane you pick: the local model or the remote API.", "Cada etapa del pipeline corre en el carril que elijas: el modelo local o la API remota."},
 	{"Edit article", "Edit article", "Editar artículo"},
 	{"Edit schedule", "Edit schedule", "Editar cronograma"},
 	{"Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Empty = generic run (whole newsroom). Write an instruction to make it a custom run.", "Vacío = corrida genérica (toda la redacción). Escribí una instrucción para hacerla personalizada."},
@@ -188,7 +188,6 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Mode", "Mode", "Modo"},
 	{"Model", "Model", "Modelo"},
 	{"Model (llama.cpp)", "Model (llama.cpp)", "Modelo (llama.cpp)"},
-	{"Model override", "Model override", "Modelo específico"},
 	{"Models", "Models", "Modelos"},
 	{"Mon", "Mon", "Lun"},
 	{"Month", "Month", "Mes"},
@@ -246,12 +245,15 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Prod", "Prod", "Prod"},
 	{"Prompt (optional)", "Prompt (optional)", "Prompt (opcional)"},
 	{"Prompt instructions", "Prompt instructions", "Instrucciones de prompt"},
+	{"Provider", "Provider", "Proveedor"},
+	{"Provider...", "Provider...", "Proveedor..."},
 	{"Queued", "Queued", "En cola"},
 	{"Queued:", "Queued:", "En cola:"},
 	{"RUNNING", "RUNNING", "CORRIENDO"},
 	{"Recent runs", "Recent runs", "Corridas recientes"},
 	{"Recomendado", "Recomendado", "Recomendado"},
 	{"Recomendado saved.", "Recomendado saved.", "Recomendado guardado."},
+	{"Remote API", "Remote API", "API remota"},
 	{"Remove {time}", "Remove {time}", "Quitar {time}"},
 	{"Removed / unresolved", "Removed / unresolved", "Eliminado / sin resolver"},
 	{"Research queries", "Research queries", "Consultas de investigación"},
@@ -284,6 +286,7 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"September", "September", "Septiembre"},
 	{"Settings", "Settings", "Configuración"},
 	{"Show", "Show", "Mostrar"},
+	{"Show the key", "Show the key", "Mostrar la clave"},
 	{"Single card", "Single card", "Tarjeta simple"},
 	{"Source", "Source", "Fuente"},
 	{"Source editor", "Source editor", "Editor de fuente"},
@@ -311,17 +314,22 @@ var panelTextSeed = []PanelTextSeedEntry{
 	{"Tue", "Tue", "Mar"},
 	{"Unspecified", "Unspecified", ""},
 	{"Up to {n} articles.", "Up to {n} articles.", "Hasta {n} artículos."},
+	{"Verify", "Verify", "Verificar"},
 	{"Wed", "Wed", "Mié"},
 	{"Weekdays", "Weekdays", "Días de la semana"},
 	{"Weekly", "Weekly", "Semanal"},
 	{"Who I am", "Who I am", "Quién soy"},
 	{"YouTube", "YouTube", "YouTube"},
 	{"auto", "auto", "auto"},
+	{"checked {s}s ago", "checked {s}s ago", "verificado hace {s} s"},
 	{"down", "down", "caído"},
 	{"failed", "failed", "falló"},
 	{"healthy", "healthy", "sano"},
+	{"key rejected", "key rejected", "clave rechazada"},
 	{"never", "never", "nunca"},
 	{"never ran", "never ran", "nunca corrió"},
+	{"no key", "no key", "sin clave"},
+	{"no report from the executor", "no report from the executor", "sin reporte del ejecutor"},
 	{"offline", "offline", "fuera de línea"},
 	{"ok", "ok", "ok"},
 	{"online", "online", "en línea"},

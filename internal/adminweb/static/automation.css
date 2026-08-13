@@ -761,6 +761,73 @@ button.cal-day.cal-today {
   background: var(--surface);
 }
 
+.models-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.models-lane-head h3 {
+  margin-right: auto;
+}
+
+.models-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.models-health-stamp {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.models-verify {
+  min-height: 1.9rem;
+  padding: 0 0.7rem;
+  font-size: 0.72rem;
+}
+
+.models-lane-note {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.models-key-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.models-key-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.models-eye {
+  width: 2.6rem;
+  min-width: 2.6rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.models-eye[aria-pressed="true"] {
+  color: var(--admin-red);
+  border-color: var(--admin-red);
+}
+
+.models-eye-icon {
+  width: 17px;
+  height: 17px;
+}
+
 .models-key-hint {
   margin: 0;
   font-size: 0.78rem;
@@ -821,9 +888,8 @@ button.cal-day.cal-today {
 
 /* Same base-table quirk as the schedule list: header and body rows lay out
    independently, so both need the widths for the columns to line up. */
-.models-stages th:nth-child(1), .models-stages td:nth-child(1) { width: 40%; }
-.models-stages th:nth-child(2), .models-stages td:nth-child(2) { width: 28%; }
-.models-stages th:nth-child(3), .models-stages td:nth-child(3) { width: 32%; }
+.models-stages th:nth-child(1), .models-stages td:nth-child(1) { width: 55%; }
+.models-stages th:nth-child(2), .models-stages td:nth-child(2) { width: 45%; }
 
 .models-stages th:nth-child(1),
 .models-stages td:nth-child(1) {

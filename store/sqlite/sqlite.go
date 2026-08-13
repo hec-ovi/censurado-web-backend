@@ -92,6 +92,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		// The schedule prompt (custom-run directive) shipped after the first
 		// schedules table, so a pre-existing database needs it added.
 		{"schedules", "prompt", "ALTER TABLE schedules ADD COLUMN prompt TEXT NOT NULL DEFAULT ''"},
+		{"schedules", "task", "ALTER TABLE schedules ADD COLUMN task TEXT NOT NULL DEFAULT 'batch'"},
 	}
 	for _, a := range adds {
 		has, err := hasColumn(ctx, db, a.table, a.column)

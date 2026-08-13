@@ -109,6 +109,9 @@ export const api = {
   // The automation-settings singleton (model lanes + per-stage routing), replaced
   // wholesale on save; the executor merges it over the pipeline's file config.
   getAutomationSettings: () => get("/automation-settings"),
+  // The deliberate secrets read (admin session only): used by the key field's
+  // eye reveal, never on a routine load.
+  getAutomationSettingsSecrets: () => get("/automation-settings?include_secrets=true"),
   putAutomationSettings: (settings) => put("/automation-settings", { settings }),
   // The executor's heartbeat (read-only from the panel; the executor writes it).
   getAutomationStatus: () => get("/automation-status"),
