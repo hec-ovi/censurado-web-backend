@@ -18,6 +18,13 @@ function mount() {
   return panel;
 }
 
+// Configuración is the first subtab; the task list lives behind the second.
+function mountList() {
+  const panel = mount();
+  screen.getByRole("tab", { name: "Schedules" }).click();
+  return panel;
+}
+
 // A full backend schedule row, as GET /schedules returns it.
 function schedule(over = {}) {
   return {
@@ -59,7 +66,7 @@ async function rowFor(slug) {
 
 test("lists schedules with status, next month/day, clock icons, and a production link", async () => {
   stubLists({ schedules: [schedule()] });
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   const row = await rowFor("edicion-manana");
@@ -95,7 +102,7 @@ test("lists schedules with status, next month/day, clock icons, and a production
 
 test("a paused schedule keeps a clean empty month gap but still shows its pattern", async () => {
   stubLists({ schedules: [schedule({ enabled: false, runs: [] })] });
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   const row = await rowFor("edicion-manana");
@@ -108,7 +115,7 @@ test("a paused schedule keeps a clean empty month gap but still shows its patter
 
 test("a queued firing shows Queued on its row until the worker picks it up", async () => {
   stubLists({ schedules: [schedule({ runs: [{ run_id: "lote-3", status: "queued", detail: "", started_at: "", finished_at: "" }] })] });
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   const row = await rowFor("edicion-manana");
@@ -122,6 +129,11 @@ test("the status card shows RUNNING with the queue while a batch is in flight", 
   });
   const panel = mount();
   await panel.reload();
+
+  // Configuración leads: the first subtab is the operational view, selected by default.
+  const tabs = screen.getAllByRole("tab");
+  assert.equal(tabs[0].textContent, "Settings");
+  assert.equal(tabs[0].getAttribute("aria-selected"), "true");
 
   const card = document.querySelector(".automation-status");
   assert.ok(within(card).getByText("RUNNING"));
@@ -151,7 +163,7 @@ test("creates a weekly schedule from the calendar editor: time select, weekday h
     }),
   );
   const user = userEvent.setup();
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   await user.click(screen.getByRole("button", { name: "New schedule" }));
@@ -183,6 +195,7 @@ test("creates a weekly schedule from the calendar editor: time select, weekday h
   assert.deepEqual(posted.times, ["07:30"]);
   assert.deepEqual(posted.weekdays, [1, 5]);
   assert.equal(posted.monthdays, undefined, "monthdays are not sent for a weekly cadence");
+  assert.equal(posted.task, "batch", "the default task is the article-edition batch");
   assert.equal(posted.mode, "auto");
   assert.equal(posted.prompt, "usando borge cubri la marcha del centro",
     "the custom-run prompt rides the upsert");
@@ -199,7 +212,7 @@ test("a monthly schedule picks its days on the month grid", async () => {
     }),
   );
   const user = userEvent.setup();
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   await user.click(screen.getByRole("button", { name: "New schedule" }));
@@ -221,6 +234,37 @@ test("a monthly schedule picks its days on the month grid", async () => {
   assert.deepEqual(posted.times, ["09:00"]);
 });
 
+test("the topics task hides Mode and Prompt and posts task=topics", async () => {
+  let posted = null;
+  stubLists();
+  server.use(
+    http.post(`${ORIGIN}/schedules`, async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json({ slug: "temas" });
+    }),
+  );
+  const user = userEvent.setup();
+  const panel = mountList();
+  await panel.reload();
+
+  await user.click(screen.getByRole("button", { name: "New schedule" }));
+  const dialog = await screen.findByRole("dialog", { name: "Schedule editor" });
+  await user.type(within(dialog).getByLabelText("Name"), "Temas");
+  await user.selectOptions(within(dialog).getByLabelText("Type"), "topics");
+
+  // Topics is one fixed job: the batch-only fields leave the form.
+  assert.equal(within(dialog).getByLabelText("Mode").closest(".field").hidden, true);
+  assert.equal(within(dialog).getByLabelText("Prompt (optional)").closest(".field").hidden, true);
+
+  await user.selectOptions(within(dialog).getByRole("combobox", { name: "Time" }), "06:00");
+  await user.click(within(dialog).getByRole("button", { name: "Add time" }));
+  await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+  await waitFor(() => assert.ok(posted, "a POST should have been sent"));
+  assert.equal(posted.task, "topics");
+  assert.equal(posted.prompt, "", "a topics task never carries a prompt");
+});
+
 test("refuses to save without a time, before any request is sent", async () => {
   let posted = false;
   stubLists();
@@ -231,7 +275,7 @@ test("refuses to save without a time, before any request is sent", async () => {
     }),
   );
   const user = userEvent.setup();
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   await user.click(screen.getByRole("button", { name: "New schedule" }));
@@ -243,9 +287,12 @@ test("refuses to save without a time, before any request is sent", async () => {
   assert.equal(posted, false, "no request reaches the backend");
 });
 
-test("a row click opens the run-history summary; editing is behind its button", async () => {
+test("a row click opens the details popup: console run history, task type, read-only prompt", async () => {
   let posted = null;
-  stubLists({ schedules: [schedule()], authors: [{ handle: "borge", name: "Borge" }] });
+  stubLists({
+    schedules: [schedule({ prompt: "cubrir la marcha del centro" })],
+    authors: [{ handle: "borge", name: "Borge" }],
+  });
   server.use(
     http.post(`${ORIGIN}/schedules`, async ({ request }) => {
       posted = await request.json();
@@ -253,17 +300,26 @@ test("a row click opens the run-history summary; editing is behind its button", 
     }),
   );
   const user = userEvent.setup();
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
-  // The summary: every recorded firing with its outcome, plus the ok/failed tally.
+  // The run history is a console: one line element per firing (real line
+  // breaks), plus the ok/failed tally.
   await user.click(await rowFor("edicion-manana"));
   const summary = await screen.findByRole("dialog", { name: "Run history" });
-  assert.equal(summary.querySelectorAll(".automation-run-row").length, 2);
-  assert.ok(within(summary).getByText("5/8 published"));
-  assert.ok(within(summary).getByText("adapter down"));
+  const lines = summary.querySelectorAll(".automation-console-line");
+  assert.equal(lines.length, 2, "one console line per run");
+  assert.equal(lines[0].querySelector(".console-status").dataset.state, "ok");
+  assert.ok(within(summary).getByText(/5\/8 published/));
+  assert.ok(within(summary).getByText(/adapter down/));
   assert.ok(within(summary).getByText("1 ok"));
   assert.ok(within(summary).getByText("1 failed"));
+
+  // The task type is named, and the custom prompt shows as read-only text.
+  assert.ok(within(summary).getByText("Article edition"));
+  const promptBlock = summary.querySelector(".automation-details-prompt");
+  assert.equal(promptBlock.textContent, "cubrir la marcha del centro");
+  assert.equal(summary.querySelector("textarea"), null, "the prompt is not editable here");
 
   // Editing is an explicit step from the summary, and stays a full upsert.
   await user.click(within(summary).getByRole("button", { name: "Edit schedule" }));
@@ -292,7 +348,7 @@ test("two-click delete removes the schedule by slug", async () => {
     }),
   );
   const user = userEvent.setup();
-  const panel = mount();
+  const panel = mountList();
   await panel.reload();
 
   const row = await rowFor("edicion-manana");

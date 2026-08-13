@@ -1,5 +1,5 @@
 import { el, clear, field, help, subTabs } from "./el.js";
-import { NewsroomIcon, PenIcon, TrashIcon } from "./icons.js";
+import { NewsroomIcon, PenIcon, TagIcon, TrashIcon } from "./icons.js";
 import { t } from "./i18n.js";
 import { ClockIcon } from "./clockIcon.js";
 import { ModelsSection } from "./modelsSection.js";
@@ -7,15 +7,18 @@ import { MonthCalendar } from "./monthCalendar.js";
 import { WEEKDAY_SHORT, nextRun, validateSchedule } from "../schedule.js";
 
 // The Automation tab, two subtabs so each view does one thing:
-//   Cronogramas   - the schedule list, directly: name, status, the next firing's
+//   Configuración - first: the operational side. The live status card (RUNNING
+//                   while a batch is in flight, the queue behind it, executor +
+//                   model health from the executor's heartbeat), the recent-runs
+//                   console, and the Models setup.
+//   Tareas        - the task list, directly: name, status, the next firing's
 //                   month/day, the fire times as round clock icons, and a link to
 //                   that month's page on the production site. Scrolls in its own
-//                   pane; empty cells stay empty. A row opens the calendar editor.
-//   Configuración - the operational side: the live status card (RUNNING while a
-//                   batch is in flight, the queue behind it, executor + model
-//                   health from the executor's heartbeat), the recent-runs strip,
-//                   and the Models setup.
+//                   pane; empty cells stay empty. A row opens the details popup
+//                   (run history as a console); editing is behind its button.
 //
+// A task is either an article-edition batch (task=batch: mode + optional prompt)
+// or a topic-normalization sweep (task=topics: one fixed job, no mode or prompt).
 // The editor is calendar-shaped: a month grid to pick days (weekday header
 // toggles for weekly, day toggles for monthly) and an hour grid with a :00/:30
 // step for times. Edits are FULL upserts (explicit slug) via api.upsertSchedule;
@@ -71,8 +74,8 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     ]),
   ]);
   const views = subTabs([
-    { id: "cronogramas", label: t("Schedules"), content: [schedulesPane] },
     { id: "configuracion", label: t("Settings"), content: [configPane] },
+    { id: "cronogramas", label: t("Schedules"), content: [schedulesPane] },
   ], { className: "autotabs", label: t("Automation sections") });
 
   const element = el("div", { class: "automation workspace-section" },
@@ -202,15 +205,17 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
   }
 
   function row(schedule, index, now) {
+    const topics = schedule.task === "topics";
     const custom = !!(schedule.prompt || "").trim();
     const kindIcon = el("span", {
-      class: "automation-kind", dataset: { kind: custom ? "custom" : "generic" },
-      title: custom ? t("Custom run (has a prompt)") : t("Generic run (whole newsroom)"),
-    }, [custom ? PenIcon("automation-kind-icon") : NewsroomIcon("automation-kind-icon")]);
+      class: "automation-kind", dataset: { kind: topics ? "topics" : custom ? "custom" : "generic" },
+      title: topics ? t("Topic normalization")
+        : custom ? t("Custom run (has a prompt)") : t("Generic run (whole newsroom)"),
+    }, [(topics ? TagIcon : custom ? PenIcon : NewsroomIcon)("automation-kind-icon")]);
     const nameCell = el("td", { class: "automation-name-cell" }, el("div", { class: "automation-name" }, [
       kindIcon,
       el("span", { class: "automation-title" }, schedule.name || schedule.slug),
-      el("span", { class: "muted automation-mode-word" }, schedule.mode === "auto" ? t("auto") : t("preview")),
+      topics ? null : el("span", { class: "muted automation-mode-word" }, schedule.mode === "auto" ? t("auto") : t("preview")),
     ]));
 
     const newest = (schedule.runs || [])[0];
@@ -274,7 +279,7 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     return tableRow;
   }
 
-  // ---- the run-history summary (a row click) --------------------------------
+  // ---- the details popup (a row click) --------------------------------------
 
   function openDetails(schedule) {
     const close = el("button", { type: "button", class: "secondary source-dialog-close", "aria-label": t("Close") }, "×");
@@ -294,20 +299,19 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const okCount = runs.filter((r) => r.status === "ok").length;
     const failedCount = runs.filter((r) => r.status === "failed").length;
 
-    const list = el("div", { class: "automation-details-runs" },
+    // The run history as a literal console: one line element per run, so every
+    // firing lands on its own line.
+    const list = el("div", { class: "automation-runs automation-details-console" },
       runs.length
-        ? runs.map((run) => el("div", { class: "automation-run-row", dataset: { runId: run.run_id } }, [
-            el("span", { class: "status", dataset: { state: RUN_STATE[run.status] || "running" } }, runLabel(run.status)),
-            el("span", { class: "automation-run-detail" }, run.detail || run.run_id),
-            el("span", { class: "automation-run-when muted" }, (run.started_at || "").replace("T", " ").slice(0, 16)),
-          ]))
-        : [el("p", { class: "muted empty-state" }, t("No runs recorded yet."))]);
+        ? runs.map((run) => consoleLine(run))
+        : [el("p", { class: "automation-console-line automation-console-empty" }, t("No runs recorded yet."))]);
 
     dialog.append(el("div", { class: "source-dialog-shell" }, [
       close,
       el("div", { class: "automation-details" }, [
         el("div", { class: "automation-details-head" }, [
           el("h2", {}, schedule.name || schedule.slug),
+          el("span", { class: "badge automation-details-task" }, taskLabel(schedule.task)),
           el("span", { class: "status", dataset: { state: schedule.enabled ? "active" : "offline" } },
             schedule.enabled ? t("Active") : t("Paused")),
         ]),
@@ -326,6 +330,18 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     ]));
     document.body.append(dialog);
     showDialog(dialog);
+  }
+
+  // One console line: date, status, optional task name, detail.
+  function consoleLine(run, name) {
+    const when = (run.started_at || "").replace("T", " ").slice(0, 16);
+    return el("div", { class: "automation-console-line", dataset: { runId: run.run_id } }, [
+      el("span", { class: "console-when" }, when || "---------- --:--"),
+      el("span", { class: "console-status", dataset: { state: run.status } },
+        runLabel(run.status).padEnd(9, " ")),
+      name ? el("span", { class: "console-schedule" }, name) : null,
+      el("span", { class: "console-detail" }, run.detail ? `· ${run.detail}` : `· ${run.run_id}`),
+    ]);
   }
 
   // The recent runs as a CONSOLE: every recorded firing across every schedule,
@@ -347,16 +363,7 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         t("No runs recorded yet.")));
       return;
     }
-    for (const run of all) {
-      const when = (run.started_at || "").replace("T", " ").slice(0, 16);
-      runsEl.append(el("div", { class: "automation-console-line", dataset: { runId: run.run_id } }, [
-        el("span", { class: "console-when" }, when || "---------- --:--"),
-        el("span", { class: "console-status", dataset: { state: run.status } },
-          runLabel(run.status).padEnd(9, " ")),
-        el("span", { class: "console-schedule" }, run.schedule),
-        el("span", { class: "console-detail" }, run.detail ? `· ${run.detail}` : `· ${run.run_id}`),
-      ]));
-    }
+    for (const run of all) runsEl.append(consoleLine(run, run.schedule));
   }
 
   // ---- the calendar editor --------------------------------------------------
@@ -406,6 +413,14 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         return tab;
       });
     const cadenceBar = el("div", { class: "cadence-tabs", role: "group", "aria-label": t("Cadence") }, cadenceTabs);
+
+    // What fires: an article-edition batch or the topic-normalization sweep.
+    // Topics is one fixed job, so mode and prompt only apply to batch.
+    const task = el("select", { id: `sch-${id}-task` }, [
+      el("option", { value: "batch" }, t("Article edition")),
+      el("option", { value: "topics" }, t("Topic normalization")),
+    ]);
+    task.value = (schedule && schedule.task) || "batch";
 
     const mode = el("select", { id: `sch-${id}-mode` }, [
       el("option", { value: "preview" }, t("Preview (hold for approval)")),
@@ -465,7 +480,23 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
     const save = el("button", { type: "submit" }, t("Save"));
     const cancel = el("button", { type: "button", class: "secondary" }, t("Cancel"));
 
-    // The editor card: a form SIDEBAR (name, mode, prompt, active, actions)
+    const modeField = field(t("Mode"), mode, `sch-${id}-mode`);
+    const promptField = el("div", { class: "field automation-prompt-field" }, [
+      el("span", { class: "field-label" }, [
+        el("label", { for: `sch-${id}-prompt` }, t("Prompt (optional)")),
+        help(t(PROMPT_HELP)),
+      ]),
+      prompt,
+    ]);
+    function syncTaskFields() {
+      const topics = task.value === "topics";
+      modeField.hidden = topics;
+      promptField.hidden = topics;
+    }
+    task.addEventListener("change", syncTaskFields);
+    syncTaskFields();
+
+    // The editor card: a form SIDEBAR (name, type, mode, prompt, active, actions)
     // beside the MAIN area (the month calendar and the time picker), the shape
     // of a calendar app's event editor.
     const editForm = el("form", { class: "automation-edit" }, [
@@ -473,14 +504,9 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         el("aside", { class: "automation-editor-side" }, [
           el("h2", { class: "automation-editor-title" }, isNew ? t("New schedule") : t("Schedule editor")),
           field(t("Name"), name, `sch-${id}-name`),
-          field(t("Mode"), mode, `sch-${id}-mode`),
-          el("div", { class: "field automation-prompt-field" }, [
-            el("span", { class: "field-label" }, [
-              el("label", { for: `sch-${id}-prompt` }, t("Prompt (optional)")),
-              help(t(PROMPT_HELP)),
-            ]),
-            prompt,
-          ]),
+          field(t("Type"), task, `sch-${id}-task`),
+          modeField,
+          promptField,
           el("div", { class: "field field-check" }, [
             enabled,
             el("label", { for: `sch-${id}-enabled` }, t("Active")),
@@ -510,8 +536,9 @@ export function AutomationPanel({ api, onChanged, refreshMs = 0 } = {}) {
         name: name.value.trim(),
         cadence: cadenceValue,
         times: [...draft.times].sort(),
+        task: task.value,
         mode: mode.value,
-        prompt: prompt.value.trim(),
+        prompt: task.value === "topics" ? "" : prompt.value.trim(),
         enabled: enabled.checked,
       };
       if (!isNew) body.slug = schedule.slug;
@@ -567,8 +594,8 @@ function runLabel(status) {
   return t("running");
 }
 
-function checkField(labelText, control, id) {
-  return el("div", { class: "field field-check" }, [control, el("label", { for: id }, labelText)]);
+function taskLabel(task) {
+  return task === "topics" ? t("Topic normalization") : t("Article edition");
 }
 
 function setStatus(node, state, text) {

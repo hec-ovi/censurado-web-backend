@@ -101,8 +101,9 @@ export function field(labelText, control, id) {
 let helpSeq = 0;
 
 // A small inline (?) marker that carries an explanation for the control next to
-// it. Clicking toggles a real popover instead of relying on the browser title
-// tooltip, so the explanation works with mouse, touch, and keyboard.
+// it. Clicking toggles a viewport-centered popup (.help-popover) instead of the
+// browser title tooltip, so the explanation works with mouse, touch, and
+// keyboard and no container can crop it.
 export function help(text) {
   const id = `help-popover-${++helpSeq}`;
   const popover = el("span", { class: "help-popover", id, hidden: true }, text);

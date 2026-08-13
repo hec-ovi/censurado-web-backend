@@ -283,6 +283,19 @@
   padding: 0;
 }
 
+/* The delete control hugs the row's right edge (the shared --stack rule is a
+   full-width grid, so the cell reflows it as right-justified flex). */
+.automation-table th:nth-child(7),
+.automation-table td:nth-child(7) {
+  text-align: right;
+  padding-right: 14px;
+}
+
+.automation-table td:nth-child(7) .source-actions--stack {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* --- the run console: a docker-log view -------------------------------------- */
 
 .automation-runs-block {
@@ -346,28 +359,6 @@
   color: #b7bec2;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Card-style run rows (the row-click summary dialog keeps these). */
-.automation-run-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  flex-wrap: wrap;
-}
-
-.automation-run-detail {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.automation-run-when {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* --- the editor dialog: a true fullscreen view ------------------------------ */
@@ -487,6 +478,12 @@
   line-height: 1.45;
 }
 
+/* A hidden field (a topics task has no mode or prompt) must stay hidden even
+   though .field sets an explicit display. */
+.automation-edit .field[hidden] {
+  display: none;
+}
+
 /* --- the run-history summary (row click) ----------------------------------- */
 
 .automation-details-dialog .source-dialog-shell {
@@ -533,9 +530,26 @@
   white-space: pre-wrap;
 }
 
-.automation-details-runs {
-  display: grid;
-  gap: 0.4rem;
+/* The details console: the same terminal as Corridas recientes, but sized for
+   one task and wrapping long details onto real new lines. */
+.automation-details-console {
+  min-height: 8rem;
+  max-height: 22rem;
+}
+
+.automation-details-console .automation-console-line {
+  white-space: pre-wrap;
+  flex-wrap: wrap;
+}
+
+.automation-details-console .automation-console-line + .automation-console-line {
+  margin-top: 0.5rem;
+}
+
+.automation-details-console .console-detail {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .automation-details-actions {

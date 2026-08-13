@@ -46,6 +46,14 @@ export function PenIcon(className = "icon") {
   ]);
 }
 
+// A topics task: the tag the normalization sweep files articles under.
+export function TagIcon(className = "icon") {
+  return svgIcon(className, [
+    svgNode("path", { d: "M12.6 2.6c-.4-.4-.9-.6-1.4-.6H4a2 2 0 0 0-2 2v7.2c0 .5.2 1 .6 1.4l8.8 8.8a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8Z" }),
+    svgNode("circle", { cx: "7.5", cy: "7.5", r: "0.5", fill: "currentColor" }),
+  ]);
+}
+
 // Reveal/hide a secret field.
 export function EyeIcon(className = "icon") {
   return svgIcon(className, [

@@ -60,6 +60,14 @@
       ],
       "default": "preview"
     },
+    "task": {
+      "enum": [
+        "batch",
+        "topics"
+      ],
+      "default": "batch",
+      "description": "What fires: the article-edition batch or the topic-normalization sweep."
+    },
     "authors": {
       "type": "array",
       "items": {
